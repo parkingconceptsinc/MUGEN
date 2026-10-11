@@ -234,7 +234,7 @@ private fun MortimerApp(player: Player, openSpotify: () -> Unit, openExternal: (
                 painter = painterResource(R.drawable.music_home_bg),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                alpha = 0.28f,
+                alpha = 0.40f,
                 modifier = Modifier.fillMaxSize(),
             )
         }
