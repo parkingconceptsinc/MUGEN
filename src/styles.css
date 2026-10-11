@@ -1447,35 +1447,22 @@ body {
   .pvActions .iconBtn { width: 38px; height: 38px; }
 }
 
-/* Light theme: keep the artwork bright and the text dark so colors match the rest of the light UI. */
-:root[data-theme="light"] .screen.library.musicHome {
-  background:
-    linear-gradient(color-mix(in srgb, var(--bg) 86%, transparent), color-mix(in srgb, var(--bg) 92%, transparent)),
-    url("/music-home-bg.webp") center / cover no-repeat,
-    var(--bg);
-}
+/* Light theme: the sidebar keeps its dark artwork and glowing labels; the music home is plain white. */
+:root[data-theme="light"] .screen.library.musicHome { background: #fff; }
 :root[data-theme="light"] .photoActionBar { box-shadow: 0 14px 34px #30251a24; }
 @media (min-width: 900px) {
   :root[data-theme="light"] .shell .sidebar {
-    background:
-      linear-gradient(#ffffff8c, #ffffff59 45%, #ffffffd9),
-      url("/sidebar-bg.webp") center top / cover no-repeat,
-      var(--bg);
-  }
-  :root[data-theme="light"] .sidebar nav button {
+    color-scheme: dark;
+    --bg: #09090d;
+    --panel: #111117;
+    --panel2: #191922;
+    --line: #292933;
+    --text: #f5f3f2;
+    --muted: #96939f;
+    --dim: #777581;
     color: var(--text);
-    text-shadow: 0 0 6px #fff, 0 0 2px #fff;
-    backdrop-filter: blur(6px);
-    background: #ffffff59;
   }
-  :root[data-theme="light"] .sidebar nav button svg { color: var(--accent); filter: drop-shadow(0 0 3px #fff); }
-  :root[data-theme="light"] .sidebar nav button:hover { color: var(--text); background: #ffffffb3; }
   :root[data-theme="light"] .sidebar nav button.active {
-    color: var(--text);
-    background: color-mix(in srgb, var(--accent) 16%, #ffffffe6);
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent), 0 6px 18px #30251a1f;
-    text-shadow: none;
+    background: color-mix(in srgb, var(--accent) 24%, #000000a6);
   }
-  :root[data-theme="light"] .sidebar nav em { color: var(--muted); text-shadow: none; }
-  :root[data-theme="light"] .sidebar .logo { box-shadow: 0 0 0 1px #0000000f, 0 8px 22px #30251a2e; }
 }
