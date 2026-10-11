@@ -994,14 +994,54 @@ private fun MortimerApp(player: Player, openSpotify: () -> Unit, openExternal: (
                     }
                 }
                 "Now Playing" -> {
-                    Text("NOW PLAYING", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
-                    Spacer(Modifier.height(8.dp))
-                    Text(currentTitle, color = MainText, fontSize = 22.sp, fontWeight = FontWeight.Bold,
-                        maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Text(if (isPlaying) "Playing" else if (player.currentMediaItem != null) "Paused" else "Nothing is playing",
-                        color = Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
-                    Text("Use the playback controls below to manage the current track.", color = Muted,
-                        fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+                    val activeMetadata = player.currentMediaItem?.mediaMetadata
+                    val artistName = activeMetadata?.artist?.toString()?.takeIf { it.isNotBlank() } ?: "Local playback"
+                    val albumName = activeMetadata?.albumTitle?.toString()?.takeIf { it.isNotBlank() } ?: "Mortimer Player"
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Panel2),
+                        shape = RoundedCornerShape(24.dp),
+                        modifier = Modifier.fillMaxWidth().padding(top = 2.dp)
+                    ) {
+                        Column(
+                            Modifier.fillMaxWidth()
+                                .background(Brush.linearGradient(listOf(Color(0xFF30212A), Color(0xFF17171F), Color(0xFF151C27))))
+                                .padding(if (compactLayout) 14.dp else 20.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                                Box(
+                                    Modifier.size(if (compactLayout) 76.dp else 104.dp)
+                                        .background(Brush.linearGradient(listOf(Accent, Color(0xFF7A3455), Color(0xFF292F50))), RoundedCornerShape(20.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Box(Modifier.size(if (compactLayout) 48.dp else 66.dp)
+                                        .background(Color(0xDD111114), RoundedCornerShape(999.dp)), contentAlignment = Alignment.Center) {
+                                        Text("♫", color = Accent, fontSize = if (compactLayout) 28.sp else 36.sp, fontWeight = FontWeight.Black)
+                                    }
+                                }
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                                    Text("NOW PLAYING", color = Accent, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.4.sp)
+                                    Text(currentTitle, color = MainText, fontSize = if (compactLayout) 17.sp else 21.sp,
+                                        fontWeight = FontWeight.ExtraBold, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                                    Text(artistName, color = Color(0xFFD0CED8), fontSize = 12.sp,
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(albumName, color = Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                            }
+                            Row(
+                                Modifier.fillMaxWidth().background(Color(0x22FFFFFF), RoundedCornerShape(13.dp)).padding(horizontal = 12.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Box(Modifier.size(8.dp).background(if (isPlaying) Accent else Muted, RoundedCornerShape(999.dp)))
+                                Text(if (isPlaying) "Playing now" else if (player.currentMediaItem != null) "Playback paused" else "Ready for your media",
+                                    color = MainText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                                Text(if (shuffleEnabled) "SHUFFLE ON" else "LOCAL PLAYER", color = Muted, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            }
+                            Text("Playback controls and volume are available in the player panel below.",
+                                color = Color(0xFFB7B5C2), fontSize = 11.sp, lineHeight = 15.sp)
+                        }
+                    }
                 }
                 "Queue" -> {
                     Text("${player.mediaItemCount} items in the playback queue", color = Muted, fontSize = 12.sp,
