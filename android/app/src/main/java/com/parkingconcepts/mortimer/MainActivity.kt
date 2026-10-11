@@ -12,6 +12,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -245,9 +247,10 @@ private fun MortimerApp(player: Player, openSpotify: () -> Unit, openExternal: (
             Text(section, color = MainText, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold)
             Text("Tu biblioteca multimedia", color = Muted, fontSize = 14.sp)
             Spacer(Modifier.height(18.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())) {
                 NavChip("Inicio", section == "Inicio") { section = "Inicio" }
                 NavChip("Mi música", section == "Mi música") { section = "Mi música" }
+                NavChip("Fotos", section == "Fotos") { section = "Fotos" }
                 NavChip("Servicios", section == "Servicios") { section = "Servicios" }
             }
             Spacer(Modifier.height(14.dp))
@@ -259,6 +262,7 @@ private fun MortimerApp(player: Player, openSpotify: () -> Unit, openExternal: (
                     HomeCard("▣", "Vídeos", "Tus vídeos locales", videos.size.toString() + " archivos") { section = "Vídeos" }
                     HomeCard("▤", "Libros", "EPUB, PDF y otros documentos", books.size.toString() + " archivos") { section = "Libros" }
                     HomeCard("▧", "Cómics", "Selecciona tus archivos de cómic", comics.size.toString() + " archivos") { section = "Cómics" }
+                    HomeCard("▦", "Fotos", "Álbum de fotos del teléfono", "Abrir") { section = "Fotos" }
                     HomeCard("♫", "Servicios de música", "Spotify y servicios compatibles", "Conectar") { section = "Servicios" }
                 }
                 "Mi música" -> {
@@ -281,6 +285,7 @@ private fun MortimerApp(player: Player, openSpotify: () -> Unit, openExternal: (
                     HomeCard("♫", "Spotify", "Abrir la aplicación oficial de Spotify", "Abrir") { openSpotify() }
                     Text("Spotify se reproduce en su aplicación oficial. Mortimer Player utiliza su reproductor nativo para los archivos locales.", color = Muted, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
                 }
+                "Fotos" -> PhotosSection(Modifier.weight(1f))
                 "Vídeos" -> {
                     Button(onClick = { videoPicker.launch(arrayOf("video/*")) }) { Text("＋ Añadir vídeos") }
                     if (videos.isEmpty()) EmptyMessage("Selecciona vídeos del dispositivo, SD o USB.")
