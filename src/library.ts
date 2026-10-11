@@ -19,6 +19,35 @@ export type StoredLibraryItem = {
   cover?: Blob;
 };
 
+export type PhotoExif = {
+  make?: string;
+  model?: string;
+  lens?: string;
+  focalLength?: number;
+  fNumber?: number;
+  exposureTime?: number;
+  iso?: number;
+  lat?: number;
+  lon?: number;
+};
+
+export type StoredPhoto = {
+  id: string;
+  name: string;
+  path: string;
+  size: number;
+  lastModified: number;
+  addedAt: number;
+  takenAt: number;
+  width: number;
+  height: number;
+  mime: string;
+  // A screen-sized copy (the original when it is already small enough) and a grid thumbnail.
+  display: Blob;
+  thumb: Blob;
+  exif?: PhotoExif;
+};
+
 export type StoredComic = {
   id: string;
   name: string;
@@ -45,7 +74,8 @@ export type StoredComic = {
 const DB_NAME = "mortimer-player";
 const STORE = "library";
 const COMICS = "comics";
-const VERSION = 2;
+const PHOTOS = "photos";
+const VERSION = 3;
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -55,6 +85,7 @@ function openDB(): Promise<IDBDatabase> {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "id" });
       if (!db.objectStoreNames.contains(COMICS)) db.createObjectStore(COMICS, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(PHOTOS)) db.createObjectStore(PHOTOS, { keyPath: "id" });
     };
     request.onsuccess = () => {
       const db = request.result;
@@ -164,9 +195,10 @@ export async function clearLibrary() {
   const db = await openDB();
   try {
     await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction([STORE, COMICS], "readwrite");
+      const tx = db.transaction([STORE, COMICS, PHOTOS], "readwrite");
       tx.objectStore(STORE).clear();
       tx.objectStore(COMICS).clear();
+      tx.objectStore(PHOTOS).clear();
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error ?? new Error("IndexedDB transaction aborted"));
@@ -209,4 +241,18 @@ export async function patchComic(id: string, patch: Partial<Omit<StoredComic, "i
 export async function loadComicLocations(id: string): Promise<string | undefined> {
   const item = await withStore<StoredComic | undefined>("readonly", (store) => store.get(id), COMICS);
   return item?.locations;
+}
+
+export async function savePhotos(items: StoredPhoto[]): Promise<StoredPhoto[]> {
+  if (!items.length) return [];
+  return await saveUniqueItems(PHOTOS, items, (item) => `${item.path}|${item.size}|${item.lastModified}`);
+}
+
+export async function loadPhotos(): Promise<StoredPhoto[]> {
+  return (await withStore<StoredPhoto[]>("readonly", (store) => store.getAll(), PHOTOS)) ?? [];
+}
+
+export async function deletePhotos(ids: string[]) {
+  if (!ids.length) return;
+  await withStore("readwrite", (store) => { for (const id of ids) store.delete(id); }, PHOTOS);
 }

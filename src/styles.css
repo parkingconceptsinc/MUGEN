@@ -1336,11 +1336,12 @@ body {
     font-weight: 700;
     letter-spacing: .06em;
     text-transform: uppercase;
-    font-size: 12.5px;
+    font-size: 15px;
+    gap: 14px;
     text-shadow: 0 1px 3px #000c, 0 0 12px color-mix(in srgb, var(--accent) 45%, transparent);
     backdrop-filter: blur(2px);
   }
-  .sidebar nav button svg { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 60%, transparent)); }
+  .sidebar nav button svg { width: 22px; height: 22px; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 60%, transparent)); }
   .sidebar nav button:hover { color: #fff; background: #0000004d; }
   .sidebar nav button.active {
     color: #fff;
@@ -1349,4 +1350,99 @@ body {
     text-shadow: 0 0 10px var(--accent), 0 0 22px color-mix(in srgb, var(--accent) 70%, transparent);
   }
   .sidebar .logo { box-shadow: 0 0 0 1px #ffffff26, 0 0 24px color-mix(in srgb, var(--accent) 45%, transparent), 0 8px 22px #000a; }
+}
+
+/* Photos: timeline grid, albums, selection bar and full-screen viewer. */
+.photoTabs { position: sticky; top: calc(62px + env(safe-area-inset-top)); z-index: 4; margin-top: 4px; backdrop-filter: blur(14px); background: color-mix(in srgb, var(--panel) 88%, transparent); }
+.photoTools { display: flex; align-items: center; gap: 8px; }
+.photoTools .searchBox { flex: 1; margin: 0; }
+.photoZoom { display: flex; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); }
+.photoZoom .iconBtn:disabled { opacity: .35; }
+.photoGroups { --tile: 124px; padding-bottom: 96px; }
+.photoGroup { content-visibility: auto; contain-intrinsic-size: auto 480px; }
+.photoDay { padding: 18px 2px 8px; }
+.photoDay h2 { margin: 10px 0 10px; font-size: 22px; font-weight: 800; letter-spacing: -.03em; text-transform: capitalize; }
+.photoDay div { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 13px; font-weight: 650; text-transform: capitalize; }
+.linkBtn { border: 0; background: none; color: var(--accent); font-size: 13px; font-weight: 700; padding: 4px 2px; }
+.photoGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--tile), 1fr)); gap: 3px; }
+.photoTile { position: relative; display: block; aspect-ratio: 1; padding: 0; overflow: hidden; border: 0; border-radius: 4px; background: var(--panel2); cursor: pointer; -webkit-touch-callout: none; user-select: none; }
+.photoTile img { width: 100%; height: 100%; object-fit: cover; transition: transform .25s ease, filter .2s; }
+.photoTile:hover img { filter: brightness(1.08); }
+.photoTile.selecting img { transform: scale(.94); border-radius: 6px; }
+.photoTile.selected img { transform: scale(.84); border-radius: 10px; }
+.photoTile.selected { background: color-mix(in srgb, var(--accent) 22%, var(--panel2)); }
+.photoBadge { position: absolute; left: 6px; bottom: 6px; padding: 1px 5px; border-radius: 4px; background: #000a; color: #fff; font-size: 10px; font-style: normal; font-weight: 800; }
+.photoFav { position: absolute; right: 6px; bottom: 6px; color: #fff; filter: drop-shadow(0 1px 2px #000c); }
+.photoCheck { position: absolute; top: 7px; left: 7px; display: grid; place-items: center; width: 22px; height: 22px; border: 2px solid #fff; border-radius: 50%; background: #0005; color: var(--on-accent); box-shadow: 0 1px 4px #0008; }
+.photoTile.selected .photoCheck { border-color: var(--accent); background: var(--accent); }
+.photoEmptyIcon { display: grid; place-items: center; width: 112px; height: 112px; border-radius: 30px; background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 30%, var(--panel2)), var(--panel)); color: var(--text); box-shadow: 0 18px 40px #0007; }
+.photoActionBar { position: fixed; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom)); z-index: 30; display: flex; align-items: center; gap: 4px; max-width: calc(100% - 24px); padding: 6px; border: 1px solid var(--line); border-radius: 18px; background: color-mix(in srgb, var(--panel) 94%, transparent); box-shadow: 0 16px 40px #000a; backdrop-filter: blur(18px); transform: translateX(-50%); animation: fade .18s; }
+.photoActionBar > span { padding: 0 10px; color: var(--muted); font-size: 13px; font-weight: 700; white-space: nowrap; }
+.photoActionBar > button:not(.btn) { display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 58px; padding: 7px 6px; border: 0; border-radius: 12px; background: none; color: var(--text); font-size: 10.5px; font-weight: 650; }
+.photoActionBar > button:not(.btn):hover:not(:disabled) { background: var(--panel2); }
+.photoActionBar > button:disabled { opacity: .4; }
+.photoActionBar > button.danger { color: #ff6b6b; }
+.albumsView { padding-bottom: 40px; }
+.photoAlbumGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 18px 14px; }
+.photoAlbumCard { display: flex; flex-direction: column; gap: 3px; min-width: 0; padding: 0; border: 0; background: none; color: var(--text); text-align: left; }
+.photoAlbumCard b { overflow: hidden; margin-top: 6px; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.photoAlbumCard small { color: var(--muted); font-size: 12px; }
+.photoAlbumCover { position: relative; display: grid; place-items: center; aspect-ratio: 1; overflow: hidden; border-radius: 14px; background: var(--panel2); color: var(--muted); box-shadow: 0 10px 24px #0005; }
+.photoAlbumCover img { width: 100%; height: 100%; object-fit: cover; transition: transform .3s; }
+.photoAlbumCard:hover .photoAlbumCover img { transform: scale(1.04); }
+.photoAlbumCover.stack { box-shadow: 6px -6px 0 -2px var(--panel2), 0 10px 24px #0005; overflow: visible; }
+.photoAlbumCover.stack img { border-radius: 14px; }
+.photoAlbumCard.create .photoAlbumCover { border: 2px dashed color-mix(in srgb, var(--accent) 50%, var(--line)); background: color-mix(in srgb, var(--accent) 7%, var(--panel)); color: var(--accent); box-shadow: none; }
+@media (min-width: 900px) {
+  .photoTabs { top: 78px; max-width: 460px; }
+  .photoActionBar { bottom: 28px; left: calc(50% + 122px); }
+  .photoAlbumGrid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+}
+
+.photoViewer { position: fixed; inset: 0; z-index: 46; display: grid; grid-template-columns: minmax(0, 1fr) auto; background: #000; color: #fff; user-select: none; -webkit-user-select: none; animation: fade .18s; }
+.pvStage { position: relative; grid-column: 1; overflow: hidden; touch-action: none; cursor: grab; }
+.pvTrack { position: absolute; inset: 0; display: grid; place-items: center; }
+.pvImage { display: block; object-fit: contain; background-size: cover; background-position: center; will-change: transform; image-rendering: auto; }
+.pvTop, .pvBottom { position: absolute; left: 0; z-index: 2; display: flex; align-items: center; gap: 8px; transition: opacity .2s, transform .2s; }
+.photoViewer.withInfo .pvTop, .photoViewer.withInfo .pvBottom { right: 340px; }
+.pvTop { top: 0; right: 0; padding: calc(8px + env(safe-area-inset-top)) 10px 28px; background: linear-gradient(#000c, transparent); }
+.pvBottom { bottom: 0; right: 0; flex-direction: column; align-items: stretch; gap: 6px; padding: 30px 10px calc(10px + env(safe-area-inset-bottom)); background: linear-gradient(transparent, #000d); }
+.photoViewer.bare .pvTop { opacity: 0; transform: translateY(-12px); pointer-events: none; }
+.photoViewer.bare .pvBottom, .photoViewer.bare .pvNav { opacity: 0; transform: translateY(12px); pointer-events: none; }
+.photoViewer .iconBtn { color: #fff; }
+.photoViewer .iconBtn.on { color: var(--accent); }
+.photoViewer .iconBtn:disabled { opacity: .35; }
+.pvTitle { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.pvTitle b { overflow: hidden; font-size: 15px; text-overflow: ellipsis; white-space: nowrap; text-transform: capitalize; }
+.pvTitle small { overflow: hidden; color: #fffa; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.pvActions { display: flex; flex-wrap: wrap; justify-content: flex-end; }
+.pvNav { position: absolute; top: 50%; z-index: 2; display: grid; place-items: center; width: 48px; height: 48px; margin-top: -24px; border: 0; border-radius: 50%; background: #0007; color: #fff; backdrop-filter: blur(8px); transition: opacity .2s, background .15s; }
+.pvNav:hover { background: #000b; }
+.pvNav.prev { left: 14px; }
+.pvNav.next { right: 14px; }
+.photoViewer.withInfo .pvNav.next { right: 354px; }
+.pvZoom { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 12px; font-variant-numeric: tabular-nums; color: #fffc; }
+.pvZoom span { min-width: 44px; text-align: center; }
+.pvStrip { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; padding: 2px; }
+.pvStrip::-webkit-scrollbar { display: none; }
+.pvStrip button { flex: none; width: 52px; height: 52px; padding: 0; overflow: hidden; border: 2px solid transparent; border-radius: 8px; background: #222; opacity: .6; transition: opacity .15s, border-color .15s; }
+.pvStrip button.on { border-color: var(--accent); opacity: 1; }
+.pvStrip button:hover { opacity: 1; }
+.pvStrip img { width: 100%; height: 100%; object-fit: cover; }
+.pvInfo { grid-column: 2; width: 340px; overflow-y: auto; padding: calc(14px + env(safe-area-inset-top)) 18px 24px; border-left: 1px solid #ffffff1a; background: #111116; }
+.pvInfo header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; font-size: 17px; }
+.pvInfo dl { display: flex; flex-direction: column; gap: 18px; margin: 0 0 20px; }
+.pvInfo dl > div { display: flex; gap: 14px; }
+.pvInfo dt { flex: none; padding-top: 2px; color: var(--accent); }
+.pvInfo dd { display: flex; flex-direction: column; gap: 3px; min-width: 0; margin: 0; }
+.pvInfo dd b { overflow-wrap: anywhere; font-size: 14px; }
+.pvInfo dd small { color: #fff9; font-size: 12.5px; }
+.pvInfo a { color: var(--accent); font-size: 13px; font-weight: 700; }
+@media (max-width: 760px) {
+  .photoViewer { grid-template-columns: 1fr; }
+  .photoViewer.withInfo .pvTop, .photoViewer.withInfo .pvBottom { right: 0; }
+  .photoViewer.withInfo .pvNav.next { right: 14px; }
+  .pvInfo { position: absolute; left: 0; right: 0; bottom: 0; z-index: 3; width: auto; max-height: 62%; border: 0; border-radius: 20px 20px 0 0; box-shadow: 0 -12px 40px #000c; padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
+  .pvNav { display: none; }
+  .pvActions .iconBtn { width: 38px; height: 38px; }
 }

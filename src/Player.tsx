@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type InputHTMLAttributes } from "react";
-import { BookOpen, Clapperboard, Disc3, Download, FilePlus, FolderOpen, Library as LibraryIcon, ListMusic, Settings as SettingsIcon, SlidersHorizontal, type LucideIcon } from "lucide-react";
+import { BookOpen, Clapperboard, Disc3, Download, FilePlus, FolderOpen, Library as LibraryIcon, ListMusic, Settings as SettingsIcon, SlidersHorizontal, type LucideIcon, Images } from "lucide-react";
 import { applyAudio, attachElement, EQ_PRESETS, initEngine, resumeEngine } from "./audioEngine";
 import { decodeAudioTrack, type DecodedAudio } from "./codecAudioDecoder";
 import { PlayerContext, ProgressContext, type Actions, type MenuTarget, type PlayerState, type SleepState } from "./context";
@@ -18,6 +18,8 @@ import { Equalizer } from "./screens/Equalizer";
 import { Settings } from "./screens/Settings";
 import { Videos } from "./screens/Videos";
 import { Comics } from "./screens/Comics";
+import { Photos } from "./screens/Photos";
+import { describeImport, importPhotos, isPhotoFile, resetPhotos } from "./photos";
 import { ComicReader } from "./screens/ComicReader";
 import { EpubReader } from "./screens/EpubReader";
 import { TextReader } from "./screens/TextReader";
@@ -28,6 +30,7 @@ const NAV: Array<[Screen, string, string, LucideIcon, boolean]> = [
   ["videos", "Videos", "Videos", Clapperboard, true],
   ["books", "Books", "Books", BookOpen, true],
   ["comics", "Comics", "Comics", BookOpen, true],
+  ["photos", "Photos", "Photos", Images, true],
   ["player", "Now Playing", "Playing", Disc3, true],
   ["queue", "Queue", "Queue", ListMusic, false],
   ["eq", "Equalizer", "EQ", SlidersHorizontal, false],
@@ -459,11 +462,25 @@ export function Player() {
       seen.add(key);
       return true;
     };
+    const photoEntries = entries.filter((e) => isPhotoFile(e.file.name));
+    let photoNote = "";
+    if (photoEntries.length) {
+      setImporting({ done: 0, total: photoEntries.length, label: "Adding photos" });
+      const photoResult = await importPhotos(photoEntries, (done, total) => setImporting({ done, total, label: "Adding photos" }));
+      if (!isImportCurrent()) return;
+      setImporting(null);
+      photoNote = describeImport(photoResult);
+      entries = entries.filter((e) => !isPhotoFile(e.file.name));
+      if (!entries.length) {
+        toast(photoNote);
+        return;
+      }
+    }
     const fresh = entries.filter((e) => supported(e.file.name) && isNew(e));
     const freshComics = entries.filter((e) => isComicFile(e.file.name) && isNew(e));
     const totalToAdd = fresh.length + freshComics.length;
     if (!totalToAdd) {
-      toast(entries.some((e) => supported(e.file.name) || isComicFile(e.file.name)) ? "Those files are already in your library" : "No supported music, video or comic files found");
+      toast(photoNote || (entries.some((e) => supported(e.file.name) || isComicFile(e.file.name)) ? "Those files are already in your library" : "No supported music, video, comic or photo files found"));
       return;
     }
     void navigator.storage?.persist?.().catch(() => false);
@@ -574,7 +591,7 @@ export function Player() {
       ? ` · ${importFailures} media file${importFailures === 1 ? "" : "s"} couldn't be imported`
       : "";
     const storageNote = libraryStorageOk && comicStorageOk ? "" : ", but some items couldn't be saved for next time";
-    toast(`${what}${failureNote}${storageNote}`);
+    toast(`${what}${failureNote}${storageNote}${photoNote ? ` · ${photoNote}` : ""}`);
   }
   function importEntries(entries: Incoming[], label?: string): Promise<void> {
     mediaImportQueue = mediaImportQueue
@@ -607,7 +624,7 @@ export function Player() {
         for await (const entry of dir.values()) {
           const path = `${prefix}/${entry.name}`;
           if (entry.kind === "file") {
-            if ((supported(entry.name) || isComicFile(entry.name)) && entry.getFile) {
+            if ((supported(entry.name) || isComicFile(entry.name) || isPhotoFile(entry.name)) && entry.getFile) {
               pending.push({ file: () => entry.getFile!(), path });
             }
           } else if (!entry.name.startsWith(".")) {
@@ -941,6 +958,7 @@ export function Player() {
           for (const c of old) if (c.cover) URL.revokeObjectURL(c.cover);
           return [];
         });
+        resetPhotos();
         setPlaylists((p) => p.map((pl) => ({ ...pl, trackIds: [] })));
         setFavoritesList([]);
         setPlays({});
@@ -1678,10 +1696,10 @@ export function Player() {
   const progress = useMemo(() => ({ currentTime, duration }), [currentTime, duration]);
   const accentColor = ACCENTS[accent] ?? ACCENTS.Coral;
 
-  const swipeScreens: Screen[] = ["library", "videos", "books", "comics"];
+  const swipeScreens: Screen[] = ["library", "videos", "books", "comics", "photos"];
   function handleSwipeStart(event: React.TouchEvent<HTMLElement>) {
     const target = event.target as HTMLElement;
-    if (reader || menu || target.closest("button, a, input, textarea, select, video, audio, [contenteditable], .albumRow, .npTools, .range, .comicReader, .epubReader, .textReader, [data-no-swipe]")) {
+    if (reader || menu || target.closest("button, a, input, textarea, select, video, audio, [contenteditable], .albumRow, .npTools, .range, .comicReader, .epubReader, .textReader, .photoViewer, .photoTile, [data-no-swipe]")) {
       swipeStart.current = null;
       return;
     }
@@ -1732,6 +1750,7 @@ export function Player() {
             {screen === "videos" && <Videos />}
             {screen === "books" && <Comics shelfOverride="books" />}
             {screen === "comics" && <Comics shelfOverride="comics" />}
+            {screen === "photos" && <Photos />}
             {screen === "queue" && <Queue />}
             {screen === "eq" && <Equalizer />}
             {screen === "settings" && <Settings theme={theme} onThemeChange={setTheme} />}
@@ -1760,7 +1779,7 @@ export function Player() {
 
           <audio ref={audioRef} preload="auto" />
           <input ref={fileInput} hidden type="file" multiple
-            accept="audio/*,video/*,text/*,.flac,.aac,.ogg,.oga,.opus,.weba,.aiff,.aif,.alac,.wma,.mka,.mp2,.mpa,.ac3,.eac3,.dts,.amr,.ape,.tak,.tta,.mpc,.wv,.shn,.caf,.au,.snd,.ra,.rm,.rma,.mp4,.webm,.ogv,.mov,.m4v,.mkv,.avi,.3gp,.3g2,.ts,.m2ts,.mts,.m2v,.mpg,.mpeg,.mpeg2,.vob,.wmv,.asf,.flv,.f4v,.rmvb,.rm,.dv,.tod,.mod,.vro,.nut,.ogm,.mxf,.divx,.cbz,.cbr,.pdf,.epub,.txt,.md,.markdown,.log,.nfo,.csv,.tsv,.json,.xml,.yaml,.yml,.toml,.ini,.cfg,.conf,.srt,.vtt,.ass,.ssa,.sub,.html,.htm,.rtf,.docx,.odt,application/pdf,application/epub+zip,application/rtf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.oasis.opendocument.text"
+            accept="audio/*,video/*,text/*,image/*,.heic,.heif,.flac,.aac,.ogg,.oga,.opus,.weba,.aiff,.aif,.alac,.wma,.mka,.mp2,.mpa,.ac3,.eac3,.dts,.amr,.ape,.tak,.tta,.mpc,.wv,.shn,.caf,.au,.snd,.ra,.rm,.rma,.mp4,.webm,.ogv,.mov,.m4v,.mkv,.avi,.3gp,.3g2,.ts,.m2ts,.mts,.m2v,.mpg,.mpeg,.mpeg2,.vob,.wmv,.asf,.flv,.f4v,.rmvb,.rm,.dv,.tod,.mod,.vro,.nut,.ogm,.mxf,.divx,.cbz,.cbr,.pdf,.epub,.txt,.md,.markdown,.log,.nfo,.csv,.tsv,.json,.xml,.yaml,.yml,.toml,.ini,.cfg,.conf,.srt,.vtt,.ass,.ssa,.sub,.html,.htm,.rtf,.docx,.odt,application/pdf,application/epub+zip,application/rtf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.oasis.opendocument.text"
             onChange={(e) => { onPickFiles(e.target.files); e.currentTarget.value = ""; }} />
           <input ref={folderInput} hidden type="file" multiple onChange={(e) => { onPickFiles(e.target.files); e.currentTarget.value = ""; }} {...({ webkitdirectory: "" } as InputHTMLAttributes<HTMLInputElement>)} />
         </div>
