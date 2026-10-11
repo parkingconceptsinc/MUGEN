@@ -1315,10 +1315,38 @@ body {
   .albumGrid { gap: 18px 12px; }
 }
 
-/* Music home: artwork behind the dashboard, washed out by the page colour. */
+/* Music home: artwork behind the dashboard at 40% visibility. */
 .screen.library.musicHome {
   background:
-    linear-gradient(color-mix(in srgb, var(--bg) 72%, transparent), color-mix(in srgb, var(--bg) 86%, transparent)),
+    linear-gradient(color-mix(in srgb, var(--bg) 60%, transparent), color-mix(in srgb, var(--bg) 60%, transparent)),
     url("/music-home-bg.webp") center / cover no-repeat,
     var(--bg);
+}
+
+/* Desktop sidebar: bright artwork with glowing navigation labels. */
+@media (min-width: 900px) {
+  :root .shell .sidebar {
+    background:
+      linear-gradient(color-mix(in srgb, var(--bg) 30%, transparent), color-mix(in srgb, var(--bg) 20%, transparent) 45%, color-mix(in srgb, var(--bg) 78%, transparent)),
+      url("/sidebar-bg.webp") center top / cover no-repeat,
+      var(--bg);
+  }
+  .sidebar nav button {
+    color: #f4f4f6d9;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    font-size: 12.5px;
+    text-shadow: 0 1px 3px #000c, 0 0 12px color-mix(in srgb, var(--accent) 45%, transparent);
+    backdrop-filter: blur(2px);
+  }
+  .sidebar nav button svg { filter: drop-shadow(0 0 6px color-mix(in srgb, var(--accent) 60%, transparent)); }
+  .sidebar nav button:hover { color: #fff; background: #0000004d; }
+  .sidebar nav button.active {
+    color: #fff;
+    background: color-mix(in srgb, var(--accent) 24%, #000000a6);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent), 0 0 18px color-mix(in srgb, var(--accent) 35%, transparent);
+    text-shadow: 0 0 10px var(--accent), 0 0 22px color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+  .sidebar .logo { box-shadow: 0 0 0 1px #ffffff26, 0 0 24px color-mix(in srgb, var(--accent) 45%, transparent), 0 8px 22px #000a; }
 }
