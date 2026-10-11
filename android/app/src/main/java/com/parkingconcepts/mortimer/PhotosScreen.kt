@@ -5,6 +5,11 @@ import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.ImageDecoder
+import android.util.LruCache
+import android.util.Size
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -12,6 +17,7 @@ import android.text.format.Formatter
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
@@ -53,7 +60,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.ContextCompat
-import coil3.compose.AsyncImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.DateFormat
@@ -237,8 +243,8 @@ fun PhotosSection(modifier: Modifier = Modifier) {
             LazyVerticalGrid(columns = GridCells.Adaptive(150.dp), modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 items(albums, key = { it.key }) { (name, list) ->
                     Column(Modifier.clickable { bucket = name }) {
-                        AsyncImage(
-                            model = list.first().uri, contentDescription = name, contentScale = ContentScale.Crop,
+                        DeviceImage(
+                            uri = list.first().uri, maxSide = 384, contentDescription = name, contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(14.dp)).background(PhPanel2),
                         )
                         Text(name, color = PhText, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
@@ -275,8 +281,8 @@ fun PhotosSection(modifier: Modifier = Modifier) {
                                 onLongClick = { selected = (selected ?: emptySet()) + photo.id },
                             )
                         ) {
-                            AsyncImage(
-                                model = photo.uri, contentDescription = photo.name, contentScale = ContentScale.Crop,
+                            DeviceImage(
+                                uri = photo.uri, maxSide = 256, contentDescription = photo.name, contentScale = ContentScale.Crop,
                                 modifier = Modifier.fillMaxSize().padding(if (isSelected) 8.dp else 0.dp).clip(RoundedCornerShape(if (isSelected) 10.dp else 0.dp)),
                             )
                             if (photo.id in favorites && selected == null) Text("♥", color = Color.White, fontSize = 14.sp, modifier = Modifier.align(Alignment.BottomEnd).padding(5.dp))
@@ -375,8 +381,8 @@ private fun PhotoViewerDialog(
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
                     items(photos.size) { n ->
-                        AsyncImage(
-                            model = photos[n].uri, contentDescription = null, contentScale = ContentScale.Crop,
+                        DeviceImage(
+                            uri = photos[n].uri, maxSide = 128, contentDescription = null, contentScale = ContentScale.Crop,
                             modifier = Modifier.size(48.dp).clip(RoundedCornerShape(8.dp))
                                 .border(2.dp, if (n == pager.currentPage) PhAccent else Color.Transparent, RoundedCornerShape(8.dp))
                                 .graphicsLayer { alpha = if (n == pager.currentPage) 1f else 0.6f },
@@ -461,8 +467,9 @@ private fun ZoomableImage(photo: DevicePhoto, onTap: () -> Unit, onZoomChanged: 
             },
         contentAlignment = Alignment.Center,
     ) {
-        AsyncImage(
-            model = photo.uri,
+        DeviceImage(
+            uri = photo.uri,
+            maxSide = 2048,
             contentDescription = photo.name,
             contentScale = ContentScale.Fit,
             modifier = Modifier.fillMaxSize().graphicsLayer {
@@ -472,5 +479,57 @@ private fun ZoomableImage(photo: DevicePhoto, onTap: () -> Unit, onZoomChanged: 
                 translationY = offset.y
             },
         )
+    }
+}
+
+private val bitmapCache = object : LruCache<String, Bitmap>((Runtime.getRuntime().maxMemory() / 6).toInt()) {
+    override fun sizeOf(key: String, value: Bitmap) = value.byteCount
+}
+
+/** Decodes a photo no larger than [maxSide] pixels, upright according to its EXIF orientation. */
+private fun decodePhoto(context: Context, uri: Uri, maxSide: Int): Bitmap? {
+    val resolver = context.contentResolver
+    if (Build.VERSION.SDK_INT >= 29 && maxSide <= 512) {
+        runCatching { return resolver.loadThumbnail(uri, Size(maxSide, maxSide), null) }
+    }
+    if (Build.VERSION.SDK_INT >= 28) {
+        return ImageDecoder.decodeBitmap(ImageDecoder.createSource(resolver, uri)) { decoder, info, _ ->
+            val longest = maxOf(info.size.width, info.size.height)
+            if (longest > maxSide) {
+                val scale = maxSide.toFloat() / longest
+                decoder.setTargetSize((info.size.width * scale).toInt().coerceAtLeast(1), (info.size.height * scale).toInt().coerceAtLeast(1))
+            }
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+        }
+    }
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+    var sample = 1
+    while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) sample *= 2
+    return resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample }) }
+}
+
+@Composable
+private fun DeviceImage(
+    uri: Uri,
+    maxSide: Int,
+    contentDescription: String?,
+    contentScale: ContentScale,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    val key = "$uri@$maxSide"
+    var bitmap by remember(key) { mutableStateOf(bitmapCache.get(key)) }
+    LaunchedEffect(key) {
+        if (bitmap == null) {
+            bitmap = withContext(Dispatchers.IO) { runCatching { decodePhoto(context, uri, maxSide) }.getOrNull() }
+                ?.also { bitmapCache.put(key, it) }
+        }
+    }
+    val current = bitmap
+    if (current != null) {
+        Image(bitmap = current.asImageBitmap(), contentDescription = contentDescription, contentScale = contentScale, modifier = modifier)
+    } else {
+        Box(modifier.background(PhPanel2))
     }
 }
