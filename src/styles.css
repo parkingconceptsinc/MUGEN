@@ -27,7 +27,8 @@
 :root[data-theme="light"] .iconBtn:hover { background: #0000000a; }
 :root[data-theme="light"] .trackRow:hover,
 :root[data-theme="light"] .groupRow:hover { background: #00000008; }
-:root[data-theme="light"] .toolBtn { background: #00000008; color: var(--text); }
+:root[data-theme="light"] .toolBtn:not(.on) { background: #00000008; color: var(--text); }
+:root[data-theme="light"] .vpTools .toolBtn:not(.on) { background: #ffffff17; color: #fff; }
 :root[data-theme="light"] .toolBtn:hover { background: #00000012; }
 :root[data-theme="light"] .npNext { border-color: var(--line); background: #00000005; }
 :root[data-theme="light"] .npNext:hover { background: #0000000a; }
@@ -1466,3 +1467,42 @@ body {
     background: color-mix(in srgb, var(--accent) 24%, #000000a6);
   }
 }
+
+/* Light theme audit: controls that still used dark-only colors, and surfaces that stay dark by design. */
+:root[data-theme="light"] .chip { background: var(--panel); color: var(--text); }
+:root[data-theme="light"] .chip:hover { background: var(--panel2); }
+:root[data-theme="light"] .chip.on { background: var(--accent); color: var(--on-accent); }
+:root[data-theme="light"] .chip.ghost { background: none; color: var(--muted); }
+:root[data-theme="light"] .chipX { background: #0000000f; }
+:root[data-theme="light"] .toggle { background: #c9ccd4; }
+:root[data-theme="light"] .toggle.on { background: var(--accent); }
+:root[data-theme="light"] .toggle i { box-shadow: 0 1px 4px #0003; }
+:root[data-theme="light"] .tabbar { background: color-mix(in srgb, var(--panel) 92%, transparent); }
+:root[data-theme="light"] .sheetRow > span,
+:root[data-theme="light"] .eqValue { color: var(--muted); }
+:root[data-theme="light"] .sheetHandle { background: #0000002e; }
+:root[data-theme="light"] .sheetItem:hover,
+:root[data-theme="light"] .tocItem:hover { background: #0000000a; }
+:root[data-theme="light"] .importBar { background: color-mix(in srgb, var(--panel) 95%, transparent); box-shadow: 0 12px 30px #30251a24; }
+:root[data-theme="light"] .toast { background: #22201f; color: #fff; box-shadow: 0 12px 30px #30251a40; }
+:root[data-theme="light"] .swatch.on { border-color: var(--text); }
+:root[data-theme="light"] .vrange::-webkit-slider-runnable-track { background: linear-gradient(to top, var(--accent) var(--pct), #00000020 var(--pct)); }
+:root[data-theme="light"] .vrange::-moz-range-track { background: #00000020; }
+:root[data-theme="light"] .vrange::-webkit-slider-thumb { box-shadow: 0 1px 4px #0005; }
+:root[data-theme="light"] .tile em { border-color: var(--line); background: #00000005; }
+
+/* Now Playing, the photo viewer and the readers are dark stages in both themes. */
+:root[data-theme="light"] :is(.nowPlaying, .photoViewer, .reader) {
+  color-scheme: dark;
+  --bg: #09090d;
+  --panel: #111117;
+  --panel2: #191922;
+  --line: #292933;
+  --text: #f5f3f2;
+  --muted: #96939f;
+  --dim: #777581;
+  color: var(--text);
+}
+:root[data-theme="light"] :is(.nowPlaying, .photoViewer, .reader) .iconBtn:hover { background: #ffffff12; }
+:root[data-theme="light"] :is(.nowPlaying, .photoViewer, .reader) .range::-webkit-slider-runnable-track { background: linear-gradient(to right, var(--accent) var(--pct), #ffffff26 var(--pct)); }
+:root[data-theme="light"] :is(.nowPlaying, .photoViewer, .reader) .range::-moz-range-track { background: #ffffff26; }
