@@ -39,6 +39,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalContext
@@ -699,13 +700,41 @@ private fun MortimerApp(player: Player, openSpotify: () -> Unit, openExternal: (
     }
 
     Surface(Modifier.fillMaxSize(), color = Bg) {
-        Column(Modifier.fillMaxSize().padding(horizontal = 14.dp)) {
-            Spacer(Modifier.height(10.dp))
-            Text("MORTIMER PLAYER", color = Accent, fontSize = 13.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-            Spacer(Modifier.height(6.dp))
-            Text(section, color = MainText, fontSize = 30.sp, fontWeight = FontWeight.ExtraBold)
-            Text("Your media library", color = Muted, fontSize = 13.sp)
-            Spacer(Modifier.height(10.dp))
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val compactLayout = maxHeight < 680.dp || maxWidth < 360.dp
+            val pagePadding = when {
+                maxWidth < 360.dp -> 10.dp
+                maxWidth > 600.dp -> 24.dp
+                else -> 14.dp
+            }
+            Column(Modifier.fillMaxSize().padding(horizontal = pagePadding)) {
+            Spacer(Modifier.height(if (compactLayout) 4.dp else 8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    Modifier.size(if (compactLayout) 34.dp else 40.dp)
+                        .background(Brush.linearGradient(listOf(Accent, Color(0xFFB94328))), RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("M", color = Color(0xFF111114), fontSize = 21.sp, fontWeight = FontWeight.Black)
+                }
+                Column(Modifier.weight(1f)) {
+                    Text("MORTIMER PLAYER", color = Accent, fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.6.sp)
+                    Text("Offline media library", color = Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                if (player.currentMediaItem != null) {
+                    Text(if (isPlaying) "PLAYING" else "PAUSED", color = if (isPlaying) Accent else Muted,
+                        fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                }
+            }
+            Spacer(Modifier.height(if (compactLayout) 5.dp else 9.dp))
+            Text(section, color = MainText, fontSize = if (compactLayout) 24.sp else 28.sp, fontWeight = FontWeight.ExtraBold,
+                maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text("Your media library", color = Muted, fontSize = 12.sp)
+            Spacer(Modifier.height(if (compactLayout) 6.dp else 9.dp))
             BackHandler(enabled = section != "Home" || selectedGroup != null || activePlaylistId != null) {
                 when {
                     selectedGroup != null -> selectedGroup = null
@@ -749,10 +778,7 @@ private fun MortimerApp(player: Player, openSpotify: () -> Unit, openExternal: (
                 when (targetSection) {
                 "Home" -> {
                     LazyColumn(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        item {
-                            Text("YOUR LIBRARY", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.5.sp, modifier = Modifier.padding(vertical = 4.dp))
-                        }
+                        item { HomeHeroCard(audio.size, videos.size, books.size, comics.size) { section = "Music" } }
                         item { AppUpdateCard() }
                         item { HomeCard("♫", "Music", "Files from your phone, SD card, or USB drive", "${audio.size} files") { section = "Music" } }
                         item { HomeCard("▣", "Videos", "Your local videos", "${videos.size} files") { section = "Videos" } }
@@ -1271,29 +1297,100 @@ private fun MortimerApp(player: Player, openSpotify: () -> Unit, openExternal: (
                     }
                 }
             }
+            }
         }
     }
 }
 
 @Composable
 private fun NavChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    Box(Modifier.background(if (selected) Accent else Panel2, RoundedCornerShape(999.dp)).clickable(onClick = onClick).padding(horizontal = 13.dp, vertical = 9.dp), contentAlignment = Alignment.Center) {
-        Text(label, color = if (selected) Color(0xFF111114) else MainText, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+    Box(
+        Modifier.background(if (selected) Accent else Panel2, RoundedCornerShape(999.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 7.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = if (selected) Color(0xFF111114) else MainText,
+            fontSize = 11.sp, maxLines = 1, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun HomeHeroCard(
+    musicCount: Int,
+    videoCount: Int,
+    bookCount: Int,
+    comicCount: Int,
+    onOpenMusic: () -> Unit
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Panel2),
+        shape = RoundedCornerShape(22.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 7.dp)
+    ) {
+        Column(
+            Modifier.fillMaxWidth()
+                .background(Brush.linearGradient(listOf(Color(0xFF30212A), Color(0xFF17171F), Color(0xFF171B25))))
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("YOUR MEDIA. YOUR WAY.", color = MainText, fontSize = 16.sp, fontWeight = FontWeight.ExtraBold,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text("Play and read files stored on your device.", color = Color(0xFFB7B5C2), fontSize = 11.sp,
+                        maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp))
+                }
+                Box(
+                    Modifier.size(52.dp).background(Color(0x22FF7849), RoundedCornerShape(17.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("▶", color = Accent, fontSize = 25.sp, fontWeight = FontWeight.Black)
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                HomeStat("MUSIC", musicCount, Modifier.weight(1f))
+                HomeStat("VIDEOS", videoCount, Modifier.weight(1f))
+                HomeStat("BOOKS", bookCount, Modifier.weight(1f))
+                HomeStat("COMICS", comicCount, Modifier.weight(1f))
+            }
+            Button(
+                onClick = onOpenMusic,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 42.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = Accent, contentColor = Color(0xFF171114)),
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(13.dp)
+            ) {
+                Text("Open music library  →", fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeStat(label: String, count: Int, modifier: Modifier = Modifier) {
+    Column(
+        modifier.background(Color(0x22FFFFFF), RoundedCornerShape(12.dp)).padding(horizontal = 7.dp, vertical = 9.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Text(count.toString(), color = MainText, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+        Text(label, color = Color(0xFFB7B5C2), fontSize = 8.sp, fontWeight = FontWeight.Bold,
+            maxLines = 1, overflow = TextOverflow.Ellipsis, letterSpacing = 0.4.sp)
     }
 }
 
 @Composable
 private fun HomeCard(icon: String, title: String, subtitle: String, trailing: String, onClick: () -> Unit) {
-    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Row(Modifier.fillMaxWidth().padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(44.dp).background(Panel2, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
+    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(17.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(42.dp).background(Color(0x22FF7849), RoundedCornerShape(13.dp)), contentAlignment = Alignment.Center) {
                 Text(icon, color = Accent, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             }
-            Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                Text(title, color = MainText, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                Text(subtitle, color = Muted, fontSize = 12.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Column(Modifier.weight(1f).padding(start = 12.dp, end = 8.dp)) {
+                Text(title, color = MainText, fontWeight = FontWeight.Bold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(subtitle, color = Muted, fontSize = 11.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
-            Text(trailing, color = Accent, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            Text(trailing, color = Accent, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
 }
@@ -1305,14 +1402,16 @@ private fun MediaRow(
     trailing: (@Composable () -> Unit)? = null,
     onClick: () -> Unit
 ) {
-    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
-        Row(Modifier.padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("♫", color = Accent, fontSize = 20.sp)
-            Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                Text(title, color = MainText, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(subtitle.ifBlank { "Local media" }, color = Muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = Panel), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 11.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(38.dp).background(Panel2, RoundedCornerShape(11.dp)), contentAlignment = Alignment.Center) {
+                Text("♫", color = Accent, fontSize = 19.sp)
             }
-            if (trailing != null) trailing() else Text("Open", color = Accent, fontSize = 12.sp)
+            Column(Modifier.weight(1f).padding(start = 10.dp, end = 5.dp)) {
+                Text(title, color = MainText, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
+                Text(subtitle.ifBlank { "Local media" }, color = Muted, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (trailing != null) trailing() else Text("Open", color = Accent, fontSize = 11.sp)
         }
     }
 }
