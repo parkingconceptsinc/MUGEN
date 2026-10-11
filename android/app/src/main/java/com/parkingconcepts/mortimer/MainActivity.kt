@@ -1048,9 +1048,9 @@ private fun MortimerApp(player: Player, openSpotify: () -> Unit, openExternal: (
                     }
                 }
                 "Books" -> {
-                    Button(onClick = { bookPicker.launch(arrayOf("application/epub+zip", "application/pdf", "text/plain", "*/*")) }, modifier = Modifier.fillMaxWidth()) { Text("＋ Import books") }
+                    Button(onClick = { bookPicker.launch(arrayOf("application/epub+zip", "application/pdf", "text/plain", "*/*")) }, modifier = Modifier.fillMaxWidth()) { Text("＋ Import books", maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     if (books.isEmpty()) EmptyMessage("Import EPUB, PDF, or other documents. Select a PDF or EPUB to read it in Mortimer Player.")
-                    LazyColumn(modifier = Modifier.weight(1f)) { items(books) { item -> MediaRow(item.title, "Selected document") {
+                    LazyColumn(modifier = Modifier.weight(1f)) { items(books, key = { it.uri.toString() }) { item -> MediaRow(item.title, "Selected document") {
                             val lowerTitle = item.title.substringBefore("?").lowercase()
                             when {
                                 lowerTitle.endsWith(".pdf") -> runCatching {
@@ -1071,9 +1071,9 @@ private fun MortimerApp(player: Player, openSpotify: () -> Unit, openExternal: (
                         } } }
                 }
                 "Comics" -> {
-                    Button(onClick = { comicPicker.launch(arrayOf("application/zip", "application/x-cbz", "application/pdf", "*/*")) }, modifier = Modifier.fillMaxWidth()) { Text("＋ Import comics") }
+                    Button(onClick = { comicPicker.launch(arrayOf("application/zip", "application/x-cbz", "application/pdf", "*/*")) }, modifier = Modifier.fillMaxWidth()) { Text("＋ Import comics", maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     if (comics.isEmpty()) EmptyMessage("Import CBZ files to read them here. CBR files require a compatible app.")
-                    LazyColumn(modifier = Modifier.weight(1f)) { items(comics) { item ->
+                    LazyColumn(modifier = Modifier.weight(1f)) { items(comics, key = { it.uri.toString() }) { item ->
                         MediaRow(item.title, "Comic file") {
                             if (item.title.substringBefore("?").lowercase().endsWith(".cbz")) {
                                 runCatching {
