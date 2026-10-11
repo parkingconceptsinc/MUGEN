@@ -192,7 +192,7 @@ export const Library = memo(function Library({ active }: { active: boolean }) {
   }
 
   return (
-    <section className="screen library" hidden={!active} ref={scroller} onScroll={(e) => scrollMemory.current.set(routeKey + routes.length, e.currentTarget.scrollTop)}>
+    <section className={`screen library${route.view === "home" ? " musicHome" : ""}`} hidden={!active} ref={scroller} onScroll={(e) => scrollMemory.current.set(routeKey + routes.length, e.currentTarget.scrollTop)}>
       <ScreenHeader title={title} subtitle={subtitle} onBack={onBack}>
         {true && (
           <>

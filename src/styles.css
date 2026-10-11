@@ -1314,3 +1314,11 @@ body {
   .sectionTitle { margin-top: 27px; }
   .albumGrid { gap: 18px 12px; }
 }
+
+/* Music home: artwork behind the dashboard, washed out by the page colour. */
+.screen.library.musicHome {
+  background:
+    linear-gradient(color-mix(in srgb, var(--bg) 72%, transparent), color-mix(in srgb, var(--bg) 86%, transparent)),
+    url("/music-home-bg.webp") center / cover no-repeat,
+    var(--bg);
+}
