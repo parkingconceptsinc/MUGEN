@@ -753,6 +753,7 @@ private fun MortimerApp(player: Player, openSpotify: () -> Unit, openExternal: (
                             Text("YOUR LIBRARY", color = Muted, fontSize = 11.sp, fontWeight = FontWeight.Bold,
                                 letterSpacing = 1.5.sp, modifier = Modifier.padding(vertical = 4.dp))
                         }
+                        item { AppUpdateCard() }
                         item { HomeCard("♫", "Music", "Files from your phone, SD card, or USB drive", "${audio.size} files") { section = "Music" } }
                         item { HomeCard("▣", "Videos", "Your local videos", "${videos.size} files") { section = "Videos" } }
                         item { HomeCard("▤", "Books", "EPUB, PDF, and other documents", "${books.size} files") { section = "Books" } }
