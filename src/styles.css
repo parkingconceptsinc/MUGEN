@@ -1446,3 +1446,23 @@ body {
   .pvNav { display: none; }
   .pvActions .iconBtn { width: 38px; height: 38px; }
 }
+
+/* Light theme: the sidebar keeps its dark artwork and glowing labels; the music home is plain white. */
+:root[data-theme="light"] .screen.library.musicHome { background: #fff; }
+:root[data-theme="light"] .photoActionBar { box-shadow: 0 14px 34px #30251a24; }
+@media (min-width: 900px) {
+  :root[data-theme="light"] .shell .sidebar {
+    color-scheme: dark;
+    --bg: #09090d;
+    --panel: #111117;
+    --panel2: #191922;
+    --line: #292933;
+    --text: #f5f3f2;
+    --muted: #96939f;
+    --dim: #777581;
+    color: var(--text);
+  }
+  :root[data-theme="light"] .sidebar nav button.active {
+    background: color-mix(in srgb, var(--accent) 24%, #000000a6);
+  }
+}
