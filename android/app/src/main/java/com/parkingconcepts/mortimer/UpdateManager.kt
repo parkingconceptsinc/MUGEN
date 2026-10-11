@@ -187,7 +187,10 @@ internal fun AppUpdateCard() {
             val query = DownloadManager.Query().setFilterById(id)
             val cursor = runCatching { manager.query(query) }.getOrNull()
             var finished = false
-            cursor?.use {
+            if (cursor == null) {
+                message = "Could not check download status. Open Downloads and try again."
+                finished = true
+            } else cursor.use {
                 if (it.moveToFirst()) {
                     when (it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
                         DownloadManager.STATUS_SUCCESSFUL -> {
