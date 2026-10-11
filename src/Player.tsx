@@ -24,6 +24,7 @@ type Item = {
   kind: "audio" | "video";
   size: number;
   path?: string;
+  title?: string;
   artist?: string;
   album?: string;
   genre?: string;
@@ -39,6 +40,11 @@ function supported(fileName: string) {
 
 function kindOf(fileName: string): "audio" | "video" {
   return videoExt.test(fileName) ? "video" : "audio";
+}
+
+function revokeItemUrls(item: Item) {
+  URL.revokeObjectURL(item.url);
+  if (item.cover) URL.revokeObjectURL(item.cover);
 }
 
 export function Player() {
@@ -81,10 +87,12 @@ export function Player() {
         if (cancelled || !stored.length) return;
         const restored: Item[] = stored.map((x) => ({
           id: x.id, name: x.name, url: URL.createObjectURL(x.file), kind: x.kind,
-          size: x.size, path: x.path, artist: x.artist, album: x.album, genre: x.genre,
+          size: x.size, path: x.path, title: x.title, artist: x.artist, album: x.album, genre: x.genre,
           cover: x.cover ? URL.createObjectURL(x.cover) : "",
         }));
-        if (!cancelled) {
+        if (cancelled) {
+          restored.forEach(revokeItemUrls);
+        } else {
           setItems(restored);
           setStatus(`${restored.length} tracks restored from your library`);
         }
@@ -94,6 +102,10 @@ export function Player() {
     })();
     return () => { cancelled = true; };
   }, []);
+
+  const itemsRef = useRef<Item[]>([]);
+  itemsRef.current = items;
+  useEffect(() => () => itemsRef.current.forEach(revokeItemUrls), []);
 
   useEffect(() => {
     const onBeforeInstall = (event: Event) => { event.preventDefault(); setInstallEvent(event as BeforeInstallPromptEvent); };
@@ -174,8 +186,10 @@ export function Player() {
     if (!("mediaSession" in navigator) || !current) return;
 
     navigator.mediaSession.metadata = new MediaMetadata({
-      title: current.name,
-      artist: "Mortimer Player",
+      title: current.title || current.name,
+      artist: current.artist || "",
+      album: current.album || "",
+      artwork: current.cover ? [{ src: current.cover }] : [],
     });
 
     const handlers: Array<[MediaSessionAction, () => void]> = [
@@ -212,21 +226,26 @@ export function Player() {
       }
     }
     for (const file of files) {
-      let artist = "", album = "", genre = "", cover = "";
+      let title = "", artist = "", album = "", genre = "", cover = "";
+      let coverBlob: Blob | undefined;
       if (kindOf(file.name) === "audio") {
         try {
           const meta = parseBlob ? await parseBlob(file) : null;
+          title = meta?.common.title || "";
           artist = meta?.common.artist || "";
           album = meta?.common.album || "";
           genre = meta?.common.genre?.[0] || "";
           const picture = meta?.common.picture?.[0];
-          if (picture) cover = URL.createObjectURL(new Blob([picture.data], { type: picture.format }));
+          if (picture) {
+            coverBlob = new Blob([picture.data], { type: picture.format });
+            cover = URL.createObjectURL(coverBlob);
+          }
         } catch {}
       }
       const id = crypto.randomUUID();
       const fileUrl = URL.createObjectURL(file);
-      added.push({ id, name: file.name, url: fileUrl, kind: kindOf(file.name), size: file.size, path: file.name, artist, album, genre, cover });
-      stored.push({ id, name: file.name, kind: kindOf(file.name), path: file.name, size: file.size, lastModified: file.lastModified, file, artist, album, genre });
+      added.push({ id, name: file.name, url: fileUrl, kind: kindOf(file.name), size: file.size, path: file.name, title, artist, album, genre, cover });
+      stored.push({ id, name: file.name, kind: kindOf(file.name), path: file.name, size: file.size, lastModified: file.lastModified, file, title, artist, album, genre, cover: coverBlob });
     }
     try {
       await saveLibrary(stored);
@@ -320,13 +339,13 @@ export function Player() {
 
   function removeCurrent() {
     if (!current) return;
-    URL.revokeObjectURL(current.url);
+    revokeItemUrls(current);
     setItems((old) => old.filter((_, i) => i !== index));
     setIndex((old) => Math.min(old, Math.max(0, items.length - 2)));
   }
 
   function clearQueue() {
-    items.forEach((item) => URL.revokeObjectURL(item.url));
+    items.forEach(revokeItemUrls);
     setItems([]);
     setIndex(0);
     setPlaying(false);

@@ -6,6 +6,7 @@ export type StoredLibraryItem = {
   size: number;
   lastModified: number;
   file: Blob;
+  title?: string;
   artist?: string;
   album?: string;
   genre?: string;
