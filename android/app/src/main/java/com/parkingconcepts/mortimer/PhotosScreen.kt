@@ -67,12 +67,12 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-private val PhBg = Color(0xFF07070A)
-private val PhPanel = Color(0xFF121218)
-private val PhPanel2 = Color(0xFF1A1A22)
-private val PhAccent = Color(0xFFFF7849)
-private val PhText = Color(0xFFF4F4F6)
-private val PhMuted = Color(0xFF8F8F9C)
+private val PhBg: Color @Composable get() = LocalMortimerColors.current.bg
+private val PhPanel: Color @Composable get() = LocalMortimerColors.current.panel
+private val PhPanel2: Color @Composable get() = LocalMortimerColors.current.panel2
+private val PhAccent: Color @Composable get() = LocalMortimerColors.current.accent
+private val PhText: Color @Composable get() = LocalMortimerColors.current.text
+private val PhMuted: Color @Composable get() = LocalMortimerColors.current.muted
 
 data class DevicePhoto(
     val id: Long,

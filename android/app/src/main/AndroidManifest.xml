@@ -15,18 +15,19 @@
         android:allowBackup="true"
         android:label="Mortimer Player"
         android:usesCleartextTraffic="false"
-        android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        android:theme="@android:style/Theme.Material.NoActionBar">
         <meta-data
             android:name="com.google.android.gms.car.application"
             android:resource="@xml/automotive_app_desc" />
         <activity
-            android:name=".PdfReaderActivity"
-            android:exported="false" />
-        <activity
             android:name=".ComicReaderActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize"
+            android:theme="@android:style/Theme.Material.NoActionBar"
             android:exported="false" />
         <activity
             android:name=".EpubReaderActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize"
+            android:theme="@android:style/Theme.Material.NoActionBar"
             android:exported="false" />
         <activity
             android:name=".MainActivity"
