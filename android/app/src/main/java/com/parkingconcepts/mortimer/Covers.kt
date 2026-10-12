@@ -119,7 +119,7 @@ object Covers {
                         }
                     }
                 }
-                "rar" -> resolver.openInputStream(uri)?.use { firstRarImage(it) }?.let { scaled(it) }
+                "rar" -> firstArchiveImage(context, uri)?.let { scaled(it) }
                 else -> if (item.format == "epub") epubCover(context, item) else zipFirstImage(context, item)
             }
         }

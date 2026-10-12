@@ -149,7 +149,7 @@ private fun ComicReader(
     val key = uri.toString()
     var source by remember { mutableStateOf<PageSource?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    var loading by remember { mutableIntStateOf(-1) }
+    var loading by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(key) {
         withContext(Dispatchers.IO) {
@@ -171,7 +171,7 @@ private fun ComicReader(
             }
             src == null -> Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Abriendo $title…", color = Color.White)
-                if (loading in 1..99) Text("Preparando páginas · $loading%", color = Color(0xAAFFFFFF), fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp))
+                loading?.let { Text("Preparando páginas · $it", color = Color(0xAAFFFFFF), fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp)) }
             }
             else -> ComicPages(src, key, title, fromStart, onClose, onChrome, onKeepAwake)
         }

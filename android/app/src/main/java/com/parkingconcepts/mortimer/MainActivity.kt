@@ -162,6 +162,7 @@ private val SECTIONS = listOf(
     Section("books", "Libros", "▤"),
     Section("comics", "Cómics", "▧"),
     Section("photos", "Fotos", "▦"),
+    Section("eq", "Ecualizador", "≋"),
     Section("services", "Servicios", "♪"),
     Section("settings", "Ajustes", "⚙"),
 )
@@ -371,7 +372,7 @@ private fun MortimerApp(
                             else player.addMediaItem(mediaItemFor(item))
                         },
                         onRemove = { item -> Covers.forget(context, item.uri); commit(library.filter { it.uri != item.uri }) })
-                    "playing" -> NowPlayingSection(player, current, currentTitle, isPlaying, queueVersion, playbackError, content)
+                    "playing" -> NowPlayingSection(player, current, currentTitle, isPlaying, queueVersion, playbackError, content, onEqualizer = { section = "eq" })
                     "videos" -> VideosSection(library, content, onAddFiles = { addFiles("videos") }, onAddFolder = { addFolder("videos") },
                         onPlay = { item -> videoOpen = item; player.setMediaItem(mediaItemFor(item)); player.prepare(); player.play() },
                         onRemove = { item -> Covers.forget(context, item.uri); commit(library.filter { it.uri != item.uri }) })
@@ -381,11 +382,12 @@ private fun MortimerApp(
                         onChange = { commit(it) }, openExternal = { openExternal(it.androidUri, mimeForItem(it)) },
                     )
                     "photos" -> PhotosSection(content)
+                    "eq" -> EqualizerSection(content)
                     "services" -> Column(content) {
                         HomeCard("♫", "Spotify", "Abrir la aplicación oficial de Spotify", "Abrir") { openSpotify() }
                         Text("Spotify se reproduce en su aplicación oficial. Mortimer Player utiliza su reproductor nativo para los archivos locales.", color = c.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
                     }
-                    "settings" -> SettingsSection(library, themePref, onTheme, player, content,
+                    "settings" -> SettingsSection(library, themePref, onTheme, player, content, onEqualizer = { section = "eq" },
                         onResetProgress = { commit(library.map { it.copy(progress = 0f, position = "", openedAt = 0) }) })
                 }
                 if (current != null && section != "playing" && section != "photos") {
@@ -729,7 +731,7 @@ private fun RoundButton(label: String, primary: Boolean, size: Int = 42, onClick
 }
 
 @Composable
-private fun NowPlayingSection(player: Player, current: LibraryItem?, title: String?, isPlaying: Boolean, queueVersion: Int, error: String?, modifier: Modifier) {
+private fun NowPlayingSection(player: Player, current: LibraryItem?, title: String?, isPlaying: Boolean, queueVersion: Int, error: String?, modifier: Modifier, onEqualizer: () -> Unit) {
     val c = LocalMortimerColors.current
     val (position, duration) = rememberPosition(player, true)
     var seeking by remember { mutableStateOf<Float?>(null) }
@@ -789,6 +791,7 @@ private fun NowPlayingSection(player: Player, current: LibraryItem?, title: Stri
                         Chip("${if (s % 1f == 0f) s.toInt().toString() else s.toString()}×", speed == s) { speed = s; player.setPlaybackSpeed(s) }
                     }
                 }
+                Box(Modifier.padding(top = 10.dp)) { Chip("≋ Ecualizador", AudioEffects.currentSettings().enabled) { onEqualizer() } }
                 if (queue.size > 1) Box(Modifier.fillMaxWidth().padding(top = 16.dp)) { SectionLabel("Cola · ${queue.size}") }
             }
         }
@@ -813,7 +816,7 @@ private fun NowPlayingSection(player: Player, current: LibraryItem?, title: Stri
 }
 
 @Composable
-private fun SettingsSection(library: List<LibraryItem>, themePref: String, onTheme: (String) -> Unit, player: Player, modifier: Modifier, onResetProgress: () -> Unit) {
+private fun SettingsSection(library: List<LibraryItem>, themePref: String, onTheme: (String) -> Unit, player: Player, modifier: Modifier, onEqualizer: () -> Unit, onResetProgress: () -> Unit) {
     val context = LocalContext.current
     val c = LocalMortimerColors.current
     var confirm by remember { mutableStateOf(false) }
@@ -834,6 +837,8 @@ private fun SettingsSection(library: List<LibraryItem>, themePref: String, onThe
                     Chip("${if (s % 1f == 0f) s.toInt().toString() else s.toString()}×", speed == s) { speed = s; player.setPlaybackSpeed(s) }
                 }
             }
+            Spacer(Modifier.height(6.dp))
+            MenuItem("≋ Ecualizador, balance y refuerzo de volumen") { onEqualizer() }
         }
         SettingsCard("Biblioteca") {
             Text(

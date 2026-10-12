@@ -7,10 +7,10 @@ import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
 import android.os.ParcelFileDescriptor
-import java.io.ByteArrayOutputStream
 import java.io.Closeable
 import java.io.File
-import java.io.InputStream
+import me.zhanghai.android.libarchive.Archive
+import me.zhanghai.android.libarchive.ArchiveEntry
 import java.util.zip.ZipFile
 
 val IMAGE_EXTENSIONS = setOf("jpg", "jpeg", "png", "webp", "gif", "bmp")
@@ -106,6 +106,7 @@ class PdfPageSource(private val descriptor: ParcelFileDescriptor) : PageSource {
 fun sniffArchive(head: ByteArray): String? = when {
     head.size >= 4 && head[0] == 'P'.code.toByte() && head[1] == 'K'.code.toByte() -> "zip"
     head.size >= 4 && head[0] == 'R'.code.toByte() && head[1] == 'a'.code.toByte() && head[2] == 'r'.code.toByte() && head[3] == '!'.code.toByte() -> "rar"
+    head.size >= 6 && head[0] == '7'.code.toByte() && head[1] == 'z'.code.toByte() && head[2] == 0xBC.toByte() && head[3] == 0xAF.toByte() -> "rar"
     head.size >= 4 && head[0] == '%'.code.toByte() && head[1] == 'P'.code.toByte() && head[2] == 'D'.code.toByte() && head[3] == 'F'.code.toByte() -> "pdf"
     else -> null
 }
@@ -136,15 +137,11 @@ private fun copyToCache(context: Context, uri: Uri, name: String, onProgress: (I
     return target
 }
 
-fun rarErrorMessage(error: Throwable): String {
-    val name = error.javaClass.simpleName
-    return if (name.contains("RarV5", ignoreCase = true) || (error.message ?: "").contains("rar5", ignoreCase = true))
-        "Este CBR usa el formato RAR5, que todavía no se puede leer. Conviértelo a CBZ para abrirlo aquí."
-    else "No se pudo abrir el CBR: " + (error.message ?: name)
-}
+fun rarErrorMessage(error: Throwable): String =
+    "No se pudo abrir el archivo comprimido: " + (error.message ?: error.javaClass.simpleName)
 
 /** Opens a comic or PDF as pages. Runs on a background thread. */
-fun openPageSource(context: Context, uri: Uri, format: String, onProgress: (Int) -> Unit): PageSource {
+fun openPageSource(context: Context, uri: Uri, format: String, onProgress: (String) -> Unit): PageSource {
     val kind = sniffArchive(readHead(context, uri)) ?: when (format) {
         "cbr" -> "rar"
         "pdf" -> "pdf"
@@ -159,8 +156,7 @@ fun openPageSource(context: Context, uri: Uri, format: String, onProgress: (Int)
         "rar" -> {
             val dir = File(context.cacheDir, "rar_$stamp").apply { mkdirs() }
             try {
-                val files = context.contentResolver.openInputStream(uri)?.use { extractRarImages(it, dir, onProgress) }
-                    ?: error("No se pudo leer el archivo.")
+                val files = extractArchiveImages(context, uri, dir) { n -> onProgress("$n páginas") }
                 check(files.isNotEmpty()) { "El CBR no contiene páginas de imagen compatibles." }
                 FolderPageSource(dir, files)
             } catch (error: Throwable) {
@@ -170,7 +166,7 @@ fun openPageSource(context: Context, uri: Uri, format: String, onProgress: (Int)
             }
         }
         else -> {
-            val file = copyToCache(context, uri, "comic_$stamp.zip", onProgress)
+            val file = copyToCache(context, uri, "comic_$stamp.zip") { pct -> onProgress("$pct%") }
             val source = runCatching { ZipPageSource(file, deleteOnClose = true) }.getOrElse {
                 file.delete()
                 error("El archivo no es un CBZ válido.")
@@ -184,28 +180,68 @@ fun openPageSource(context: Context, uri: Uri, format: String, onProgress: (Int)
     }
 }
 
-private fun extractRarImages(input: InputStream, dir: File, onProgress: (Int) -> Unit): List<File> {
-    val out = ArrayList<Pair<String, File>>()
-    com.github.junrar.Archive(input).use { archive ->
-        val headers = archive.fileHeaders.filter { !it.isDirectory && extensionOf(it.fileName) in IMAGE_EXTENSIONS }
-        headers.forEachIndexed { i, header ->
-            val target = File(dir, "%05d.%s".format(i, extensionOf(header.fileName)))
-            target.outputStream().use { archive.extractFile(header, it) }
-            out.add(header.fileName.replace('\\', '/') to target)
-            onProgress(((i + 1) * 100) / headers.size)
+/** Opens [uri] with libarchive (RAR4, RAR5, 7z, ZIP…) and visits every entry header. */
+private inline fun forEachArchiveEntry(context: Context, uri: Uri, visit: (archive: Long, entry: Long, name: String, isFile: Boolean) -> Boolean) {
+    val pfd = context.contentResolver.openFileDescriptor(uri, "r") ?: error("No se pudo leer el archivo.")
+    pfd.use {
+        val archive = Archive.readNew()
+        try {
+            Archive.readSupportFilterAll(archive)
+            Archive.readSupportFormatAll(archive)
+            Archive.readOpenFd(archive, it.fd, 64 * 1024)
+            while (true) {
+                val entry = Archive.readNextHeader(archive)
+                if (entry == 0L) break
+                val name = ArchiveEntry.pathnameUtf8(entry) ?: ArchiveEntry.pathname(entry)?.let { bytes -> String(bytes) } ?: ""
+                val isFile = (ArchiveEntry.filetype(entry) and ArchiveEntry.AE_IFMT) == ArchiveEntry.AE_IFREG
+                if (!visit(archive, entry, name.replace('\\', '/'), isFile)) break
+            }
+        } finally {
+            runCatching { Archive.free(archive) }
         }
+    }
+}
+
+private fun isPageName(name: String) =
+    extensionOf(name) in IMAGE_EXTENSIONS && !name.substringAfterLast('/').startsWith(".") && !name.startsWith("__MACOSX")
+
+private fun writeEntry(archive: Long, target: File) {
+    ParcelFileDescriptor.open(target, ParcelFileDescriptor.MODE_WRITE_ONLY or ParcelFileDescriptor.MODE_CREATE or ParcelFileDescriptor.MODE_TRUNCATE).use { out ->
+        Archive.readDataIntoFd(archive, out.fd)
+    }
+}
+
+/** Extracts every page image into [dir]; [onProgress] gets the number of pages found so far. */
+private fun extractArchiveImages(context: Context, uri: Uri, dir: File, onProgress: (Int) -> Unit): List<File> {
+    val out = ArrayList<Pair<String, File>>()
+    forEachArchiveEntry(context, uri) { archive, _, name, isFile ->
+        if (isFile && isPageName(name)) {
+            val target = File(dir, "%05d.%s".format(out.size, extensionOf(name)))
+            writeEntry(archive, target)
+            out.add(name to target)
+            onProgress(out.size)
+        }
+        true
     }
     return out.sortedBy { naturalKey(it.first) }.map { it.second }
 }
 
-/** First page of a RAR archive, for covers. */
-fun firstRarImage(input: InputStream): ByteArray? {
-    com.github.junrar.Archive(input).use { archive ->
-        val header = archive.fileHeaders
-            .filter { !it.isDirectory && extensionOf(it.fileName) in IMAGE_EXTENSIONS }
-            .minByOrNull { naturalKey(it.fileName.replace('\\', '/')) } ?: return null
-        val bytes = ByteArrayOutputStream()
-        archive.extractFile(header, bytes)
-        return bytes.toByteArray()
+/** First page of a RAR/7z archive, for covers. */
+fun firstArchiveImage(context: Context, uri: Uri): ByteArray? {
+    var first: String? = null
+    forEachArchiveEntry(context, uri) { _, _, name, isFile ->
+        if (isFile && isPageName(name) && (first == null || naturalKey(name) < naturalKey(first!!))) first = name
+        true
+    }
+    val wanted = first ?: return null
+    val tmp = File(context.cacheDir, "cover_${System.nanoTime()}")
+    try {
+        var found = false
+        forEachArchiveEntry(context, uri) { archive, _, name, isFile ->
+            if (isFile && name == wanted) { writeEntry(archive, tmp); found = true; false } else true
+        }
+        return if (found) tmp.readBytes() else null
+    } finally {
+        tmp.delete()
     }
 }
