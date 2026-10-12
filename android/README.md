@@ -12,19 +12,19 @@ gradle assembleDebug
 
 El APK de depuración se genera en `app/build/outputs/apk/debug/app-debug.apk`. El workflow de GitHub Actions también compila y publica el APK como artefacto descargable de la ejecución.
 
-## Funciones de esta primera vista nativa
+## Funciones
 
-- Interfaz Android nativa con el estilo oscuro y acento coral de Mortimer Player.
-- Selección de archivos de audio con el selector de documentos de Android; permite navegar por almacenamiento interno, SD y unidades USB compatibles con el dispositivo.
-- Persistencia local de las selecciones de biblioteca y de los permisos de acceso a documentos, para conservar la biblioteca al cerrar y volver a abrir la app.
-- Reproducción local en cola mediante AndroidX Media3/ExoPlayer, con controles básicos de reproducir, pausar y siguiente. La interfaz se conecta a un servicio Media3 separado para mantener la sesión de audio cuando la actividad deja de estar visible; falta validarlo en un dispositivo real.
-- Selección y reproducción de vídeo dentro de la app mediante Media3.
-- Lectores nativos de PDF, EPUB de texto y CBZ dentro de la app; CBR se delega a una aplicación compatible. El lector EPUB ofrece navegación por capítulos y extracción de texto, no reproduce fielmente todos los diseños complejos, fuentes o estilos del formato.
-- Acceso directo a la aplicación oficial de Spotify, o a Spotify Web si la aplicación no está instalada.
-- Se conserva el servicio de medios de Android Auto existente, que requiere pruebas en un dispositivo y vehículo compatibles.
+- Tema claro, oscuro o el del sistema, con los mismos colores que la PWA. La barra lateral (fija en tablets, deslizable en el móvil) conserva su imagen y sus letras brillantes en ambos modos.
+- Biblioteca guardada en `library.json`: música, vídeos, libros y cómics desde archivos sueltos o carpetas enteras (teléfono, SD o USB). Los archivos no se copian; se guardan sus permisos de acceso, el progreso y las portadas.
+- Música con carátulas y etiquetas, búsqueda, vistas por canciones, artistas, álbumes y carpetas, cola, aleatorio, repetición, velocidad y pantalla Reproduciendo con barra de posición. Reproducción con Media3 en un servicio aparte.
+- Vídeos con miniaturas y reproductor a pantalla completa.
+- Libros: lector EPUB con imágenes y estilos del libro, índice, tamaño de letra, tipografía, interlineado, temas (oscuro, negro, sepia y claro), páginas o lectura continua, y progreso guardado. Los TXT usan el mismo lector.
+- Cómics: CBZ, CBR (RAR4) y PDF con modos página, doble página y vertical, dirección manga, ajuste a pantalla o a ancho, zoom, cuadrícula de páginas y progreso guardado. Las estanterías tienen "Seguir leyendo", búsqueda, orden, series por carpeta y menú para marcar como leído, mover o quitar.
+- Fotos tipo álbum desde la galería del teléfono, con álbumes, favoritos, selección múltiple y visor con zoom.
+- Acceso directo a Spotify y servicio de Android Auto.
 
 ## Estado y limitaciones
 
-Esta es una versión preliminar de la conversión nativa, no una paridad funcional completa con la PWA. La persistencia básica de las selecciones ya está implementada; todavía faltan controles de reproducción completos, soporte CBR integrado, ecualizador, preferencias, validación real de reproducción en segundo plano y pruebas de Android Auto. Spotify se abre en su aplicación oficial: la reproducción completa de su catálogo dentro de Mortimer Player no está implementada.
+Los CBR en formato RAR5 todavía no se pueden abrir; hay que convertirlos a CBZ. Falta el ecualizador de la PWA y las pruebas en un vehículo con Android Auto.
 
 La app no usa WebView ni carga la PWA. No se afirma que el APK esté listo para distribución final hasta que el workflow compile correctamente y las funciones se prueben en dispositivos reales.

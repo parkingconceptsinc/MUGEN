@@ -205,18 +205,16 @@ class CarMediaService : MediaBrowserServiceCompat() {
             // Continue below: SAF-imported audio may still be available without MediaStore permission.
         }
         val knownUris = items.mapNotNullTo(mutableSetOf()) { item -> item.mediaId }
-        val imported = getSharedPreferences("mortimer_library", MODE_PRIVATE)
-            .getStringSet("audio", emptySet()).orEmpty()
-        imported.forEach { row ->
-            val parts = row.split('\t', limit = 2)
-            if (parts.size == 2 && parts[0].isNotBlank() && knownUris.add(parts[0])) {
-                val uri = Uri.parse(parts[0])
+        val imported = LibraryStore.load(this).filter { it.kind == "audio" }
+        imported.forEach { track ->
+            if (track.uri.isNotBlank() && knownUris.add(track.uri)) {
+                val uri = Uri.parse(track.uri)
                 items += MediaBrowserCompat.MediaItem(
                     MediaDescriptionCompat.Builder()
                         .setMediaId(uri.toString())
                         .setMediaUri(uri)
-                        .setTitle(parts[1].ifBlank { "Unknown title" })
-                        .setSubtitle("Imported local audio")
+                        .setTitle(track.title.ifBlank { "Unknown title" })
+                        .setSubtitle(track.artist.ifBlank { "Imported local audio" })
                         .build(),
                     MediaBrowserCompat.MediaItem.FLAG_PLAYABLE
                 )
@@ -244,14 +242,9 @@ class CarMediaService : MediaBrowserServiceCompat() {
                 }
             }
         }
-        val imported = getSharedPreferences("mortimer_library", MODE_PRIVATE)
-            .getStringSet("audio", emptySet()).orEmpty()
-            .mapNotNull { row ->
-                val parts = row.split('\t', limit = 2)
-                if (parts.size == 2 && parts[0].isNotBlank()) {
-                    parts[0] to parts[1]
-                } else null
-            }
+        val imported = LibraryStore.load(this)
+            .filter { it.kind == "audio" && it.uri.isNotBlank() }
+            .map { it.uri to it.title }
             .sortedBy { it.second.lowercase() }
         imported.forEach { (rawUri, _) ->
             runCatching { Uri.parse(rawUri) }.getOrNull()?.let(ordered::add)

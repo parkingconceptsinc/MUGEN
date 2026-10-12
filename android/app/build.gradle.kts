@@ -12,8 +12,8 @@ android {
         applicationId = "com.parkingconcepts.mortimer"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.7.0-native-preview"
+        versionCode = 3
+        versionName = "0.8.0"
     }
 
     compileOptions {
@@ -40,4 +40,6 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.6.1")
     implementation("androidx.media3:media3-ui:1.6.1")
     implementation("androidx.media3:media3-session:1.6.1")
+    // CBR (RAR) comics. Pure Java, from Maven Central.
+    implementation("com.github.junrar:junrar:7.5.5")
 }
