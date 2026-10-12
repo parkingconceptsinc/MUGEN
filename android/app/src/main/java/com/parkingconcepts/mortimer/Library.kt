@@ -69,7 +69,7 @@ data class LibraryItem(
     }
 }
 
-val READABLE_EXTENSIONS = setOf("pdf", "epub", "cbz", "cbr", "zip", "rar", "txt", "md", "markdown", "log", "nfo", "csv")
+val READABLE_EXTENSIONS = setOf("pdf", "epub", "cbz", "cbr", "cb7", "7z", "zip", "rar", "txt", "md", "markdown", "log", "nfo", "csv")
 val AUDIO_EXTENSIONS = setOf("mp3", "m4a", "aac", "flac", "ogg", "oga", "opus", "wav", "wma", "amr", "mka", "aiff", "aif", "alac", "3gp", "mid", "midi")
 val VIDEO_EXTENSIONS = setOf("mp4", "m4v", "mkv", "webm", "mov", "avi", "3gp", "3g2", "ts", "m2ts", "mts", "mpg", "mpeg", "wmv", "flv", "ogv")
 
@@ -82,7 +82,7 @@ fun formatOf(name: String, kind: String): String = when (kind) {
         "pdf" -> "pdf"
         "epub" -> "epub"
         "cbz", "zip" -> "cbz"
-        "cbr", "rar" -> "cbr"
+        "cbr", "rar", "cb7", "7z" -> "cbr"
         "txt", "md", "markdown", "log", "nfo", "csv" -> "txt"
         else -> "other"
     }
@@ -177,7 +177,7 @@ fun itemsFromTree(context: Context, tree: Uri, kind: String): List<LibraryItem> 
     val accepted = when (kind) {
         "audio" -> AUDIO_EXTENSIONS
         "videos" -> VIDEO_EXTENSIONS
-        "comics" -> setOf("cbz", "cbr", "zip", "rar", "pdf")
+        "comics" -> setOf("cbz", "cbr", "cb7", "7z", "zip", "rar", "pdf")
         else -> READABLE_EXTENSIONS
     }
     val out = ArrayList<LibraryItem>()

@@ -19,12 +19,13 @@ El APK de depuración se genera en `app/build/outputs/apk/debug/app-debug.apk`. 
 - Música con carátulas y etiquetas, búsqueda, vistas por canciones, artistas, álbumes y carpetas, cola, aleatorio, repetición, velocidad y pantalla Reproduciendo con barra de posición. Reproducción con Media3 en un servicio aparte.
 - Vídeos con miniaturas y reproductor a pantalla completa.
 - Libros: lector EPUB con imágenes y estilos del libro, índice, tamaño de letra, tipografía, interlineado, temas (oscuro, negro, sepia y claro), páginas o lectura continua, y progreso guardado. Los TXT usan el mismo lector.
-- Cómics: CBZ, CBR (RAR4) y PDF con modos página, doble página y vertical, dirección manga, ajuste a pantalla o a ancho, zoom, cuadrícula de páginas y progreso guardado. Las estanterías tienen "Seguir leyendo", búsqueda, orden, series por carpeta y menú para marcar como leído, mover o quitar.
+- Cómics: CBZ, CBR (RAR4 y RAR5), CB7 y PDF con modos página, doble página y vertical, dirección manga, ajuste a pantalla o a ancho, zoom, cuadrícula de páginas y progreso guardado. Las estanterías tienen "Seguir leyendo", búsqueda, orden, series por carpeta y menú para marcar como leído, mover o quitar.
 - Fotos tipo álbum desde la galería del teléfono, con álbumes, favoritos, selección múltiple y visor con zoom.
+- Ecualizador de 10 bandas con los ajustes predefinidos de la PWA y ajustes propios, preamplificador, balance y refuerzo de volumen.
 - Acceso directo a Spotify y servicio de Android Auto.
 
 ## Estado y limitaciones
 
-Los CBR en formato RAR5 todavía no se pueden abrir; hay que convertirlos a CBZ. Falta el ecualizador de la PWA y las pruebas en un vehículo con Android Auto.
+El ecualizador usa el del sistema Android, que en la mayoría de teléfonos tiene 5 bandas: las 10 de la app se adaptan a ellas. Faltan pruebas en un vehículo con Android Auto.
 
 La app no usa WebView ni carga la PWA. No se afirma que el APK esté listo para distribución final hasta que el workflow compile correctamente y las funciones se prueben en dispositivos reales.
