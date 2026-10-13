@@ -203,7 +203,7 @@ private fun escapeHtml(s: String) = s.replace("&", "&amp;").replace("<", "&lt;")
 
 private fun decodeText(bytes: ByteArray): String {
     val utf = String(bytes, Charsets.UTF_8)
-    if (!utf.contains('�')) return utf.removePrefix("﻿")
+    if (!utf.contains('�')) return utf.removePrefix(0xFEFF.toChar().toString())
     return String(bytes, Charset.forName("windows-1252"))
 }
 
@@ -400,6 +400,7 @@ private fun BookReader(
                     webView.isVerticalScrollBarEnabled = false
                     webView.isHorizontalScrollBarEnabled = false
                     webView.setBackgroundColor(AndroidColor.TRANSPARENT)
+                    @SuppressLint("JavascriptInterface")
                     webView.addJavascriptInterface(bridge, "Mortimer")
                     webView.webViewClient = object : WebViewClient() {
                         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
