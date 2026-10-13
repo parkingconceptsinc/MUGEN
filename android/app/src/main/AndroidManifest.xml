@@ -31,6 +31,9 @@
             android:theme="@android:style/Theme.Material.NoActionBar"
             android:exported="false" />
         <activity
+            android:name=".PdfReaderActivity"
+            android:exported="false" />
+        <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
@@ -39,21 +42,20 @@
             </intent-filter>
         </activity>
 
+        <receiver
+            android:name="androidx.media3.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
+
         <service
             android:name=".PlaybackService"
             android:exported="true"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
-                <action android:name="androidx.media3.session.MediaSessionService" />
-            </intent-filter>
-        </service>
-
-        <service
-            android:name=".CarMediaService"
-            android:permission="android.permission.BIND_MEDIA_BROWSER_SERVICE"
-            android:exported="true"
-            android:foregroundServiceType="mediaPlayback">
-            <intent-filter>
+                <action android:name="androidx.media3.session.MediaLibraryService" />
                 <action android:name="android.media.browse.MediaBrowserService" />
             </intent-filter>
         </service>
