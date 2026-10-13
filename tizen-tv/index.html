@@ -1,11 +1,60 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#080a10"><title>Mortimer Player for TV</title><link rel="stylesheet" href="styles.css"><script src="app.js" defer></script></head>
-<body><main class="shell">
-<header class="topbar"><div class="brand"><span class="brand-mark">M</span><span>MORTIMER <small>PLAYER</small></span></div><div class="status">TV EDITION · PREVIEW</div></header>
-<section class="hero"><div class="hero-copy"><p class="eyebrow">YOUR MEDIA. YOUR SCREEN.</p><h1>Make room<br>for the <em>moment.</em></h1><p class="subcopy">A cinematic media experience for your Samsung TV.</p><div class="actions"><button id="browseBtn" class="primary focused" data-action="browse">Browse media <span>›</span></button><button id="resumeBtn" class="secondary" data-action="resume">Open demo video</button></div><p class="hint">Navigate with ▲ ▼ ◀ ▶ · Select with OK · Back to return</p></div>
-<div class="visual" aria-hidden="true"><div class="orb orb-a"></div><div class="orb orb-b"></div><div class="disc"><div class="disc-center">M</div></div><div class="visual-label"><span>NOW PLAYING</span><b>Discover your next favorite</b></div></div></section>
-<section class="library" id="library"><div class="section-heading"><div><p class="eyebrow">YOUR LIBRARY</p><h2>Choose your world</h2></div><span class="section-note">TV OPTIMIZED</span></div><div class="tiles">
-<button class="tile focused" data-action="music"><span class="tile-icon">♫</span><b>Music</b><small>Albums and tracks</small></button><button class="tile" data-action="video"><span class="tile-icon">▷</span><b>Video</b><small>Movies and clips</small></button><button class="tile" data-action="sources"><span class="tile-icon">▤</span><b>Sources</b><small>USB and local media</small></button><button class="tile" data-action="settings"><span class="tile-icon">⚙</span><b>Settings</b><small>Playback and display</small></button></div></section>
-<section class="notice" id="notice" role="status" aria-live="polite">TV preview ready. Connect a supported media source to begin.</section>
-<section class="player hidden" id="player"><video id="video" controls playsinline></video><div class="player-footer"><b id="mediaTitle">Demo playback</b><button id="closePlayer">Close player</button></div></section>
-<footer><span>Mortimer Player · Tizen TV edition</span><span>BUILD 0.1.0</span></footer></main></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#07070a">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Mortimer Player for Samsung Smart TV">
+  <title>Mortimer Player · TV</title>
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+<div class="app-shell">
+  <aside class="rail" aria-label="Main navigation">
+    <button class="brand-mark" data-screen="home" aria-label="Mortimer Player home"><span>M</span></button>
+    <div class="rail-rule"></div>
+    <nav class="rail-nav" aria-label="Library">
+      <button class="nav-item active" data-screen="home" aria-label="Home"><span class="nav-glyph">⌂</span><span class="nav-label">Home</span></button>
+      <button class="nav-item" data-screen="music" aria-label="Music"><span class="nav-glyph">♫</span><span class="nav-label">Music</span></button>
+      <button class="nav-item" data-screen="videos" aria-label="Videos"><span class="nav-glyph">▷</span><span class="nav-label">Videos</span></button>
+      <button class="nav-item" data-screen="books" aria-label="Books"><span class="nav-glyph">▤</span><span class="nav-label">Books</span></button>
+      <button class="nav-item" data-screen="comics" aria-label="Comics"><span class="nav-glyph">▧</span><span class="nav-label">Comics</span></button>
+      <button class="nav-item" data-screen="photos" aria-label="Photos"><span class="nav-glyph">▣</span><span class="nav-label">Photos</span></button>
+    </nav>
+    <div class="rail-spacer"></div>
+    <nav class="rail-nav rail-bottom" aria-label="Playback and settings">
+      <button class="nav-item" data-screen="now-playing" aria-label="Now Playing"><span class="nav-glyph">◉</span><span class="nav-label">Now Playing</span></button>
+      <button class="nav-item" data-screen="queue" aria-label="Queue"><span class="nav-glyph">☷</span><span class="nav-label">Queue</span></button>
+      <button class="nav-item" data-screen="equalizer" aria-label="Equalizer"><span class="nav-glyph">≋</span><span class="nav-label">Equalizer</span></button>
+      <button class="nav-item" data-screen="settings" aria-label="Settings"><span class="nav-glyph">⚙</span><span class="nav-label">Settings</span></button>
+    </nav>
+  </aside>
+  <main class="main">
+    <header class="topbar"><div class="wordmark">MORTIMER <span>PLAYER</span></div><div class="topbar-right"><span class="platform-chip"><i></i> SAMSUNG TV</span><span class="topbar-divider"></span><span class="edition">TV EDITION · PREVIEW</span></div></header>
+    <section class="screen active" id="home-screen" aria-labelledby="home-title">
+      <div class="home-grid">
+        <div class="hero-copy"><p class="kicker">YOUR MEDIA, YOUR WAY</p><h1 id="home-title">Stay in the<br><em>moment.</em></h1><p class="hero-description">Your music, films, books and memories — in one place.</p>
+          <div class="hero-actions"><button class="action-primary" data-screen="music"><span class="action-icon">♫</span> Explore music <span class="action-arrow">›</span></button><button class="action-secondary" data-screen="sources"><span class="action-icon">▣</span> Media sources</button></div>
+          <div class="hero-footnote"><span class="pulse-dot"></span><span>TV interface preview</span><span class="footnote-sep">/</span><span>Media library not connected yet</span></div>
+        </div>
+        <div class="art-stage" aria-label="Decorative artwork preview"><div class="art-glow"></div><div class="album-art"><div class="art-orbit orbit-one"></div><div class="art-orbit orbit-two"></div><div class="art-sun"></div><div class="art-landscape"></div><div class="art-monogram">M<span>·</span></div><div class="art-edition">MORTIMER / AUDIO STUDIES</div></div><div class="art-caption"><span class="caption-line"></span><div><small>DESIGN PREVIEW</small><b>Artwork-led listening</b></div></div></div>
+      </div>
+      <div class="home-shelf"><div class="shelf-heading"><div><p class="section-eyebrow">YOUR SPACE</p><h2>Choose a destination</h2></div><span class="shelf-note">USE THE REMOTE</span></div>
+        <div class="destination-grid">
+          <button class="destination destination-music" data-screen="music"><span class="destination-symbol">♫</span><span class="destination-copy"><b>Music</b><small>Albums and tracks</small></span><span class="destination-chevron">›</span></button>
+          <button class="destination destination-video" data-screen="videos"><span class="destination-symbol">▷</span><span class="destination-copy"><b>Videos</b><small>Films and clips</small></span><span class="destination-chevron">›</span></button>
+          <button class="destination" data-screen="books"><span class="destination-symbol">▤</span><span class="destination-copy"><b>Books</b><small>Reading library</small></span><span class="destination-chevron">›</span></button>
+          <button class="destination" data-screen="comics"><span class="destination-symbol">▧</span><span class="destination-copy"><b>Comics</b><small>Visual stories</small></span><span class="destination-chevron">›</span></button>
+          <button class="destination" data-screen="photos"><span class="destination-symbol">▣</span><span class="destination-copy"><b>Photos</b><small>Personal gallery</small></span><span class="destination-chevron">›</span></button>
+        </div>
+      </div>
+    </section>
+    <section class="screen detail-screen" id="detail-screen" hidden aria-live="polite"></section>
+    <footer class="footer"><span>Mortimer Player</span><span class="footer-center" id="footer-context">A personal media space</span><span class="remote-hint"><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> Navigate <kbd>OK</kbd> Select <kbd>BACK</kbd> Return</span></footer>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+</div>
+</body>
+</html>
