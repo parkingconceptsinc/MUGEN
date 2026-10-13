@@ -12,8 +12,8 @@ android {
         applicationId = "com.parkingconcepts.mortimer"
         minSdk = 26
         targetSdk = 35
-        versionCode = 4
-        versionName = "0.9.0"
+        versionCode = providers.gradleProperty("androidVersionCode").orElse("4").get().toInt()
+        versionName = providers.gradleProperty("androidVersionName").orElse("0.9.0").get()
     }
 
     compileOptions {
@@ -22,6 +22,23 @@ android {
     }
 
     kotlinOptions { jvmTarget = "17" }
+
+
+    signingConfigs {
+        create("release") {
+            storeFile = file(System.getenv("ANDROID_KEYSTORE_PATH") ?: "missing-release.keystore")
+            storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: ""
+            keyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: ""
+            keyPassword = System.getenv("ANDROID_KEY_PASSWORD") ?: ""
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
+        }
+    }
 
     buildFeatures {
         compose = true
