@@ -32,7 +32,7 @@ import com.google.common.util.concurrent.ListenableFuture
  * Single Media3 library/session for the app UI and Android Auto.
  * Both clients now control the same ExoPlayer and browse the same library.
  */
-@OptIn(UnstableApi::class)
+@UnstableApi
 class PlaybackService : MediaLibraryService() {
     private var librarySession: MediaLibrarySession? = null
     private lateinit var player: ExoPlayer
@@ -44,6 +44,7 @@ class PlaybackService : MediaLibraryService() {
         // Keep the native equalizer/balance pipeline while sharing this one player
         // between the in-app controller and Android Auto.
         val renderers = object : DefaultRenderersFactory(this) {
+            @UnstableApi
             override fun buildAudioSink(
                 context: Context,
                 enableFloatOutput: Boolean,
