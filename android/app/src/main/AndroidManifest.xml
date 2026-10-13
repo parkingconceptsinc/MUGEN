@@ -62,6 +62,7 @@
         <service
             android:name=".PlaybackService"
             android:exported="true"
+            android:permission="android.permission.MEDIA_CONTENT_CONTROL"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaLibraryService" />
