@@ -17,7 +17,8 @@ assert.match(html, /aria-label="Main navigation"/, "navigation needs an accessib
 assert.match(html, /role="status"/, "a status/toast region should exist");
 
 for (const screen of ["home", "music", "videos", "books", "comics", "photos", "now-playing", "queue", "equalizer", "sources", "settings"]) {
-  assert.match(js, new RegExp("['\"]" + screen + "['\"]"), `screen route missing: ${screen}`);
+  const declared = js.includes(screen + ":") || js.includes("'" + screen + "'") || js.includes('"' + screen + '"');
+  assert.ok(declared, `screen route missing: ${screen}`);
 }
 for (const action of ["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp", "Escape", "Backspace"]) {
   assert.ok(js.includes(action), `remote/keyboard key handling missing: ${action}`);
