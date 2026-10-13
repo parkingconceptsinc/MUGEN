@@ -14,6 +14,8 @@
 
     <application
         android:allowBackup="true"
+        android:icon="@drawable/ic_mortimer"
+        android:roundIcon="@drawable/ic_mortimer"
         android:label="Mortimer Player"
         android:usesCleartextTraffic="false"
         android:theme="@android:style/Theme.Material.NoActionBar">
@@ -29,9 +31,6 @@
             android:name=".EpubReaderActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize"
             android:theme="@android:style/Theme.Material.NoActionBar"
-            android:exported="false" />
-        <activity
-            android:name=".PdfReaderActivity"
             android:exported="false" />
         <activity
             android:name=".MainActivity"
@@ -57,6 +56,10 @@
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaLibraryService" />
                 <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </service>
     </application>
