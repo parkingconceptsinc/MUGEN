@@ -32,6 +32,7 @@ import com.google.common.util.concurrent.ListenableFuture
  * Single Media3 library/session for the app UI and Android Auto.
  * Both clients now control the same ExoPlayer and browse the same library.
  */
+@OptIn(UnstableApi::class)
 class PlaybackService : MediaLibraryService() {
     private var librarySession: MediaLibrarySession? = null
     private lateinit var player: ExoPlayer
