@@ -300,7 +300,7 @@ private class ReaderBridge(
     @JavascriptInterface fun tap(zone: Int) { main.post { onTap(zone) } }
 }
 
-@SuppressLint("SetJavaScriptEnabled")
+@SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
 @Composable
 private fun BookReader(
     uri: Uri,
@@ -400,7 +400,6 @@ private fun BookReader(
                     webView.isVerticalScrollBarEnabled = false
                     webView.isHorizontalScrollBarEnabled = false
                     webView.setBackgroundColor(AndroidColor.TRANSPARENT)
-                    @SuppressLint("JavascriptInterface")
                     webView.addJavascriptInterface(bridge, "Mortimer")
                     webView.webViewClient = object : WebViewClient() {
                         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
