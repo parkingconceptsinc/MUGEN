@@ -1,0 +1,35 @@
+name: Tizen TV checks
+
+on:
+  push:
+    branches: [feature/tizen-tv]
+    paths:
+      - "tizen-tv/**"
+      - ".claude/skills/**"
+      - ".github/workflows/tizen-tv-checks.yml"
+  pull_request:
+    paths:
+      - "tizen-tv/**"
+      - ".claude/skills/**"
+      - ".github/workflows/tizen-tv-checks.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Check JavaScript syntax
+        run: node --check tizen-tv/app.js
+      - name: Run TV UI smoke checks
+        run: node tizen-tv/tests/smoke.mjs
+      - name: Validate Tizen manifest XML
+        run: python -c "import xml.etree.ElementTree as ET; ET.parse('tizen-tv/config.xml'); print('config.xml is well-formed XML')"
