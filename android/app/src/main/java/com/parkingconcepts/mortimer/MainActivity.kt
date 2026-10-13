@@ -216,6 +216,7 @@ private fun formatTime(ms: Long): String {
     return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, (s % 3600) / 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
 }
 
+@OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 private fun MortimerApp(
     player: Player,
