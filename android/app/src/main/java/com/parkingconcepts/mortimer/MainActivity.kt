@@ -850,6 +850,7 @@ private fun SettingsSection(library: List<LibraryItem>, themePref: String, onThe
             MenuItem(if (coversCleared) "✓ Portadas borradas" else "Volver a generar portadas") { Covers.clear(context); coversCleared = true }
             MenuItem("Borrar el progreso de lectura", danger = true) { confirm = true }
         }
+        AppUpdateCard()
         SettingsCard("Acerca de") {
             Text("Mortimer Player ${BuildConfig.VERSION_NAME}", color = c.text, fontWeight = FontWeight.SemiBold)
             Text("Música, vídeos, libros, cómics y fotos en una sola app.", color = c.muted, fontSize = 12.sp)
