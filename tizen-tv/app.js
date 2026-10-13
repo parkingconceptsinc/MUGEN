@@ -101,8 +101,7 @@
   }
 
   function visibleButtons() {
-    var root = currentScreen === 'home' ? homeScreen : detailScreen;
-    var list = root.querySelectorAll('button:not([disabled])');
+    var list = document.querySelectorAll('button:not([disabled])');
     var result = [];
     for (var i = 0; i < list.length; i++) {
       var button = list[i];
