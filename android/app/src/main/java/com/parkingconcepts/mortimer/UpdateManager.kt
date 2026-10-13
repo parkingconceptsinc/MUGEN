@@ -152,7 +152,7 @@ internal fun AppUpdateCard() {
                         downloadedName = null
                         return@Button
                     }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
+                    if (!context.packageManager.canRequestPackageInstalls()) {
                         message = "Allow installs from Mortimer Player in Android Settings, then return and tap Install update."
                         context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                         return@Button
