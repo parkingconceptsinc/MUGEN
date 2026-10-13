@@ -209,7 +209,7 @@
       return;
     }
     if (key === 'MediaPlay' || key === 'MediaPause' || key === 'MediaPlayPause' || key === 'MediaStop' ||
-        key === 'MediaFastForward' || key === 'MediaRewind') {
+        key === 'MediaFastForward' || key === 'MediaRewind' || code === 10252) {
       announce('Playback controls become available when the TV media engine is connected.');
     }
   });
