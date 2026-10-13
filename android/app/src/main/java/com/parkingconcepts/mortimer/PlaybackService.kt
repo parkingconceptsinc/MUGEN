@@ -287,9 +287,13 @@ class PlaybackService : MediaLibraryService() {
 
     private fun isKnownAudioUri(uri: Uri): Boolean {
         val rawUri = uri.toString()
-        val imported = getSharedPreferences("mortimer_library", MODE_PRIVATE)
+        // The current app persists imported items in library.json. Keep checking the
+        // legacy preference set too so users upgrading from an older build can resume.
+        val imported = LibraryStore.load(this).any { it.kind == "audio" && it.uri == rawUri }
+        if (imported) return true
+        val legacy = getSharedPreferences("mortimer_library", MODE_PRIVATE)
             .getStringSet("audio", emptySet()).orEmpty()
-        if (imported.any { row -> row.substringBefore('\t') == rawUri }) return true
+        if (legacy.any { row -> row.substringBefore('\t') == rawUri }) return true
 
         // MediaStore audio rows use paths such as /external/audio/media/<id>.
         return uri.authority == "media" && uri.pathSegments.any { it.equals("audio", ignoreCase = true) }
@@ -333,26 +337,46 @@ class PlaybackService : MediaLibraryService() {
             }
         }
 
-        val imported = getSharedPreferences("mortimer_library", MODE_PRIVATE)
+        // Read the current JSON library first; this is where current versions store
+        // SAF imports from phone storage, SD cards, and USB drives.
+        LibraryStore.load(this)
+            .asSequence()
+            .filter { it.kind == "audio" && it.uri.isNotBlank() }
+            .sortedBy { it.title.lowercase() }
+            .forEach { imported ->
+                runCatching { Uri.parse(imported.uri) }.getOrNull()?.let { uri ->
+                    if (uri !in items) {
+                        items[uri] = buildAudioItem(
+                            uri,
+                            imported.title.ifBlank { "Unknown title" },
+                            imported.artist.ifBlank { "Unknown artist" },
+                            imported.album
+                        )
+                    }
+                }
+            }
+
+        // Retain legacy imports while older installations migrate to library.json.
+        getSharedPreferences("mortimer_library", MODE_PRIVATE)
             .getStringSet("audio", emptySet()).orEmpty()
             .mapNotNull { row ->
                 val parts = row.split('\t')
                 if (parts.size >= 2 && parts[0].isNotBlank()) parts else null
             }
             .sortedBy { it[1].lowercase() }
-        imported.forEach { parts ->
-            runCatching { Uri.parse(parts[0]) }.getOrNull()?.let { uri ->
-                if (uri !in items) {
-                    items[uri] = buildAudioItem(
-                        uri,
-                        parts[1].ifBlank { "Unknown title" },
-                        parts.getOrNull(2)?.ifBlank { "Unknown artist" } ?: "Unknown artist",
-                        parts.getOrNull(3).orEmpty(),
-                        parts.getOrNull(4).orEmpty()
-                    )
+            .forEach { parts ->
+                runCatching { Uri.parse(parts[0]) }.getOrNull()?.let { uri ->
+                    if (uri !in items) {
+                        items[uri] = buildAudioItem(
+                            uri,
+                            parts[1].ifBlank { "Unknown title" },
+                            parts.getOrNull(2)?.ifBlank { "Unknown artist" } ?: "Unknown artist",
+                            parts.getOrNull(3).orEmpty(),
+                            parts.getOrNull(4).orEmpty()
+                        )
+                    }
                 }
             }
-        }
         return items.values.toList()
     }
 
