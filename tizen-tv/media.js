@@ -340,8 +340,8 @@
       var browseButton = makeActionButton('Browse media sources', 'open-sources', 'action-primary');
       browseButton.setAttribute('data-screen', 'sources');
       browseButton.removeAttribute('data-media-action');
+      empty.appendChild(browseButton);
       list.appendChild(empty);
-      list.appendChild(browseButton);
       showLibraryStatus(message || 'No matching files found. You can browse a specific folder in Media Sources.', false);
       focusRefresh(list.querySelector('button'));
       return;
