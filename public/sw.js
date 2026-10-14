@@ -1,5 +1,5 @@
-const CACHE = "six-shell-v10";
-const BASE = "/Mortimer-player/";
+const CACHE = "mugen-shell-v1";
+const BASE = "/MUGEN/";
 const BUILD_ASSETS = [];
 const SHELL = [
   BASE,
@@ -27,7 +27,7 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys()
-      .then((keys) => Promise.all(keys.filter((key) => key.startsWith("six-shell-") && key !== CACHE).map((key) => caches.delete(key))))
+      .then((keys) => Promise.all(keys.filter((key) => key.startsWith("mugen-shell-") && key !== CACHE).map((key) => caches.delete(key))))
       .then(() => self.clients.claim())
   );
 });

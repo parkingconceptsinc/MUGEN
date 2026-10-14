@@ -1578,7 +1578,7 @@ export function Player() {
           title: current.title,
           artist: current.artist || current.album,
           album: current.album,
-          artwork: current.cover ? [{ src: current.cover, sizes: "512x512" }] : [{ src: "/Mortimer-player/icon-512.png", sizes: "512x512", type: "image/png" }],
+          artwork: current.cover ? [{ src: current.cover, sizes: "512x512" }] : [{ src: `${import.meta.env.BASE_URL}icon-512.png`, sizes: "512x512", type: "image/png" }],
         })
       : null;
   }, [current?.id, current?.cover]);

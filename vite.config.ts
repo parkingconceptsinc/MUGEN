@@ -28,7 +28,7 @@ function offlinePrecache(): Plugin {
 }
 
 export default defineConfig({
-  base: "/Mortimer-player/",
+  base: "/MUGEN/",
   plugins: [react(), offlinePrecache()],
   build: { manifest: true },
 });
