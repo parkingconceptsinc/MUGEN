@@ -9,7 +9,10 @@ The TV app is a **separate target** inside this repository. It does not replace 
 - Home uses three high-priority destinations and responsive cards; directional focus scrolls focused controls into view for long media lists.
 - Multi-input navigation: directional TV remote, keyboard arrows/Enter/Escape/Backspace, native Tab focus, mouse hover/click, and pointer-aware focus styling. Native input and seek controls retain their own keyboard behavior.
 - Guarded Samsung media-key handling.
-- Dedicated Music, Videos, and Media Sources screens.
+- Dedicated Music, Videos, Media Sources, and unified All formats library.
+- Central format registry recognizes common audio/video, PDF, plain-text, ebook, comic archive, image, subtitle, and Office extensions.
+- Built-in reader shell: plain-text/Markdown/CSV/JSON/XML/subtitle preview via the Tizen filesystem stream API, plus PDF iframe and image viewer attempts where the TV WebView supports them.
+- Unsupported reader engines are explicitly identified rather than reporting false success.
 - A TV media adapter in `media.js` that uses the documented Tizen filesystem APIs when running inside a compatible Samsung TV runtime:
   - lists mounted storage devices;
   - lists standard TV folders and mounted external storage;
@@ -47,7 +50,10 @@ GitHub Actions workflow `.github/workflows/tizen-tv-checks.yml` checks JavaScrip
 - The full TV model code has not been confirmed. The manifest currently targets Tizen 5.5 as a provisional baseline, based on the resemblance to a 2020 TU-series TV; do not treat that as an exact model identification.
 - The file scan is deliberately bounded (up to 240 folders and 1,200 matching files) to avoid freezing the TV. Use Media Sources to browse deeper folders.
 - Filename extensions only suggest media type; they do not guarantee a codec/container will decode. AVPlay reports device-specific failures. Test real files on the television.
-- Album art, embedded metadata, subtitles, resume position, playlists/queue, equalizer, and TV-specific books/comics/photos experiences are not fully implemented yet.
+- **Full codec coverage is not guaranteed:** extensions only identify containers; audio/video codecs and profiles are constrained by the TV hardware and Samsung AVPlay. MKV, FLAC, HEVC, etc. can still fail depending on the internal codec/profile.
+- **Not yet readable:** EPUB/MOBI/AZW/FB2, CBZ/CBR/CB7/CBT, Word/Excel/PowerPoint, and compressed archives are recognized but need bundled offline parsing/rendering engines. A file registry alone does not decode them.
+- PDF and image rendering depend on the TV WebView and are not verified on physical hardware. Text previews are capped at 250 KB to protect TV memory.
+- Album art, embedded metadata, resume position, playlists/queue, equalizer, and richer book/comic readers remain pending.
 - Playback controls and seek behavior are wired to AVPlay, but their real operation still needs emulator/TV validation.
 
 ## Official API references
