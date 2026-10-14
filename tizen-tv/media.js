@@ -22,7 +22,10 @@
     focusBeforePlayer: null,
     progressTimer: null,
     scanToken: 0,
-    sourceToken: 0
+    sourceToken: 0,
+    galleryToken: 0,
+    galleryItems: [],
+    galleryMode: 'albums'
   };
 
   function byId(id) { return document.getElementById(id); }
@@ -537,6 +540,139 @@
     }
   }
 
+
+  function showGalleryStatus(message, isError) {
+    var status = byId('gallery-status');
+    if (!status) return;
+    status.textContent = message;
+    status.className = 'media-status' + (isError ? ' is-error' : '');
+  }
+  function renderPhotoGallery(items, message) {
+    var container = byId('photo-gallery-list');
+    if (!container) return;
+    clear(container);
+    container.className = 'photo-gallery-grid ' + (state.galleryMode === 'art' ? 'art-mode' : 'albums-mode');
+    var modeButtons = document.querySelectorAll('.gallery-mode-button');
+    for (var i = 0; i < modeButtons.length; i++) {
+      modeButtons[i].classList.toggle('active', modeButtons[i].getAttribute('data-gallery-mode') === state.galleryMode);
+      modeButtons[i].setAttribute('aria-pressed', modeButtons[i].getAttribute('data-gallery-mode') === state.galleryMode ? 'true' : 'false');
+    }
+    if (!items.length) {
+      var empty = element('div', 'media-empty photo-gallery-empty');
+      empty.appendChild(element('b', '', 'No photos found yet'));
+      empty.appendChild(element('p', '', 'Connect a USB drive with JPG, PNG, WebP, GIF, BMP or TIFF images, then scan again.'));
+      var browse = makeActionButton('Browse media sources', 'open-sources', 'action-secondary');
+      browse.setAttribute('data-screen', 'sources');
+      browse.removeAttribute('data-media-action');
+      empty.appendChild(browse);
+      container.appendChild(empty);
+      showGalleryStatus(message || 'No supported images found. Open Media Sources to browse a specific folder.', false);
+      return;
+    }
+    var groups = {};
+    var order = [];
+    items.forEach(function (item) {
+      var parent = item.path.slice(0, Math.max(0, item.path.lastIndexOf('/'))) || 'Photo collection';
+      var label = parent.split('/').pop() || 'Photo collection';
+      if (state.galleryMode === 'art') label = 'ART GALLERY';
+      if (!groups[label]) { groups[label] = []; order.push(label); }
+      groups[label].push(item);
+    });
+    order.forEach(function (label) {
+      if (state.galleryMode === 'albums') {
+        var heading = element('div', 'photo-album-heading');
+        heading.appendChild(element('h2', '', label));
+        heading.appendChild(element('span', '', groups[label].length + (groups[label].length === 1 ? ' photo' : ' photos')));
+        container.appendChild(heading);
+      }
+      var grid = element('div', state.galleryMode === 'art' ? 'photo-album-grid art-tiles' : 'photo-album-grid');
+      groups[label].forEach(function (item) {
+        var id = String(state.nextId++);
+        state.itemMap[id] = item;
+        var tile = element('button', 'photo-tile');
+        tile.type = 'button';
+        tile.setAttribute('data-gallery-image-id', id);
+        tile.setAttribute('aria-label', 'Open photo ' + item.name);
+        var img = element('img', 'photo-tile-image');
+        img.alt = item.name;
+        img.src = item.uri || '';
+        img.loading = 'lazy';
+        img.onerror = function () { tile.classList.add('photo-tile-unavailable'); };
+        tile.appendChild(img);
+        var caption = element('span', 'photo-tile-caption');
+        caption.appendChild(element('b', '', item.name));
+        caption.appendChild(element('small', '', item.location || label));
+        tile.appendChild(caption);
+        grid.appendChild(tile);
+      });
+      container.appendChild(grid);
+    });
+    showGalleryStatus(message || (items.length + ' photos indexed from connected folders.'), false);
+  }
+  async function scanGallery() {
+    if (!apiAvailable()) {
+      showGalleryStatus('This preview is outside Samsung Tizen. Photo scanning requires the TV runtime or emulator.', true);
+      return;
+    }
+    var token = ++state.galleryToken;
+    var container = byId('photo-gallery-list');
+    if (container) {
+      clear(container);
+      container.appendChild(element('div', 'media-empty', 'Scanning connected photo folders…'));
+    }
+    showGalleryStatus('Scanning mounted photo folders…', false);
+    var roots = [
+      {path:'pictures',label:'Pictures',depth:0},
+      {path:'images',label:'Images',depth:0},
+      {path:'dcim',label:'Camera',depth:0},
+      {path:'downloads',label:'Downloads',depth:0}
+    ];
+    try {
+      var storages = await listStorages();
+      state.storages = storages;
+      storages.forEach(function (storage) {
+        if (storage && storage.state === 'MOUNTED' &&
+            (storage.type === 'EXTERNAL' || /^removable_/i.test(storageLabel(storage)))) {
+          roots.push({path:storageLabel(storage),label:storageLabel(storage),depth:0});
+        }
+      });
+      var queue = roots.slice(), visited = {}, found = [], foundPaths = {};
+      var scanned = 0, maxDirectories = 240, maxImages = 1000;
+      while (queue.length && scanned < maxDirectories && found.length < maxImages) {
+        if (token !== state.galleryToken) return;
+        var entry = queue.shift(), key = rootPath(entry.path);
+        if (!key || visited[key]) continue;
+        visited[key] = true;
+        var names;
+        try { names = await listDirectory(key); } catch (_) { scanned++; continue; }
+        scanned++;
+        names.forEach(function (name) {
+          if (!name || name === '.' || name === '..' || name.indexOf('/') >= 0) return;
+          var path = joinPath(key, name);
+          if (isDirectory(path)) {
+            if (entry.depth < 5 && !visited[path] && queue.length < 1600) queue.push({path:path,label:entry.label,depth:entry.depth+1});
+          } else if (classify(name) === 'image' && !foundPaths[path] && found.length < maxImages) {
+            foundPaths[path] = true;
+            found.push({name:name,path:path,uri:fileUri(path),kind:'image',location:entry.label});
+          }
+        });
+        if (scanned % 8 === 0) showGalleryStatus('Scanning… ' + scanned + ' folders · ' + found.length + ' photos found.', false);
+      }
+      if (token !== state.galleryToken) return;
+      found.sort(byName);
+      state.galleryItems = found;
+      var suffix = ' Scanned ' + scanned + ' folders.';
+      if (scanned >= maxDirectories || found.length >= maxImages) suffix += ' Safety limit reached; browse Media Sources for deeper folders.';
+      renderPhotoGallery(found, found.length + ' photos found.' + suffix);
+    } catch (error) {
+      if (token !== state.galleryToken) return;
+      showGalleryStatus(error.message || 'The TV could not scan photo storage.', true);
+      if (container) {
+        clear(container);
+        container.appendChild(element('div', 'media-empty is-error', error.message || 'Photo scan failed.'));
+      }
+    }
+  }
   function closeReader() {
     var overlay = byId('reader-overlay');
     var content = byId('reader-content');
@@ -853,6 +989,13 @@
     if (action === 'refresh-sources') { refreshSources(); return; }
     if (action === 'back-directory') { backDirectory(); return; }
     if (action === 'scan-library') { scanLibrary(target.getAttribute('data-media-kind') || 'audio'); return; }
+    if (action === 'scan-gallery') { scanGallery(); return; }
+    if (action === 'gallery-mode') {
+      state.galleryMode = target.getAttribute('data-gallery-mode') === 'art' ? 'art' : 'albums';
+      renderPhotoGallery(state.galleryItems, state.galleryItems.length + ' photos in this collection.');
+      focusRefresh(target);
+      return;
+    }
     if (action === 'open-sources') {
       var navSources = document.querySelector('.nav-item[data-screen="sources"]');
       if (navSources) navSources.click();
@@ -875,6 +1018,11 @@
     }
     if (target.hasAttribute('data-open-path')) {
       browseTo(target.getAttribute('data-open-path'), target.getAttribute('data-open-title'));
+      return;
+    }
+    if (target.hasAttribute('data-gallery-image-id')) {
+      var photo = state.itemMap[target.getAttribute('data-gallery-image-id')];
+      if (photo) openDocument(photo);
       return;
     }
     if (target.hasAttribute('data-media-file-id')) {
@@ -938,10 +1086,12 @@
       state.screen = key;
       if (key !== 'sources') state.sourceToken++;
       if (key !== 'music' && key !== 'videos') state.scanToken++;
+      if (key !== 'photos') state.galleryToken++;
       if (key === 'sources') refreshSources();
       else if (key === 'music') scanLibrary('audio');
       else if (key === 'videos') scanLibrary('video');
       else if (key === 'library') scanLibrary('all');
+      else if (key === 'photos') scanGallery();
     },
     refreshSources: refreshSources,
     scanLibrary: scanLibrary,
@@ -950,6 +1100,7 @@
     togglePlayback: togglePlayback,
     handleMediaKey: handleMediaKey,
     overlayVisible: overlayVisible,
-    openDocument: openDocument
+    openDocument: openDocument,
+    scanGallery: scanGallery
   };
 })();
