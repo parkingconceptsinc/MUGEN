@@ -28,7 +28,9 @@ jobs:
         with:
           node-version: 22
       - name: Check JavaScript syntax
-        run: node --check tizen-tv/app.js
+        run: |
+          node --check tizen-tv/app.js
+          node --check tizen-tv/media.js
       - name: Run TV UI smoke checks
         run: node tizen-tv/tests/smoke.mjs
       - name: Validate Tizen manifest XML
