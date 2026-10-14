@@ -86,6 +86,9 @@
     return index < 0 ? '' : value.slice(index + 1).toLowerCase();
   }
   function classify(name) {
+    if (window.MortimerFormats && typeof window.MortimerFormats.classify === 'function') {
+      return window.MortimerFormats.classify(name);
+    }
     var ext = extensionOf(name);
     if (audioExtensions[ext]) return 'audio';
     if (videoExtensions[ext]) return 'video';
@@ -254,7 +257,7 @@
       folders.sort(byName);
       media.sort(byName);
       if (!folders.length && !media.length) {
-        list.appendChild(element('div', 'media-empty', 'No supported audio or video files were found in this folder.'));
+        list.appendChild(element('div', 'media-empty', 'No recognized media or document files were found in this folder.'));
       }
       folders.forEach(function (folder) {
         var button = element('button', 'media-row folder-row');
@@ -272,7 +275,7 @@
       media.forEach(function (item) {
         appendMediaRow(list, item, false);
       });
-      var summary = folders.length + ' folders · ' + media.length + ' playable candidates. Codec support still depends on the TV.';
+      var summary = folders.length + ' folders · ' + media.length + ' recognized files. Actual playback and reading depend on the available engine.';
       if (clipped) summary += ' Showing the first ' + maxVisibleEntries + ' of ' + names.length + ' entries; open subfolders to continue.';
       showSourceStatus(summary, false);
       focusRefresh(containerFirstButton(list));
@@ -319,12 +322,15 @@
     var button = element('button', 'media-row');
     button.type = 'button';
     button.setAttribute('data-media-file-id', id);
-    button.appendChild(element('span', 'media-row-icon', item.kind === 'audio' ? '♫' : '▷'));
+    var formats = window.MortimerFormats;
+    var label = formats ? formats.label(item.kind) : (item.kind === 'audio' ? 'Audio' : 'Video');
+    var glyph = formats ? formats.icon(item.kind) : (item.kind === 'audio' ? '♫' : '▷');
+    button.appendChild(element('span', 'media-row-icon', glyph));
     var copy = element('span', 'media-row-copy');
     copy.appendChild(element('b', '', item.name));
-    copy.appendChild(element('small', '', (item.kind === 'audio' ? 'Audio file' : 'Video file') + ' · ' + (isScanResult ? item.location || item.path : item.path)));
+    copy.appendChild(element('small', '', label + ' · ' + (isScanResult ? item.location || item.path : item.path)));
     button.appendChild(copy);
-    button.appendChild(element('span', 'media-row-arrow', '▶'));
+    button.appendChild(element('span', 'media-row-arrow', formats && formats.isMedia(item.kind) ? '▶' : '›'));
     container.appendChild(button);
   }
 
@@ -332,10 +338,10 @@
     var list = byId('library-list');
     if (!list) return;
     clear(list);
-    var filtered = items.filter(function (item) { return item.kind === kind; });
+    var filtered = items.filter(function (item) { return kind === 'all' || item.kind === kind; });
     if (!filtered.length) {
       var empty = element('div', 'media-empty');
-      empty.appendChild(element('b', '', kind === 'audio' ? 'No music found yet' : 'No videos found yet'));
+      empty.appendChild(element('b', '', kind === 'audio' ? 'No music found yet' : (kind === 'video' ? 'No videos found yet' : 'No supported files found yet')));
       empty.appendChild(element('p', '', 'Connect a USB drive or open Media Sources to browse available folders. Only items the TV filesystem can read are listed.'));
       var browseButton = makeActionButton('Browse media sources', 'open-sources', 'action-primary');
       browseButton.setAttribute('data-screen', 'sources');
@@ -347,7 +353,7 @@
       return;
     }
     filtered.forEach(function (item) { appendMediaRow(list, item, true); });
-    showLibraryStatus(message || (filtered.length + ' media files found. The TV must still confirm format compatibility.'), false);
+    showLibraryStatus(message || (filtered.length + ' recognized files found. Codec and reader compatibility varies by format.'), false);
     focusRefresh(containerFirstButton(list));
   }
 
@@ -360,7 +366,10 @@
     var list = byId('library-list');
     if (list) clear(list);
     showLibraryStatus('Scanning mounted media folders…', false);
-    var roots = [{ path: kind === 'audio' ? 'music' : 'videos', label: kind === 'audio' ? 'Music folder' : 'Videos folder', depth: 0 }];
+    var roots = kind === 'all' ? [
+      {path:'music',label:'Music folder',depth:0},{path:'videos',label:'Videos folder',depth:0},
+      {path:'documents',label:'Documents folder',depth:0},{path:'downloads',label:'Downloads folder',depth:0}
+    ] : [{ path: kind === 'audio' ? 'music' : 'videos', label: kind === 'audio' ? 'Music folder' : 'Videos folder', depth: 0 }];
     try {
       var storages = await listStorages();
       state.storages = storages;
@@ -396,7 +405,7 @@
             }
           } else {
             var itemKind = classify(name);
-            if (itemKind === kind && !foundPaths[path] && found.length < maxResults) {
+            if ((kind === 'all' ? !!itemKind : itemKind === kind) && !foundPaths[path] && found.length < maxResults) {
               foundPaths[path] = true;
               found.push({ name: name, path: path, uri: fileUri(path), kind: itemKind, location: entry.label });
             }
@@ -418,6 +427,91 @@
         list.appendChild(empty);
       }
     }
+  }
+
+  function closeReader() {
+    var overlay = byId('reader-overlay');
+    var content = byId('reader-content');
+    if (content) clear(content);
+    if (overlay) { overlay.hidden = true; overlay.classList.add('hidden'); }
+    focusRefresh();
+  }
+  function showReaderStatus(message, isError) {
+    var status = byId('reader-status');
+    if (!status) return;
+    status.textContent = message;
+    status.className = 'reader-status' + (isError ? ' is-error' : '');
+  }
+  function readTextFile(path) {
+    return new Promise(function (resolve, reject) {
+      var api = fsApi();
+      if (!api || typeof api.resolve !== 'function') { reject(new Error('Text reading requires the Tizen filesystem API.')); return; }
+      api.resolve(path, function (file) {
+        if (!file || typeof file.openStream !== 'function') { reject(new Error('This TV filesystem entry cannot be opened as text.')); return; }
+        file.openStream('r', function (stream) {
+          try {
+            var size = Math.min(Number(file.fileSize) || 65536, 250000);
+            var text = stream.read(size);
+            stream.close();
+            resolve({text: text || '', truncated: (Number(file.fileSize) || 0) > size});
+          } catch (error) {
+            try { stream.close(); } catch (_) {}
+            reject(error);
+          }
+        }, function (error) { reject(new Error(error && error.message || 'Could not read this text file.')); }, 'UTF-8');
+      }, function (error) { reject(new Error(error && error.message || 'Could not resolve this file.')); }, 'r');
+    });
+  }
+  function openDocument(item) {
+    var formats = window.MortimerFormats;
+    var kind = item.kind;
+    var ext = formats ? formats.extension(item.name) : extensionOf(item.name);
+    var stateInfo = formats ? formats.readerState(kind, ext) : {state:'recognized-only',message:'No reader is available for this format.'};
+    var overlay = byId('reader-overlay');
+    var content = byId('reader-content');
+    if (!overlay || !content) { toast('Document reader UI is unavailable.'); return; }
+    state.focusBeforePlayer = document.activeElement;
+    clear(content);
+    overlay.hidden = false;
+    overlay.classList.remove('hidden');
+    setText('reader-title', item.name);
+    showReaderStatus((formats ? formats.label(kind) : kind) + ' · ' + stateInfo.message, false);
+    if (!item.uri) {
+      showReaderStatus('The TV did not return a readable URI for this file.', true);
+      return;
+    }
+    if (kind === 'pdf') {
+      var frame = element('iframe', 'reader-frame');
+      frame.title = item.name;
+      frame.src = item.uri;
+      content.appendChild(frame);
+      showReaderStatus('Opening PDF with the TV browser viewer. If it stays blank, this firmware does not expose a native PDF viewer.', false);
+      focusRefresh(byId('reader-close'));
+      return;
+    }
+    if (kind === 'image') {
+      var image = element('img', 'reader-image');
+      image.alt = item.name;
+      image.src = item.uri;
+      content.appendChild(image);
+      showReaderStatus('Image decoding depends on the Samsung TV WebView.', false);
+      return;
+    }
+    if (kind === 'text' && ['txt','md','markdown','log','csv','tsv','json','xml','yaml','yml','ini','srt','vtt'].indexOf(ext) >= 0) {
+      readTextFile(item.path).then(function (result) {
+        if (overlay.hidden) return;
+        var pre = element('pre', 'reader-text', result.text);
+        content.appendChild(pre);
+        showReaderStatus('Text file opened.' + (result.truncated ? ' Preview limited to 250 KB to protect TV memory.' : ''), false);
+      }).catch(function (error) { showReaderStatus(error.message || 'Could not read this text file.', true); });
+      return;
+    }
+    showReaderStatus(stateInfo.message, true);
+    var note = element('div', 'reader-unavailable');
+    note.appendChild(element('h3', '', 'Reader engine required'));
+    note.appendChild(element('p', '', stateInfo.message));
+    note.appendChild(element('p', '', 'The file is recognized and remains visible in the library; MUGEN will not pretend it was opened successfully.'));
+    content.appendChild(note);
   }
 
   function ensureWebApis() {
@@ -657,6 +751,7 @@
       return;
     }
     if (action === 'player-close') { closePlayer(); return; }
+    if (action === 'reader-close') { closeReader(); return; }
     if (action === 'player-toggle') { togglePlayback(); return; }
     if (action === 'player-stop') { closePlayer(); return; }
     if (action === 'player-backward') { seekBy(-10); return; }
@@ -667,7 +762,11 @@
     }
     if (target.hasAttribute('data-media-file-id')) {
       var item = state.itemMap[target.getAttribute('data-media-file-id')];
-      if (item) playItem(item);
+      if (item) {
+        var formats = window.MortimerFormats;
+        if (formats && formats.isMedia(item.kind)) playItem(item);
+        else openDocument(item);
+      }
     }
   });
 
@@ -681,6 +780,11 @@
     var key = event.key;
     var code = event.keyCode || event.which;
     if (key === 'Escape' || key === 'Backspace' || code === 10009) {
+      if (byId('reader-overlay') && !byId('reader-overlay').hidden) {
+        event.preventDefault(); event.stopPropagation();
+        if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+        closeReader(); return;
+      }
       if (overlayVisible()) {
         event.preventDefault();
         event.stopPropagation();
@@ -720,6 +824,7 @@
       if (key === 'sources') refreshSources();
       else if (key === 'music') scanLibrary('audio');
       else if (key === 'videos') scanLibrary('video');
+      else if (key === 'library') scanLibrary('all');
     },
     refreshSources: refreshSources,
     scanLibrary: scanLibrary,
@@ -727,6 +832,7 @@
     stop: closePlayer,
     togglePlayback: togglePlayback,
     handleMediaKey: handleMediaKey,
-    overlayVisible: overlayVisible
+    overlayVisible: overlayVisible,
+    openDocument: openDocument
   };
 })();
