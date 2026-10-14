@@ -69,6 +69,10 @@
       toURI:uri,
       resolve:function(path,ok,fail){var p=normalize(path);var parent=p.slice(0,p.lastIndexOf('/')), name=p.split('/').pop();
         if(dirs[p] || Object.keys(content).indexOf(p)>=0 || Object.keys(files).some(function(k){return k.replace(/\/$/,'')===p;}) || (files[parent+'/']||[]).indexOf(name)>=0){ok(entry(p));}else fail({message:'Virtual file not found: '+p});},
+      copyFile:function(source,destination,overwrite,ok,fail){var p=normalize(destination);entry(normalize(source)).copyTo(p.slice(0,p.lastIndexOf('/')),p.split('/').pop(),overwrite,ok,fail);},
+      copyDirectory:function(source,destination,overwrite,ok,fail){var p=normalize(destination);entry(normalize(source)).copyTo(p.slice(0,p.lastIndexOf('/')),p.split('/').pop(),overwrite,ok,fail);},
+      moveFile:function(source,destination,overwrite,ok,fail){var p=normalize(destination);entry(normalize(source)).moveTo(p.slice(0,p.lastIndexOf('/')),p.split('/').pop(),overwrite,ok,fail);},
+      moveDirectory:function(source,destination,overwrite,ok,fail){var p=normalize(destination);entry(normalize(source)).moveTo(p.slice(0,p.lastIndexOf('/')),p.split('/').pop(),overwrite,ok,fail);},
       deleteFile:function(path,ok){var p=normalize(path),parent=p.slice(0,p.lastIndexOf('/'));files[parent+'/']=(files[parent+'/']||[]).filter(function(n){return n!==p.split('/').pop();});delete content[p];ok();},
       deleteDirectory:function(path,recursive,ok){var p=normalize(path);delete files[p+'/'];delete dirs[p];ok();}
     },
