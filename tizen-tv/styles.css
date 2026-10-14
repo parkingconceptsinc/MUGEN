@@ -246,3 +246,25 @@ kbd{font:inherit;font-size:9px;padding:3px 5px;border:1px solid #34343d;border-r
   .destination-copy small{white-space:normal}
   .footer-center{display:none}
 }
+
+
+/* Readability pass for the 10-foot interface: favor legibility over dense lists. */
+.nav-label{font-size:13px}
+.hero-footnote{font-size:13px}
+.shelf-note{font-size:12px}
+.destination-copy small{font-size:13px}
+.screen-subtitle{font-size:18px}
+.media-status{font-size:14px}
+.list-eyebrow{font-size:12px}
+.source-entry-copy small{font-size:13px}
+.media-row-copy small{font-size:13px}
+.source-location{font-size:15px}
+.source-disclaimer{font-size:12px}
+.player-status{font-size:14px}
+.player-hint{font-size:12px}
+@media(max-height:720px){
+ .nav-label{font-size:12px}
+ .hero-footnote{font-size:12px}
+ .destination-copy small{font-size:12px}
+ .source-entry-copy small,.media-row-copy small{font-size:12px}
+}
