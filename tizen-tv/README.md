@@ -101,3 +101,6 @@ The GitHub Actions workflow `.github/workflows/mugen-tizen-package.yml` validate
 Open `virtual-tv.html` in a browser served from the repository's `tizen-tv/` folder to run the MUGEN interface against a simulated Samsung Tizen filesystem and AVPlay engine. It includes mock USB media and test cases for navigation, audio, video, photos, USB copy, and format/reader-state reporting. Use the viewport buttons to inspect responsive layouts. All storage changes occur only in mock memory. A passing virtual test is not evidence of real codec, firmware, remote-control, or WGT-install compatibility.
 
 See `AUDIT-FINDINGS.md` for the source audit and `TV-TEST-CHECKLIST.md` for physical-device validation.
+
+
+The browser-driven Virtual TV suite runs in Chromium through the `MUGEN Virtual TV functional tests` GitHub Actions workflow. It exercises simulated Home/back navigation, audio and video playback state, photo modes and image opening, USB browsing/copy, format classification, and responsive viewport controls. The virtual filesystem is isolated in browser memory and does not alter a physical drive.
