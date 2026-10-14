@@ -198,3 +198,6 @@ kbd{font:inherit;font-size:9px;padding:3px 5px;border:1px solid #34343d;border-r
 .source-toolbar-actions>*+*,.library-toolbar-actions>*+*{margin-left:10px}
 .player-controls button{margin-left:6px;margin-right:6px}
 @media(max-height:720px){.rail-nav>.nav-item+.nav-item{margin-top:4px}.rail-bottom>.nav-item+.nav-item{margin-top:2px}}
+
+.source-grid>.list-eyebrow{grid-column:1/-1}
+.source-grid>.standard-locations-label{grid-column:1/-1}
