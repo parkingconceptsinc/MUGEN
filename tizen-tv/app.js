@@ -41,7 +41,7 @@
       title: 'Now Playing', kicker: 'YOUR CURRENT SESSION', subtitle: 'Playback status and controls for the active track.', icon: '◉',
       kind: 'empty', label: 'NOTHING PLAYING', heading: 'Ready when you are.',
       body: 'Open a track from Music or Videos to start playback. Supported formats depend on the TV media engine.',
-      button: 'Set up media sources', target: 'sources', symbol: '◉'
+      button: 'Open Music', target: 'music', symbol: '◉'
     },
     queue: {
       title: 'Queue', kicker: 'UP NEXT', subtitle: 'Manage what plays next.', icon: '☷',
@@ -120,6 +120,12 @@
     if (!element) return;
     focusedElement = element;
     element.classList.add('focused');
+    /* Keep remote focus inside the scrollable list when browsing long USB folders. */
+    try {
+      element.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'auto' });
+    } catch (_) {
+      try { element.scrollIntoView(false); } catch (__) {}
+    }
     try { element.focus({ preventScroll: true }); } catch (_) { try { element.focus(); } catch (__) {} }
   }
 
