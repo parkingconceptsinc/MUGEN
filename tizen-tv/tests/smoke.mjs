@@ -26,7 +26,10 @@ assert.match(html, /aria-label="Main navigation"/, "navigation needs an accessib
 assert.match(html, /data-screen="sources" aria-label="Media sources"/, "implemented media sources must be reachable from the TV rail");
 assert.doesNotMatch(html, /class="nav-item" data-screen="(books|comics|photos|queue|equalizer)"/, "unimplemented destinations must not crowd the primary navigation");
 assert.equal((html.match(/class="destination(?:\s|")/g) || []).length, 5, "home should prioritize Music, Videos, All formats, Photos and Sources");
-assert.match(css, /grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/, "home destinations should use a spacious four-column TV layout");
+assert.match(css, /\.destination-grid\{grid-template-columns:repeat\(5,minmax\(0,1fr\)\)\}/, "Home should use the canonical five-destination TV layout");
+assert.equal((css.match(/\.destination-grid\{grid-template-columns:repeat\(/g) || []).length, 1, "Home base grid must have only one canonical column rule");
+assert.match(css, /@media\(max-width:1250px\)\{\.destination-grid\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\)\}\}/, "Home should reduce to three columns on medium screens");
+assert.match(css, /@media\(max-width:900px\)\{\.destination-grid\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}\}/, "Home should reduce to two columns on narrow screens");
 assert.match(css, /@media\(max-width:900px\)/, "layout needs a narrower viewport fallback");
 assert.match(html, /role="status"/, "a status region should exist");
 
@@ -58,6 +61,7 @@ assert.match(media, /gallery-mode/, "gallery should provide album and art-galler
 assert.match(css, /photo-album-grid/, "photo gallery grid styling must exist");
 assert.match(css, /art-mode/, "art gallery layout must have a dedicated presentation mode");
 assert.match(media, /readTextFile/, "plain-text reading path should exist");
+assert.match(media, /kind === 'subtitle'\) && \['txt'.*'ass','ssa','sub'/, "subtitle extensions should route through the text viewer");
 assert.match(formats, /reader-engine-required/, "unsupported formats must report missing reader engines honestly");
 assert.match(media, /listStorages/, "storage discovery API should be wired");
 assert.match(media, /data-manage-path/, "USB items should expose file-management actions");
@@ -80,5 +84,8 @@ assert.match(manifest, /privilege name="http:\/\/tizen\.org\/privilege\/external
 assert.match(readme, /physical TV|physical television|not tested/i, "physical device limitations must be documented");
 assert.ok(existsSync(new URL("../DESIGN.md", import.meta.url)), "design contract must exist");
 assert.ok(existsSync(new URL("../TV-TEST-CHECKLIST.md", import.meta.url)), "device validation checklist must exist");
+assert.ok(existsSync(new URL("../virtual-tv.html", import.meta.url)), "Virtual TV test bench must exist");
+assert.ok(existsSync(new URL("../virtual-tv-mock.js", import.meta.url)), "Virtual TV Tizen mock must exist");
+assert.ok(existsSync(new URL("../AUDIT-FINDINGS.md", import.meta.url)), "audit findings must exist");
 
 console.log("Tizen TV static smoke checks passed. Hardware playback and USB enumeration still require TV/emulator validation.");
