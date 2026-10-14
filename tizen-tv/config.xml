@@ -9,6 +9,7 @@
   <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable" pointing-device-support="disable"/>
   <feature name="http://tizen.org/feature/screen.size.normal"/>
   <tizen:privilege name="http://tizen.org/privilege/filesystem.read"/>
+  <tizen:privilege name="http://tizen.org/privilege/filesystem.write"/>
   <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
   <tizen:privilege name="http://tizen.org/privilege/mediastorage"/>
   <tizen:privilege name="http://tizen.org/privilege/externalstorage"/>
