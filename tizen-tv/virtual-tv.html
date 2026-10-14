@@ -97,7 +97,7 @@
     check(fm.classify('book.epub')==='ebook','EPUB classification mismatch');
     check(fm.classify('comic.cbz')==='comic','CBZ classification mismatch');
     check(fm.readerState('ebook','epub').state==='reader-engine-required','EPUB must be reported as requiring a reader engine');
-    click('[data-screen="library"]');await wait(100);
+    click('[data-screen="library"]');await wait(450);
     const list=doc().getElementById('library-list');
     check(list && list.textContent.includes('Demo Book.epub'),'All-formats scan did not expose sample EPUB. Status: '+(doc().getElementById('library-status')?.textContent||'missing')+'. Rows: '+(list?list.textContent:'missing list'));
     const epubRow=Array.from(list.querySelectorAll('[data-media-file-id]')).find(row=>row.textContent.includes('Demo Book.epub'));
