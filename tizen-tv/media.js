@@ -239,7 +239,9 @@
       list.appendChild(element('p', 'list-eyebrow', title || path));
       var folders = [];
       var media = [];
-      names.forEach(function (name) {
+      var maxVisibleEntries = 350;
+      var clipped = names.length > maxVisibleEntries;
+      names.slice(0, maxVisibleEntries).forEach(function (name) {
         if (!name || name === '.' || name === '..' || name.indexOf('/') >= 0) return;
         var fullPath = joinPath(path, name);
         if (isDirectory(fullPath)) {
@@ -270,7 +272,9 @@
       media.forEach(function (item) {
         appendMediaRow(list, item, false);
       });
-      showSourceStatus(folders.length + ' folders · ' + media.length + ' playable candidates. Codec support still depends on the TV.', false);
+      var summary = folders.length + ' folders · ' + media.length + ' playable candidates. Codec support still depends on the TV.';
+      if (clipped) summary += ' Showing the first ' + maxVisibleEntries + ' of ' + names.length + ' entries; open subfolders to continue.';
+      showSourceStatus(summary, false);
       focusRefresh(containerFirstButton(list));
     }).catch(function (error) {
       if (state.currentPath !== path) return;
@@ -333,8 +337,11 @@
       var empty = element('div', 'media-empty');
       empty.appendChild(element('b', '', kind === 'audio' ? 'No music found yet' : 'No videos found yet'));
       empty.appendChild(element('p', '', 'Connect a USB drive or open Media Sources to browse available folders. Only items the TV filesystem can read are listed.'));
-      empty.appendChild(makeActionButton('Browse media sources', 'open-sources', 'action-primary'));
+      var browseButton = makeActionButton('Browse media sources', 'open-sources', 'action-primary');
+      browseButton.setAttribute('data-screen', 'sources');
+      browseButton.removeAttribute('data-media-action');
       list.appendChild(empty);
+      list.appendChild(browseButton);
       showLibraryStatus(message || 'No matching files found. You can browse a specific folder in Media Sources.', false);
       focusRefresh(list.querySelector('button'));
       return;
@@ -709,6 +716,7 @@
     onScreen: function (key) {
       state.screen = key;
       if (key !== 'sources') state.sourceToken++;
+      if (key !== 'music' && key !== 'videos') state.scanToken++;
       if (key === 'sources') refreshSources();
       else if (key === 'music') scanLibrary('audio');
       else if (key === 'videos') scanLibrary('video');
