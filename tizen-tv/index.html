@@ -9,6 +9,7 @@
   <title>Mortimer Player · TV</title>
   <link rel="stylesheet" href="styles.css">
   <script src="app.js" defer></script>
+  <script src="media.js" defer></script>
 </head>
 <body>
 <div class="app-shell">
@@ -54,6 +55,32 @@
     <section class="screen detail-screen" id="detail-screen" hidden aria-live="polite"></section>
     <footer class="footer"><span>Mortimer Player</span><span class="footer-center" id="footer-context">A personal media space</span><span class="remote-hint"><kbd>←</kbd><kbd>↑</kbd><kbd>↓</kbd><kbd>→</kbd> Navigate <kbd>OK</kbd> Select <kbd>BACK</kbd> Return</span></footer>
   </main>
+  <section class="player-overlay hidden" id="player-overlay" role="dialog" aria-label="Media player" aria-modal="true" hidden>
+    <div class="player-backdrop" aria-hidden="true"></div>
+    <header class="player-topline">
+      <div class="player-wordmark">MORTIMER <span>PLAYER</span></div>
+      <span class="player-kind" id="player-kind">NOW PLAYING</span>
+      <button class="player-close" data-media-action="player-close">× <span>Close</span></button>
+    </header>
+    <div class="avplay-stage" id="avplay-stage" hidden>
+      <object id="avplay-surface" type="application/avplayer" aria-label="Video playback surface"></object>
+    </div>
+    <div class="audio-player-art" id="audio-player-art">
+      <div class="audio-vinyl" aria-hidden="true"><div class="audio-vinyl-label">M<span>·</span></div></div>
+      <div class="audio-player-copy"><p class="kicker">NOW PLAYING</p><h1 id="audio-art-title">Media title</h1><p id="player-path">Local media</p><div class="audio-eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
+    </div>
+    <div class="player-bottom">
+      <div class="player-track-info"><div><h2 id="player-title">Media title</h2><p id="player-status" class="player-status" role="status" aria-live="polite">Preparing media…</p></div><span class="player-badge">LOCAL MEDIA</span></div>
+      <div class="player-progress"><span id="player-time-current">00:00</span><input id="playback-seek" type="range" min="0" max="1000" value="0" aria-label="Seek playback"><span id="player-time-duration">--:--</span></div>
+      <nav class="player-controls" aria-label="Playback controls">
+        <button data-media-action="player-backward" aria-label="Rewind 10 seconds">↶ <small>10s</small></button>
+        <button class="player-main-action" id="player-play-pause" data-media-action="player-toggle">Ⅱ <span>Pause</span></button>
+        <button data-media-action="player-forward" aria-label="Forward 30 seconds">↷ <small>30s</small></button>
+        <button data-media-action="player-stop" aria-label="Stop playback">■ <span>Stop</span></button>
+      </nav>
+      <p class="player-hint"><kbd>◀</kbd><kbd>▶</kbd> Seek <kbd>OK</kbd> Play/Pause <kbd>BACK</kbd> Close player</p>
+    </div>
+  </section>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </div>
 </body>
