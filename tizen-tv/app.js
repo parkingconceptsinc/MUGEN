@@ -102,7 +102,10 @@
   }
 
   function visibleButtons() {
-    var list = document.querySelectorAll('button:not([disabled])');
+    var playerOverlay = document.getElementById('player-overlay');
+    var playerOpen = playerOverlay && !playerOverlay.hidden && !playerOverlay.classList.contains('hidden');
+    var root = playerOpen ? playerOverlay : document;
+    var list = root.querySelectorAll('button:not([disabled])');
     var result = [];
     for (var i = 0; i < list.length; i++) {
       var button = list[i];
@@ -123,8 +126,11 @@
   function focusFirst() {
     var buttons = visibleButtons();
     if (!buttons.length) return;
-    var preferred = currentScreen === 'home' ? document.querySelector('#home-screen [data-screen="music"]') :
-      detailScreen.querySelector('button:not([disabled])');
+    var overlay = document.getElementById('player-overlay');
+    var playerOpen = overlay && !overlay.hidden && !overlay.classList.contains('hidden');
+    var preferred = playerOpen ? document.getElementById('player-play-pause') :
+      (currentScreen === 'home' ? document.querySelector('#home-screen [data-screen="music"]') :
+      detailScreen.querySelector('button:not([disabled])'));
     setFocus(preferred || buttons[0]);
   }
 
