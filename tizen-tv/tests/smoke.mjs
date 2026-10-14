@@ -43,5 +43,6 @@ assert.match(manifest, /privilege name="http:\/\/tizen\.org\/privilege\/filesyst
 assert.match(manifest, /privilege name="http:\/\/tizen\.org\/privilege\/externalstorage"/, "external storage access is required");
 assert.match(readme, /physical TV|physical television|not tested/i, "physical device limitations must be documented");
 assert.ok(existsSync(new URL("../DESIGN.md", import.meta.url)), "design contract must exist");
+assert.ok(existsSync(new URL("../TV-TEST-CHECKLIST.md", import.meta.url)), "device validation checklist must exist");
 
 console.log("Tizen TV static smoke checks passed. Hardware playback and USB enumeration still require TV/emulator validation.");
