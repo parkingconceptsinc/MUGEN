@@ -32,6 +32,7 @@ jobs:
           node --check tizen-tv/app.js
           node --check tizen-tv/media.js
           node --check tizen-tv/formats.js
+          node --check tizen-tv/virtual-tv-mock.js
       - name: Run TV UI smoke checks
         run: node tizen-tv/tests/smoke.mjs
       - name: Validate Tizen manifest XML
