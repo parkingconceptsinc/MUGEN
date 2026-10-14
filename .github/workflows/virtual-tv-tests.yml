@@ -1,0 +1,43 @@
+name: MUGEN Virtual TV functional tests
+
+on:
+  push:
+    branches: [feature/tizen-tv]
+    paths:
+      - "tizen-tv/**"
+      - ".github/workflows/virtual-tv-tests.yml"
+  pull_request:
+    paths:
+      - "tizen-tv/**"
+      - ".github/workflows/virtual-tv-tests.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  virtual-tv:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install isolated Playwright
+        run: npm install --prefix /tmp/mugen-virtual-tv playwright
+      - name: Install Chromium
+        run: /tmp/mugen-virtual-tv/node_modules/.bin/playwright install --with-deps chromium
+      - name: Start local TV test server
+        run: |
+          python3 -m http.server 4173 --directory tizen-tv >/tmp/mugen-virtual-tv-server.log 2>&1 &
+          echo $! >/tmp/mugen-virtual-tv-server.pid
+          for i in $(seq 1 30); do
+            if curl --silent --fail http://127.0.0.1:4173/virtual-tv.html >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/mugen-virtual-tv-server.log
+          exit 1
+      - name: Run browser functional tests
+        run: node tizen-tv/tests/virtual-tv-browser.mjs
