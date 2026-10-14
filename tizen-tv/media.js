@@ -19,8 +19,10 @@
     nextId: 1,
     currentItem: null,
     playing: false,
+    focusBeforePlayer: null,
     progressTimer: null,
-    scanToken: 0
+    scanToken: 0,
+    sourceToken: 0
   };
 
   function byId(id) { return document.getElementById(id); }
@@ -186,6 +188,7 @@
   }
 
   function refreshSources() {
+    var requestToken = ++state.sourceToken;
     var sourceList = byId('source-list');
     var contents = byId('source-contents');
     var backButton = byId('directory-back');
@@ -198,11 +201,13 @@
     state.pathStack = [];
     showSourceStatus('Checking TV storage…', false);
     listStorages().then(function (storages) {
+      if (requestToken !== state.sourceToken) return;
       state.storages = storages;
       renderSourceList(storages);
       showSourceStatus('Storage scan complete. Select a source to browse its folders and media.', false);
       focusRefresh(containerFirstButton(sourceList));
     }).catch(function (error) {
+      if (requestToken !== state.sourceToken) return;
       state.storages = [];
       renderSourceList([]);
       showSourceStatus(error.message || 'TV storage is unavailable.', true);
@@ -443,6 +448,7 @@
   function showPlayerShell(item) {
     var overlay = byId('player-overlay');
     if (!overlay) return;
+    state.focusBeforePlayer = document.activeElement;
     overlay.hidden = false;
     overlay.classList.remove('hidden');
     setText('player-title', item.name);
@@ -460,6 +466,7 @@
     setText('player-time-duration', '--:--');
     var seek = byId('playback-seek');
     if (seek) seek.value = '0';
+    focusRefresh(byId('player-play-pause'));
   }
   function syncDisplayRect() {
     var avplay = window.webapis && window.webapis.avplay;
@@ -626,7 +633,9 @@
       overlay.hidden = true;
     }
     playerStatus('Player closed', false);
-    focusRefresh(null);
+    var restoreFocus = state.focusBeforePlayer;
+    state.focusBeforePlayer = null;
+    focusRefresh(restoreFocus && restoreFocus.offsetWidth > 0 ? restoreFocus : null);
   }
   function handleMediaKey(key, code) {
     if (!state.currentItem) return false;
@@ -679,16 +688,26 @@
   });
 
   document.addEventListener('keydown', function (event) {
-    if (!overlayVisible()) return;
     var key = event.key;
     var code = event.keyCode || event.which;
     if (key === 'Escape' || key === 'Backspace' || code === 10009) {
-      event.preventDefault();
-      event.stopPropagation();
-      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
-      closePlayer();
+      if (overlayVisible()) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+        closePlayer();
+        return;
+      }
+      if (state.screen === 'sources' && state.pathStack.length) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+        backDirectory();
+        return;
+      }
       return;
     }
+    if (!overlayVisible()) return;
     if (key === 'MediaPlay' || key === 'MediaPause' || key === 'MediaPlayPause' ||
         key === 'MediaStop' || key === 'MediaFastForward' || key === 'MediaRewind' || code === 10252) {
       if (handleMediaKey(key, code)) {
@@ -706,6 +725,7 @@
   window.MortimerTVMedia = {
     onScreen: function (key) {
       state.screen = key;
+      if (key !== 'sources') state.sourceToken++;
       if (key === 'sources') refreshSources();
       else if (key === 'music') scanLibrary('audio');
       else if (key === 'videos') scanLibrary('video');
