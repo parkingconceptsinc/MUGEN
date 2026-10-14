@@ -65,8 +65,10 @@ assert.match(media, /kind === 'subtitle'\) && \['txt'.*'ass','ssa','sub'/, "subt
 assert.match(formats, /reader-engine-required/, "unsupported formats must report missing reader engines honestly");
 assert.match(media, /listStorages/, "storage discovery API should be wired");
 assert.match(media, /data-manage-path/, "USB items should expose file-management actions");
-assert.match(media, /copyTo/, "USB copy should use the Tizen filesystem API");
-assert.match(media, /moveTo/, "USB move should use the Tizen filesystem API");
+assert.match(media, /copyFile/, "USB file copy should use the Tizen filesystem manager API");
+assert.match(media, /copyDirectory/, "USB directory copy should use the Tizen filesystem manager API");
+assert.match(media, /moveFile/, "USB file move should use the Tizen filesystem manager API");
+assert.match(media, /moveDirectory/, "USB directory move should use the Tizen filesystem manager API");
 assert.match(media, /deleteDirectory/, "USB folder deletion should use the Tizen filesystem API");
 assert.match(media, /deleteFile/, "USB file deletion should use the Tizen filesystem API");
 assert.match(media, /isRemovablePath/, "write operations must be restricted to mounted removable storage");
