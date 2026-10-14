@@ -27,6 +27,8 @@ Read `DESIGN.md` and the Claude Code project skills in `../.claude/skills/`:
 
 ## Build checks
 
+Use [TV-TEST-CHECKLIST.md](TV-TEST-CHECKLIST.md) for the emulator and physical-TV validation matrix.
+
 GitHub Actions workflow `.github/workflows/tizen-tv-checks.yml` checks JavaScript syntax for both scripts, TV UI smoke assertions, and XML well-formedness. These are static checks only; they do not compile or sign a WGT and do not confirm a TV API works on the target firmware.
 
 ## Important limits
