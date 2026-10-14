@@ -19,6 +19,10 @@
       title: 'Videos', kicker: 'WATCH YOUR WAY', subtitle: 'Your local films, shows and clips.', icon: '▷',
       kind: 'library', mediaKind: 'video'
     },
+    library: {
+      title: 'All formats', kicker: 'ONE LIBRARY · MANY FORMATS', subtitle: 'Audio, video, PDFs, ebooks, comics and office files from connected storage.', icon: '▤',
+      kind: 'library', mediaKind: 'all'
+    },
     books: {
       title: 'Books', kicker: 'PICK UP WHERE YOU LEFT OFF', subtitle: 'A calm space for your reading library.', icon: '▤',
       kind: 'empty', label: 'NOT CONNECTED YET', heading: 'Your reading shelf is planned.',
