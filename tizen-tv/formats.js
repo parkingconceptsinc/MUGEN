@@ -35,7 +35,7 @@
   function readerState(kind, ext) {
     if (kind === 'audio' || kind === 'video') return {state:'device-decoder', message:'The TV must decode the file container and its internal audio/video codecs.'};
     if (kind === 'pdf') return {state:'native-viewer-unverified', message:'PDF is recognized; embedded PDF viewing depends on the TV WebView.'};
-    if (kind === 'text' && ['txt','md','markdown','log','csv','tsv','json','xml','yaml','yml','ini','srt','vtt'].indexOf(ext) >= 0) return {state:'text-reader', message:'Text can be read by the built-in text viewer.'};
+    if ((kind === 'text' || kind === 'subtitle') && ['txt','md','markdown','log','csv','tsv','json','xml','yaml','yml','ini','srt','vtt','ass','ssa','sub'].indexOf(ext) >= 0) return {state:'text-reader', message:'Text can be read by the built-in text viewer.'};
     if (kind === 'image') return {state:'native-image-unverified', message:'Image decoding depends on the TV WebView.'};
     if (kind === 'ebook') return {state:'reader-engine-required', message:'A local EPUB/ebook rendering engine must be bundled before this format can be read.'};
     if (kind === 'comic') return {state:'archive-engine-required', message:'CBZ/CBR comic archive extraction and page rendering require a bundled archive engine.'};
