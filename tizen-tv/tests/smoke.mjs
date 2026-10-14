@@ -89,5 +89,6 @@ assert.ok(existsSync(new URL("../TV-TEST-CHECKLIST.md", import.meta.url)), "devi
 assert.ok(existsSync(new URL("../virtual-tv.html", import.meta.url)), "Virtual TV test bench must exist");
 assert.ok(existsSync(new URL("../virtual-tv-mock.js", import.meta.url)), "Virtual TV Tizen mock must exist");
 assert.ok(existsSync(new URL("../AUDIT-FINDINGS.md", import.meta.url)), "audit findings must exist");
+assert.ok(existsSync(new URL("./virtual-tv-browser.mjs", import.meta.url)), "browser-driven Virtual TV tests must exist");
 
 console.log("Tizen TV static smoke checks passed. Hardware playback and USB enumeration still require TV/emulator validation.");
