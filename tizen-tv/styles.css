@@ -5,6 +5,11 @@ body{overflow:hidden}
 button{font:inherit;color:inherit;cursor:pointer;border:0}
 button:focus{outline:none}
 button:focus-visible,.focused{outline:3px solid var(--accent)!important;outline-offset:4px;box-shadow:0 0 0 7px #ff784923,0 10px 32px #0008;transform:translateY(-2px);z-index:2}
+button:hover,.mouse-hover{filter:brightness(1.12)}
+body.pointer-mode button:focus-visible,body.pointer-mode button.focused{outline:none!important;outline-offset:0;box-shadow:none;transform:none}
+body.pointer-mode button:hover,body.pointer-mode button.mouse-hover{outline:2px solid #ff9b79;outline-offset:3px;box-shadow:0 0 0 5px #ff78491c;transform:translateY(-1px);z-index:2}
+button:focus-visible{scroll-margin:24px}
+@media(hover:none){button:hover{filter:none}}
 button:disabled{opacity:.42;cursor:default;transform:none}
 .app-shell{height:100vh;width:100vw;min-height:560px;display:flex;background:radial-gradient(ellipse at 78% 7%,#2a171328,transparent 37%),var(--bg);overflow:hidden}
 .rail{width:100px;flex:0 0 100px;display:flex;flex-direction:column;align-items:center;padding:28px 10px 20px;background:#0b0b10;border-right:1px solid #ffffff0a;z-index:3}
