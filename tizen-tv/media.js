@@ -982,7 +982,7 @@
     var target = event.target;
     while (target && target !== document && !target.getAttribute('data-media-action') &&
            !target.getAttribute('data-open-path') && !target.getAttribute('data-media-file-id') &&
-           !target.getAttribute('data-manage-path')) {
+           !target.getAttribute('data-gallery-image-id') && !target.getAttribute('data-manage-path')) {
       target = target.parentNode;
     }
     if (!target || target === document) return;
