@@ -9,7 +9,8 @@ The TV app is a **separate target** inside this repository. It does not replace 
 - Home uses three high-priority destinations and responsive cards; directional focus scrolls focused controls into view for long media lists.
 - Multi-input navigation: directional TV remote, keyboard arrows/Enter/Escape/Backspace, native Tab focus, mouse hover/click, and pointer-aware focus styling. Native input and seek controls retain their own keyboard behavior.
 - Guarded Samsung media-key handling.
-- Dedicated Music, Videos, Media Sources, and unified All formats library.
+- Dedicated Music, Videos, Media Sources, unified All formats library, and a Photos screen with separate album and art-gallery layouts.
+- Photo discovery scans mounted removable storage and standard Pictures/Images/DCIM/Downloads locations, with bounded traversal to protect TV memory. Image thumbnails open in the built-in full-screen image/document viewer where the Samsung TV WebView supports the format.
 - Central format registry recognizes common audio/video, PDF, plain-text, ebook, comic archive, image, subtitle, and Office extensions.
 - Built-in reader shell: plain-text/Markdown/CSV/JSON/XML/subtitle preview via the Tizen filesystem stream API, plus PDF iframe and image viewer attempts where the TV WebView supports them.
 - Unsupported reader engines are explicitly identified rather than reporting false success.
@@ -60,6 +61,7 @@ GitHub Actions workflow `.github/workflows/tizen-tv-checks.yml` checks JavaScrip
 - **Not yet readable:** EPUB/MOBI/AZW/FB2, CBZ/CBR/CB7/CBT, Word/Excel/PowerPoint, and compressed archives are recognized but need bundled offline parsing/rendering engines. A file registry alone does not decode them.
 - PDF and image rendering depend on the TV WebView and are not verified on physical hardware. Text previews are capped at 250 KB to protect TV memory.
 - Album art, embedded metadata, resume position, playlists/queue, equalizer, and richer book/comic readers remain pending.
+- Photo gallery scan and layouts are implemented in the source, but image decoding, thumbnails, remote navigation, and performance with large USB collections still require validation on the target TV. Image extensions are not a guarantee that the firmware can decode every file.
 - Playback controls and seek behavior are wired to AVPlay, but their real operation still needs emulator/TV validation.
 
 ## Official API references
