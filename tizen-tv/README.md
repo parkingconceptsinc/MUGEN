@@ -94,3 +94,10 @@ The GitHub Actions workflow `.github/workflows/mugen-tizen-package.yml` validate
 4. Add metadata/artwork and resume state after confirming reliable media identity/path behavior.
 5. Finish queue, subtitles, and optional books/comics/photos experiences based on supported APIs.
 6. Produce a signed WGT and a repeatable release flow once SDK and device validation passes.
+
+
+## Virtual TV test bench
+
+Open `virtual-tv.html` in a browser served from the repository's `tizen-tv/` folder to run the MUGEN interface against a simulated Samsung Tizen filesystem and AVPlay engine. It includes mock USB media and test cases for navigation, audio, video, photos, USB copy, and format/reader-state reporting. Use the viewport buttons to inspect responsive layouts. All storage changes occur only in mock memory. A passing virtual test is not evidence of real codec, firmware, remote-control, or WGT-install compatibility.
+
+See `AUDIT-FINDINGS.md` for the source audit and `TV-TEST-CHECKLIST.md` for physical-device validation.
