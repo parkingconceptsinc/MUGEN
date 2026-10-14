@@ -27,7 +27,7 @@ assert.match(html, /data-screen="sources" aria-label="Media sources"/, "implemen
 assert.doesNotMatch(html, /class="nav-item" data-screen="(books|comics|photos|queue|equalizer)"/, "unimplemented destinations must not crowd the primary navigation");
 assert.equal((html.match(/class="destination(?:\s|")/g) || []).length, 5, "home should prioritize Music, Videos, All formats, Photos and Sources");
 assert.match(css, /\.destination-grid\{display:grid;grid-template-columns:repeat\(5,minmax\(0,1fr\)\)/, "Home should use the canonical five-destination TV layout");
-assert.equal((css.match(/\.destination-grid\{grid-template-columns:repeat\(/g) || []).length, 0, "Home must not contain duplicate base grid overrides");
+assert.equal((css.match(/\.destination-grid\{display:grid;grid-template-columns:repeat\(/g) || []).length, 1, "Home must have exactly one canonical base grid rule");
 assert.match(css, /@media\(max-width:1250px\)\{\.destination-grid\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\)\}\}/, "Home should reduce to three columns on medium screens");
 assert.match(css, /@media\(max-width:900px\)\{\.destination-grid\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}\}/, "Home should reduce to two columns on narrow screens");
 assert.match(css, /@media\(max-width:900px\)/, "layout needs a narrower viewport fallback");
