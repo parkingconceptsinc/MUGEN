@@ -54,6 +54,12 @@ assert.match(media, /openDocument/, "non-audio/video files must route through do
 assert.match(media, /readTextFile/, "plain-text reading path should exist");
 assert.match(formats, /reader-engine-required/, "unsupported formats must report missing reader engines honestly");
 assert.match(media, /listStorages/, "storage discovery API should be wired");
+assert.match(media, /data-manage-path/, "USB items should expose file-management actions");
+assert.match(media, /copyTo/, "USB copy should use the Tizen filesystem API");
+assert.match(media, /moveTo/, "USB move should use the Tizen filesystem API");
+assert.match(media, /deleteDirectory/, "USB folder deletion should use the Tizen filesystem API");
+assert.match(media, /deleteFile/, "USB file deletion should use the Tizen filesystem API");
+assert.match(media, /isRemovablePath/, "write operations must be restricted to mounted removable storage");
 assert.match(media, /listDirectory/, "TV folder browsing should be wired");
 assert.match(media, /toURI/, "local media paths must become file URIs");
 assert.match(media, /prepareAsync/, "AVPlay async preparation should be used");
