@@ -36,10 +36,8 @@
       button: 'Back to Home', target: 'home', symbol: '▧', variant: 'comic'
     },
     photos: {
-      title: 'Photos', kicker: 'YOUR MOMENTS', subtitle: 'Bring your favorite memories to the big screen.', icon: '▣',
-      kind: 'empty', label: 'NOT CONNECTED YET', heading: 'Your gallery, reimagined.',
-      body: 'Photo source enumeration and slideshow controls need to be connected to supported TV APIs.',
-      button: 'Back to Home', target: 'home', symbol: '▣', variant: 'photo'
+      title: 'Photos', kicker: 'MEMORIES · CURATED FOR THE BIG SCREEN', subtitle: 'Browse photo albums or explore your images as a gallery of art.', icon: '▣',
+      kind: 'gallery'
     },
     'now-playing': {
       title: 'Now Playing', kicker: 'YOUR CURRENT SESSION', subtitle: 'Playback status and controls for the active track.', icon: '◉',
@@ -81,7 +79,13 @@
       '</p><h1>' + data.title + '<span class="title-period">.</span></h1><p class="screen-subtitle">' +
       data.subtitle + '</p></div><span class="screen-icon" aria-hidden="true">' + data.icon + '</span></div>';
 
-    if (data.kind === 'library') {
+    if (data.kind === 'gallery') {
+      html += '<div class="photo-gallery-browser">' +
+        '<div class="photo-gallery-toolbar"><div><p class="list-eyebrow">YOUR VISUAL COLLECTION</p><span id="gallery-status" class="media-status" role="status">Discovering photos on connected storage…</span></div>' +
+        '<div class="library-toolbar-actions"><button class="action-secondary gallery-mode-button active" data-media-action="gallery-mode" data-gallery-mode="albums">Photo albums</button><button class="action-secondary gallery-mode-button" data-media-action="gallery-mode" data-gallery-mode="art">Art gallery</button><button class="action-primary" data-media-action="scan-gallery">Scan photos</button></div></div>' +
+        '<div id="photo-gallery-list" class="photo-gallery-grid albums-mode" aria-label="Photo gallery"></div>' +
+        '<p class="photo-gallery-hint">Select a photo to view it full screen. Use the TV remote to move focus between images.</p></div>';
+    } else if (data.kind === 'library') {
       html += '<div class="library-browser"><div class="library-toolbar"><div><p class="list-eyebrow">' +
         (data.mediaKind === 'audio' ? 'LOCAL AUDIO' : 'LOCAL VIDEO') +
         '</p><span id="library-status" class="media-status" role="status">Checking media sources…</span></div><div class="library-toolbar-actions"><button class="action-primary" data-media-action="scan-library" data-media-kind="' +
