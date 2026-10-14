@@ -329,6 +329,5 @@ kbd{font:inherit;font-size:9px;padding:3px 5px;border:1px solid #34343d;border-r
 @media(max-height:720px){.photo-gallery-browser{gap:7px}.photo-album-grid{gap:8px;margin-bottom:12px}.photo-tile-caption b{font-size:11px}.photo-gallery-hint{font-size:10px}}
 
 /* Five balanced Home destinations at TV scale, collapsing cleanly on smaller viewports. */
-.destination-grid{grid-template-columns:repeat(5,minmax(0,1fr))}
 @media(max-width:1250px){.destination-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:900px){.destination-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
