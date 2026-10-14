@@ -741,7 +741,7 @@
       showReaderStatus('Image decoding depends on the Samsung TV WebView.', false);
       return;
     }
-    if (kind === 'text' && ['txt','md','markdown','log','csv','tsv','json','xml','yaml','yml','ini','srt','vtt'].indexOf(ext) >= 0) {
+    if ((kind === 'text' || kind === 'subtitle') && ['txt','md','markdown','log','csv','tsv','json','xml','yaml','yml','ini','srt','vtt','ass','ssa','sub'].indexOf(ext) >= 0) {
       readTextFile(item.path).then(function (result) {
         if (overlay.hidden) return;
         var pre = element('pre', 'reader-text', result.text);
