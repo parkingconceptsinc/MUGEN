@@ -51,7 +51,7 @@ assert.match(formats, /'cbz'/, "comic format registry should include CBZ");
 assert.match(formats, /'cbr'/, "comic format registry should include CBR");
 assert.match(formats, /'docx'/, "office format registry should include DOCX");
 assert.match(media, /openDocument/, "non-audio/video files must route through document reader");
-assert.match(app, /kind: 'gallery'/, "Photos should open a dedicated gallery screen");
+assert.match(js, /kind: 'gallery'/, "Photos should open a dedicated gallery screen");
 assert.match(media, /function scanGallery\(/, "photo gallery must scan image files from connected storage");
 assert.match(media, /data-gallery-image-id/, "gallery thumbnails must open a full-size image viewer");
 assert.match(media, /gallery-mode/, "gallery should provide album and art-gallery modes");
