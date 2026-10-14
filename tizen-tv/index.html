@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="styles.css">
   <script id="samsung-webapis-script" src="$WEBAPIS/webapis/webapis.js" defer></script>
   <script src="app.js" defer></script>
+  <script src="formats.js" defer></script>
   <script src="media.js" defer></script>
 </head>
 <body>
@@ -21,6 +22,7 @@
       <button class="nav-item active" data-screen="home" aria-label="Home"><span class="nav-glyph">⌂</span><span class="nav-label">Home</span></button>
       <button class="nav-item" data-screen="music" aria-label="Music"><span class="nav-glyph">♫</span><span class="nav-label">Music</span></button>
       <button class="nav-item" data-screen="videos" aria-label="Videos"><span class="nav-glyph">▷</span><span class="nav-label">Videos</span></button>
+      <button class="nav-item" data-screen="library" aria-label="All formats"><span class="nav-glyph">▤</span><span class="nav-label">Library</span></button>
       <button class="nav-item" data-screen="sources" aria-label="Media sources"><span class="nav-glyph">▣</span><span class="nav-label">Sources</span></button>
     </nav>
     <div class="rail-spacer"></div>
@@ -43,6 +45,7 @@
         <div class="destination-grid">
           <button class="destination destination-music" data-screen="music"><span class="destination-symbol">♫</span><span class="destination-copy"><b>Music</b><small>Albums and tracks</small></span><span class="destination-chevron">›</span></button>
           <button class="destination destination-video" data-screen="videos"><span class="destination-symbol">▷</span><span class="destination-copy"><b>Videos</b><small>Films and clips</small></span><span class="destination-chevron">›</span></button>
+          <button class="destination destination-library" data-screen="library"><span class="destination-symbol">▤</span><span class="destination-copy"><b>All formats</b><small>Books, comics and documents</small></span><span class="destination-chevron">›</span></button>
           <button class="destination destination-sources" data-screen="sources"><span class="destination-symbol">▣</span><span class="destination-copy"><b>Media sources</b><small>USB and folders</small></span><span class="destination-chevron">›</span></button>
         </div>
       </div>
@@ -76,6 +79,7 @@
       <p class="player-hint"><kbd>◀</kbd><kbd>▶</kbd> Seek <kbd>OK</kbd> Play/Pause <kbd>BACK</kbd> Close player</p>
     </div>
   </section>
+  <section class="reader-overlay hidden" id="reader-overlay" role="dialog" aria-modal="true" aria-label="Document reader" hidden><header class="reader-topline"><div><p class="kicker">MORTIMER READER</p><h2 id="reader-title">Document</h2></div><button class="reader-close" data-media-action="reader-close">× Close</button></header><p id="reader-status" class="reader-status" role="status" aria-live="polite"></p><div id="reader-content" class="reader-content"></div></section>
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
 </div>
 </body>
