@@ -52,7 +52,7 @@ assert.match(formats, /'cbr'/, "comic format registry should include CBR");
 assert.match(formats, /'docx'/, "office format registry should include DOCX");
 assert.match(media, /openDocument/, "non-audio/video files must route through document reader");
 assert.match(media, /readTextFile/, "plain-text reading path should exist");
-assert.match(media, /reader-engine-required/, "unsupported formats must report missing reader engines honestly");
+assert.match(formats, /reader-engine-required/, "unsupported formats must report missing reader engines honestly");
 assert.match(media, /listStorages/, "storage discovery API should be wired");
 assert.match(media, /listDirectory/, "TV folder browsing should be wired");
 assert.match(media, /toURI/, "local media paths must become file URIs");
