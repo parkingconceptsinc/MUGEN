@@ -5,6 +5,8 @@ The TV app is a **separate target** inside this repository. It does not replace 
 ## Current implementation
 
 - PWA-aligned dark theme, orange `#ff7849` accent, large TV-safe type, left rail, home artwork, and explicit empty/error states.
+- Primary navigation is intentionally limited to implemented workflows (Home, Music, Videos, Media Sources, Now Playing, Settings); planned Books, Comics, Photos, Queue and Equalizer destinations do not crowd the main rail.
+- Home uses three high-priority destinations and responsive cards; directional focus scrolls focused controls into view for long media lists.
 - Directional remote navigation, visible focus, Enter/OK, Back/Escape, and guarded Samsung media-key handling.
 - Dedicated Music, Videos, and Media Sources screens.
 - A TV media adapter in `media.js` that uses the documented Tizen filesystem APIs when running inside a compatible Samsung TV runtime:
@@ -30,6 +32,12 @@ Read `DESIGN.md` and the Claude Code project skills in `../.claude/skills/`:
 Use [TV-TEST-CHECKLIST.md](TV-TEST-CHECKLIST.md) for the emulator and physical-TV validation matrix.
 
 GitHub Actions workflow `.github/workflows/tizen-tv-checks.yml` checks JavaScript syntax for both scripts, TV UI smoke assertions, and XML well-formedness. These are static checks only; they do not compile or sign a WGT and do not confirm a TV API works on the target firmware.
+
+## UI audit status (2026-10-14)
+
+- Static GitHub Actions checks passed for the navigation/layout refinement and smoke-test assertions: [run details](https://github.com/parkingconceptsinc/MUGEN/actions/runs/38597166502).
+- Desktop-browser and physical-TV visual inspection are **not run** in this environment. Responsive CSS rules are present, but a human visual pass at 1920×1080, 1280×720 and short-height viewports remains required.
+- Samsung remote behavior, USB browsing, AVPlay playback and signed WGT installation remain hardware/SDK validation tasks; static checks do not prove those paths work on the target TV.
 
 ## Important limits
 
