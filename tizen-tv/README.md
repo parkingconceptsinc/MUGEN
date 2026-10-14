@@ -23,6 +23,12 @@ The TV app is a **separate target** inside this repository. It does not replace 
 - Media/AVPlay APIs are guarded: a desktop browser preview says that TV storage/playback APIs are unavailable instead of pretending to scan a USB drive.
 - No third-party image/font/CDN is needed for the base UI.
 
+## USB file management
+
+The media-source browser now exposes a Manage control for each listed USB file and folder. It offers copy, move, and delete operations through the Tizen filesystem API. Copy and move ask for an existing destination folder path on a connected removable drive; overwriting is disabled. Delete requires confirmation, and deleting a folder is recursive. Mutations are restricted to paths beneath a currently mounted removable-storage root.
+
+These controls require the app's filesystem write permission and a Tizen runtime that grants write access to the USB filesystem. The desktop preview cannot validate physical USB writes. Before relying on this feature, test copy/move/delete on a non-critical test USB on the target Samsung TV, including full storage, read-only media, disconnect during operation, and duplicate destination names. TV remote behavior for native prompt and confirm dialogs also needs physical-device validation. Never test deletion on a drive containing the only copy of important files.
+
 ## Skills and design contract
 
 Read `DESIGN.md` and the Claude Code project skills in `../.claude/skills/`:
