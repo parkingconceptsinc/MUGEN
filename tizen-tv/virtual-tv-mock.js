@@ -67,7 +67,8 @@
       listDirectory:function(path,ok,fail){setTimeout(function(){var p=normalize(path);if(files[p+'/'])ok(names(p));else fail({message:'Folder not found in virtual filesystem: '+p});},10);},
       isDirectory:function(path){return !!dirs[normalize(path)];},
       toURI:uri,
-      resolve:function(path,ok,fail){var p=normalize(path);if(dirs[p] || Object.keys(content).indexOf(p)>=0 || Object.keys(files).some(function(k){return k.replace(/\/$/,'')===p;})){ok(entry(p));}else fail({message:'Virtual file not found: '+p});},
+      resolve:function(path,ok,fail){var p=normalize(path);var parent=p.slice(0,p.lastIndexOf('/')), name=p.split('/').pop();
+        if(dirs[p] || Object.keys(content).indexOf(p)>=0 || Object.keys(files).some(function(k){return k.replace(/\/$/,'')===p;}) || (files[parent+'/']||[]).indexOf(name)>=0){ok(entry(p));}else fail({message:'Virtual file not found: '+p});},
       deleteFile:function(path,ok){var p=normalize(path),parent=p.slice(0,p.lastIndexOf('/'));files[parent+'/']=(files[parent+'/']||[]).filter(function(n){return n!==p.split('/').pop();});delete content[p];ok();},
       deleteDirectory:function(path,recursive,ok){var p=normalize(path);delete files[p+'/'];delete dirs[p];ok();}
     },
