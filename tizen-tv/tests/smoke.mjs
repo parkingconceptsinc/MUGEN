@@ -34,6 +34,11 @@ for (const action of ["ArrowRight", "ArrowLeft", "ArrowDown", "ArrowUp", "Escape
   assert.ok(js.includes(action), `remote/keyboard key handling missing: ${action}`);
 }
 assert.match(js, /registerKeyBatch/, "Tizen media-key registration should be guarded");
+assert.match(js, /pointermove/, "mouse hover targeting should be supported");
+assert.match(js, /pointerdown/, "mouse clicks should synchronize focus state");
+assert.match(js, /pointer-mode/, "pointer interaction should have a dedicated visual mode");
+assert.match(js, /editingControl/, "native keyboard behavior must be preserved for inputs and seek controls");
+assert.match(css, /body\.pointer-mode button:hover/, "mouse hover must remain visibly distinguishable");
 assert.match(media, /listStorages/, "storage discovery API should be wired");
 assert.match(media, /listDirectory/, "TV folder browsing should be wired");
 assert.match(media, /toURI/, "local media paths must become file URIs");
