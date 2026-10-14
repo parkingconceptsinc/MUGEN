@@ -8,7 +8,7 @@
 <header><div class="brand"><div class="mark">M</div><div><h1>MUGEN · Virtual TV Test Bench</h1><p>Samsung TV interface simulation · mock USB · mock AVPlay · no physical files changed</p></div></div><span class="small">DEV / SIMULATION ONLY</span></header>
 <div class="toolbar"><button data-size="1920x1080" class="active">TV 1920 × 1080</button><button data-size="1280x720">TV 1280 × 720</button><button data-size="960x540">Compact 960 × 540</button><button id="reload">Restart virtual TV</button></div>
 <div class="layout"><div class="tv-wrap"><iframe id="tv" class="tv-frame" title="MUGEN Virtual Samsung TV"></iframe><div class="tv-caption"><span>Simulated Samsung Tizen runtime</span><span id="runtime-status">Booting mock storage…</span></div></div>
-<aside class="panel"><h2>Functional test suite</h2><p>Tests run against the real MUGEN TV HTML/CSS/JS, with filesystem and AVPlay replaced by deterministic mocks.</p><div class="legend"><span><i class="dot passdot"></i>Passed</span><span><i class="dot faildot"></i>Failed</span><span><i class="dot pendingdot"></i>Not run</span></div><div class="test-actions"><button class="test-button primary" id="run-tests">Run all functional tests</button><button class="test-button" data-test="navigation">Navigation and remote</button><button class="test-button" data-test="music">Music scan and playback</button><button class="test-button" data-test="video">Video scan and playback</button><button class="test-button" data-test="gallery">Photo scan and gallery modes</button><button class="test-button" data-test="formats">Format honesty and reader status</button></div><div class="results" id="results"><div class="result pending">Tests have not run yet.</div></div><p class="small">The virtual TV cannot prove real codec support, Samsung firmware behavior, USB permissions or remote-control hardware behavior.</p></aside></div>
+<aside class="panel"><h2>Functional test suite</h2><p>Tests run against the real MUGEN TV HTML/CSS/JS, with filesystem and AVPlay replaced by deterministic mocks.</p><div class="legend"><span><i class="dot passdot"></i>Passed</span><span><i class="dot faildot"></i>Failed</span><span><i class="dot pendingdot"></i>Not run</span></div><div class="test-actions"><button class="test-button primary" id="run-tests">Run all functional tests</button><button class="test-button" data-test="navigation">Navigation and remote</button><button class="test-button" data-test="music">Music scan and playback</button><button class="test-button" data-test="video">Video scan and playback</button><button class="test-button" data-test="gallery">Photo scan and gallery modes</button><button class="test-button" data-test="usb">USB browse and safe copy</button><button class="test-button" data-test="formats">Format honesty and reader status</button></div><div class="results" id="results"><div class="result pending">Tests have not run yet.</div></div><p class="small">The virtual TV cannot prove real codec support, Samsung firmware behavior, USB permissions or remote-control hardware behavior.</p></aside></div>
 <script>
 (function(){
   const frame=document.getElementById('tv'), results=document.getElementById('results'), runtime=document.getElementById('runtime-status');
@@ -73,6 +73,23 @@
     click('[data-media-action="reader-close"]');
     return 'USB image scan, album/art layouts and image opening work in simulation';
   }
+  async function testUsb(){
+    click('[data-screen="sources"]');await wait(60);
+    const usb=doc().querySelector('[data-open-path="removable_sda1"]');
+    check(usb,'Virtual USB device was not listed');
+    usb.click();await wait(60);
+    const folder=doc().querySelector('[data-open-path="removable_sda1/Music"]');
+    check(folder,'USB Music folder was not listed');
+    folder.click();await wait(60);
+    const manage=doc().querySelector('[data-manage-path="removable_sda1/Music/USB Track.mp3"]');
+    check(manage,'Manage action for USB test file was not rendered');
+    let promptCount=0;
+    frame.contentWindow.prompt=function(){promptCount++;return promptCount===1?'1':'removable_sda1';};
+    frame.contentWindow.confirm=function(){return true;};
+    manage.click();await wait(120);
+    check((frame.contentWindow.__MUGEN_VIRTUAL_TV__.files['removable_sda1/']||[]).includes('USB Track.mp3'),'Mock USB copy did not create destination file');
+    return 'USB browsing and copy flow worked against isolated mock storage';
+  }
   async function testFormats(){
     const fm=frame.contentWindow.MortimerFormats;
     check(fm.classify('song.flac')==='audio','FLAC classification mismatch');
@@ -89,7 +106,7 @@
     click('[data-media-action="reader-close"]');
     return 'Central format registry and explicit unsupported-reader messaging are consistent';
   }
-  const tests={navigation:testNavigation,music:testMusic,video:testVideo,gallery:testGallery,formats:testFormats};
+  const tests={navigation:testNavigation,music:testMusic,video:testVideo,gallery:testGallery,usb:testUsb,formats:testFormats};
   async function run(which){
     results.innerHTML='';
     const selected=which?[which]:Object.keys(tests);
