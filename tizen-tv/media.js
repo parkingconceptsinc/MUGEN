@@ -155,42 +155,43 @@
   function fsMutation(path, operation, destination, name, directory) {
     return new Promise(function (resolve, reject) {
       var api = fsApi();
-      if (!api || typeof api.resolve !== 'function') {
+      if (!api) {
         reject(new Error('File management requires the Samsung Tizen filesystem API.'));
         return;
       }
-      api.resolve(path, function (entry) {
-        var success = function () { resolve(true); };
-        var failure = function (error) { reject(new Error(error && error.message || 'The USB operation failed. Check drive permissions and free space.')); };
-        try {
-          if (operation === 'copy' || operation === 'move') {
-            var method = operation === 'copy' ? entry.copyTo : entry.moveTo;
-            if (typeof method !== 'function') {
-              reject(new Error('This Tizen filesystem entry does not support ' + operation + '.'));
+      var success = function () { resolve(true); };
+      var failure = function (error) {
+        reject(new Error(error && error.message || 'The USB operation failed. Check drive permissions and free space.'));
+      };
+      try {
+        if (operation === 'copy' || operation === 'move') {
+          var methodName = operation === 'copy'
+            ? (directory ? 'copyDirectory' : 'copyFile')
+            : (directory ? 'moveDirectory' : 'moveFile');
+          var method = api[methodName];
+          if (typeof method !== 'function') {
+            reject(new Error('This Tizen filesystem runtime does not support ' + operation + ' for this item.'));
+            return;
+          }
+          method.call(api, path, joinPath(destination, name), false, success, failure);
+        } else if (operation === 'delete') {
+          if (directory) {
+            if (typeof api.deleteDirectory !== 'function') {
+              reject(new Error('Folder deletion is not available in this Tizen runtime.'));
               return;
             }
-            method.call(entry, destination, name, false, success, failure);
-          } else if (operation === 'delete') {
-            if (directory) {
-              if (typeof api.deleteDirectory !== 'function') {
-                reject(new Error('Folder deletion is not available in this Tizen runtime.'));
-                return;
-              }
-              api.deleteDirectory(path, true, success, failure);
-            } else {
-              if (typeof api.deleteFile !== 'function') {
-                reject(new Error('File deletion is not available in this Tizen runtime.'));
-                return;
-              }
-              api.deleteFile(path, success, failure);
-            }
+            api.deleteDirectory(path, true, success, failure);
           } else {
-            reject(new Error('Unknown file operation.'));
+            if (typeof api.deleteFile !== 'function') {
+              reject(new Error('File deletion is not available in this Tizen runtime.'));
+              return;
+            }
+            api.deleteFile(path, success, failure);
           }
-        } catch (error) { reject(error); }
-      }, function (error) {
-        reject(new Error(error && error.message || 'Could not access this USB item for writing.'));
-      }, 'rw');
+        } else {
+          reject(new Error('Unknown file operation.'));
+        }
+      } catch (error) { reject(error); }
     });
   }
   function manageMedia(path, name, directory) {
