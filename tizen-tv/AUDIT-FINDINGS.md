@@ -10,7 +10,8 @@ Audit target: `feature/tizen-tv`. This is a source-level review plus a desktop v
 4. **Recognized image formats exceed guaranteed browser decoding.** HEIC/AVIF/TIFF are classified as images, but the reader relies on the TV WebView's native `img` decoding. Recognition is not decoding support.
 5. **EPUB, comics, office documents and archives do not have bundled render/extraction engines.** These should remain explicitly marked as recognized-only / engine-required until a compatible local engine is bundled and tested.
 6. **Subtitle extension overlap:** `srt`, `vtt`, `ass`, `ssa`, and `sub` occur in both text and subtitle groups. The registry resolves these to `subtitle`; the text-reader route has now been extended to accept those subtitle types as plain text. Timed subtitle rendering is still not implemented.
-7. **Virtual TV is not hardware emulation.** It can test route rendering, scanning logic against deterministic mock files, state changes and UI behavior. It cannot validate AVPlay's actual decoder, TV filesystem semantics, USB removal, remote focus behavior on Tizen, or certificate/package installation.
+7. **USB mutation originally depended on legacy entry methods.** The Samsung Tizen Filesystem API documents manager-level `copyFile`, `copyDirectory`, `moveFile`, and `moveDirectory`; the mutation adapter now uses those methods and constructs the full destination path. The virtual mock implements the same manager-level contract.
+8. **Virtual TV is not hardware emulation.** It can test route rendering, scanning logic against deterministic mock files, state changes and UI behavior. It cannot validate AVPlay's actual decoder, TV filesystem semantics, USB removal, remote focus behavior on Tizen, or certificate/package installation.
 
 ## Test strategy
 
