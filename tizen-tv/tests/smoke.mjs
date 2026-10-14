@@ -19,6 +19,11 @@ assert.match(html, /app\.js/, "application script must be linked");
 assert.match(html, /media\.js/, "TV media adapter must be linked");
 assert.match(html, /\$WEBAPIS\/webapis\/webapis\.js/, "Samsung WebAPI library must be declared");
 assert.match(html, /aria-label="Main navigation"/, "navigation needs an accessible label");
+assert.match(html, /data-screen="sources" aria-label="Media sources"/, "implemented media sources must be reachable from the TV rail");
+assert.doesNotMatch(html, /class="nav-item" data-screen="(books|comics|photos|queue|equalizer)"/, "unimplemented destinations must not crowd the primary navigation");
+assert.equal((html.match(/class="destination(?:\s|")/g) || []).length, 3, "home should prioritize the three implemented destinations: Music, Videos and Sources");
+assert.match(css, /grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/, "home destinations should use a spacious three-column TV layout");
+assert.match(css, /@media\(max-width:900px\)/, "layout needs a narrower viewport fallback");
 assert.match(html, /role="status"/, "a status region should exist");
 
 for (const screen of ["home", "music", "videos", "books", "comics", "photos", "now-playing", "queue", "equalizer", "sources", "settings"]) {
