@@ -7,7 +7,8 @@ The TV app is a **separate target** inside this repository. It does not replace 
 - PWA-aligned dark theme, orange `#ff7849` accent, large TV-safe type, left rail, home artwork, and explicit empty/error states.
 - Primary navigation is intentionally limited to implemented workflows (Home, Music, Videos, Media Sources, Now Playing, Settings); planned Books, Comics, Photos, Queue and Equalizer destinations do not crowd the main rail.
 - Home uses three high-priority destinations and responsive cards; directional focus scrolls focused controls into view for long media lists.
-- Directional remote navigation, visible focus, Enter/OK, Back/Escape, and guarded Samsung media-key handling.
+- Multi-input navigation: directional TV remote, keyboard arrows/Enter/Escape/Backspace, native Tab focus, mouse hover/click, and pointer-aware focus styling. Native input and seek controls retain their own keyboard behavior.
+- Guarded Samsung media-key handling.
 - Dedicated Music, Videos, and Media Sources screens.
 - A TV media adapter in `media.js` that uses the documented Tizen filesystem APIs when running inside a compatible Samsung TV runtime:
   - lists mounted storage devices;
