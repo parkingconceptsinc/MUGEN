@@ -13,15 +13,11 @@
   var screens = {
     music: {
       title: 'Music', kicker: 'YOUR COLLECTION', subtitle: 'Albums, artists and every track in your library.', icon: '♫',
-      kind: 'empty', label: 'LIBRARY NOT CONNECTED', heading: 'Your music belongs here.',
-      body: 'The TV media index has not been connected yet. Once the Tizen Content API integration is implemented, supported local tracks and artwork can appear here.',
-      button: 'View media sources', target: 'sources', symbol: '♫'
+      kind: 'library', mediaKind: 'audio'
     },
     videos: {
       title: 'Videos', kicker: 'WATCH YOUR WAY', subtitle: 'Your local films, shows and clips.', icon: '▷',
-      kind: 'empty', label: 'MEDIA INDEX PENDING', heading: 'The next frame is yours.',
-      body: 'Video browsing and playback are not connected in this preview. Actual formats and subtitle support must be validated with the target TV media engine.',
-      button: 'Check media sources', target: 'sources', symbol: '▷', variant: 'video'
+      kind: 'library', mediaKind: 'video'
     },
     books: {
       title: 'Books', kicker: 'PICK UP WHERE YOU LEFT OFF', subtitle: 'A calm space for your reading library.', icon: '▤',
@@ -81,7 +77,12 @@
       '</p><h1>' + data.title + '<span class="title-period">.</span></h1><p class="screen-subtitle">' +
       data.subtitle + '</p></div><span class="screen-icon" aria-hidden="true">' + data.icon + '</span></div>';
 
-    if (data.kind === 'empty') {
+    if (data.kind === 'library') {
+      html += '<div class="library-browser"><div class="library-toolbar"><div><p class="list-eyebrow">' +
+        (data.mediaKind === 'audio' ? 'LOCAL AUDIO' : 'LOCAL VIDEO') +
+        '</p><span id="library-status" class="media-status" role="status">Checking media sources…</span></div><div class="library-toolbar-actions"><button class="action-primary" data-media-action="scan-library" data-media-kind="' +
+        data.mediaKind + '">Scan library</button><button class="action-secondary" data-screen="sources">Browse folders</button></div></div><div class="media-list" id="library-list" aria-label="Media files"></div></div>';
+    } else if (data.kind === 'empty') {
       html += '<div class="empty-panel"><div class="empty-art ' + (data.variant ? data.variant + '-art' : '') +
         '" aria-hidden="true"><span>' + data.symbol + '</span><i></i></div><div class="empty-copy"><p class="section-eyebrow">' +
         data.label + '</p><h2>' + data.heading + '</h2><p>' + data.body +
@@ -93,7 +94,7 @@
         '</span><h2>' + data.heading + '</h2><p>' + data.body + '</p><button class="action-secondary" data-screen="' +
         data.target + '">' + data.button + '</button></div>';
     } else if (data.kind === 'sources') {
-      html += '<div class="source-card"><div class="source-icon" aria-hidden="true">▣</div><div class="source-copy"><h2>USB and TV media library</h2><p>Automatic source discovery is not enabled in this build. It requires the supported Tizen Content API, permission validation, and testing with a USB device on the target TV.</p><span class="state-pill"><i></i> Integration pending</span></div></div><div class="source-note"><b>Why can&#39;t I browse files yet?</b><p>Samsung TV apps do not have the same folder picker and decoder access as an Android app or desktop browser. The TV-specific source adapter must be implemented and tested separately.</p></div>';
+      html += '<div class="source-browser"><div class="source-toolbar"><div><p class="list-eyebrow">MEDIA STORAGE</p><span class="media-status" id="source-status" role="status">Checking TV storage…</span></div><div class="source-toolbar-actions"><button class="action-secondary" id="directory-back" data-media-action="back-directory" hidden>‹ Back</button><button class="action-primary" id="refresh-sources" data-media-action="refresh-sources">Refresh devices</button></div></div><div class="source-location" id="source-location">Choose a connected USB drive or standard TV folder.</div><div class="source-grid" id="source-list"></div><div class="media-list source-contents" id="source-contents" hidden></div><p class="source-disclaimer">Files are discovered through the Samsung Tizen filesystem API. Playback depends on the TV media engine and the format of each file.</p></div>';
     } else if (data.kind === 'settings') {
       html += '<div class="settings-list"><div class="setting-row"><span class="setting-symbol">⌘</span><div><b>Remote navigation</b><small>Directional focus, OK and Back</small></div><span class="setting-status">Preview active</span></div><div class="setting-row"><span class="setting-symbol">◈</span><div><b>Appearance</b><small>Mortimer dark theme</small></div><span class="setting-status">Active</span></div><div class="setting-row"><span class="setting-symbol">♫</span><div><b>Audio and subtitles</b><small>Requires media engine integration</small></div><span class="setting-status pending">Planned</span></div><div class="setting-row"><span class="setting-symbol">▣</span><div><b>Library scanning</b><small>Requires TV content index integration</small></div><span class="setting-status pending">Planned</span></div></div>';
     }
@@ -172,7 +173,19 @@
     footerContext.textContent = key === 'home' ? 'A personal media space' : (screens[key].subtitle || screens[key].title);
     setFocus(null);
     focusFirst();
+    if (window.MortimerTVMedia && typeof window.MortimerTVMedia.onScreen === 'function') {
+      window.MortimerTVMedia.onScreen(key);
+    }
   }
+
+  window.addEventListener('mortimer:focus-refresh', function (event) {
+    if (event && event.detail && event.detail.offsetWidth > 0 && !event.detail.closest('[hidden]')) {
+      setFocus(event.detail);
+    } else {
+      focusedElement = null;
+      focusFirst();
+    }
+  });
 
   function goBack() {
     if (currentScreen !== 'home') {
