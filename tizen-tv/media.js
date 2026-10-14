@@ -131,6 +131,108 @@
     var api = fsApi();
     try { return !!(api && api.isDirectory && api.isDirectory(path)); } catch (_) { return false; }
   }
+  function isRemovablePath(path, allowRoot) {
+    var candidate = rootPath(path);
+    return state.storages.some(function (storage) {
+      if (!storage || storage.state !== 'MOUNTED' ||
+          !(storage.type === 'EXTERNAL' || /^removable_/i.test(storageLabel(storage)))) return false;
+      var root = rootPath(storageLabel(storage));
+      return !!root && (candidate === root ? !!allowRoot : candidate.indexOf(root + '/') === 0);
+    });
+  }
+  function makeManageButton(path, name, directory) {
+    var button = element('button', 'media-manage-button', 'Manage');
+    button.type = 'button';
+    button.setAttribute('data-manage-path', path);
+    button.setAttribute('data-manage-name', name);
+    button.setAttribute('data-manage-directory', directory ? 'true' : 'false');
+    button.setAttribute('aria-label', 'Manage ' + name);
+    return button;
+  }
+  function fsMutation(path, operation, destination, name, directory) {
+    return new Promise(function (resolve, reject) {
+      var api = fsApi();
+      if (!api || typeof api.resolve !== 'function') {
+        reject(new Error('File management requires the Samsung Tizen filesystem API.'));
+        return;
+      }
+      api.resolve(path, function (entry) {
+        var success = function () { resolve(true); };
+        var failure = function (error) { reject(new Error(error && error.message || 'The USB operation failed. Check drive permissions and free space.')); };
+        try {
+          if (operation === 'copy' || operation === 'move') {
+            var method = operation === 'copy' ? entry.copyTo : entry.moveTo;
+            if (typeof method !== 'function') {
+              reject(new Error('This Tizen filesystem entry does not support ' + operation + '.'));
+              return;
+            }
+            method.call(entry, destination, name, false, success, failure);
+          } else if (operation === 'delete') {
+            if (directory) {
+              if (typeof api.deleteDirectory !== 'function') {
+                reject(new Error('Folder deletion is not available in this Tizen runtime.'));
+                return;
+              }
+              api.deleteDirectory(path, true, success, failure);
+            } else {
+              if (typeof api.deleteFile !== 'function') {
+                reject(new Error('File deletion is not available in this Tizen runtime.'));
+                return;
+              }
+              api.deleteFile(path, success, failure);
+            }
+          } else {
+            reject(new Error('Unknown file operation.'));
+          }
+        } catch (error) { reject(error); }
+      }, function (error) {
+        reject(new Error(error && error.message || 'Could not access this USB item for writing.'));
+      }, 'rw');
+    });
+  }
+  function manageMedia(path, name, directory) {
+    if (!isRemovablePath(path, false)) {
+      toast('For safety, file changes are enabled only for items inside a mounted removable USB drive.');
+      return;
+    }
+    var choice = window.prompt('Manage USB item:\n1 = Copy\n2 = Move\n3 = Delete\n\nEnter 1, 2 or 3.', '1');
+    if (choice == null) return;
+    choice = String(choice).trim();
+    if (choice !== '1' && choice !== '2' && choice !== '3') {
+      toast('No operation selected. Enter 1, 2 or 3.');
+      return;
+    }
+    var operation = choice === '1' ? 'copy' : (choice === '2' ? 'move' : 'delete');
+    var destination = '';
+    if (operation === 'copy' || operation === 'move') {
+      destination = window.prompt('Enter the destination folder path on a connected USB drive. The item name will be preserved.', state.currentPath || '');
+      if (destination == null) return;
+      destination = rootPath(destination.trim());
+      if (!destination || !isRemovablePath(destination, true) || !isDirectory(destination)) {
+        toast('Destination must be an existing folder on a mounted USB drive.');
+        return;
+      }
+      if (directory && (destination === path || destination.indexOf(path + '/') === 0)) {
+        toast('A folder cannot be copied or moved into itself or one of its subfolders.');
+        return;
+      }
+    } else {
+      var confirmed = window.confirm('Permanently delete ' + (directory ? 'folder and all its contents' : 'file') + '?\n\n' + name);
+      if (!confirmed) return;
+    }
+    toast((operation === 'delete' ? 'Deleting ' : (operation === 'copy' ? 'Copying ' : 'Moving ')) + name + '…');
+    fsMutation(path, operation, destination, name, directory).then(function () {
+      toast(operation.charAt(0).toUpperCase() + operation.slice(1) + ' completed: ' + name);
+      if (state.currentPath) renderSourceFiles(state.currentPath, state.sourceTitle);
+      if (state.screen === 'music') scanLibrary('audio');
+      else if (state.screen === 'videos') scanLibrary('video');
+      else if (state.screen === 'library') scanLibrary('all');
+      refreshSources();
+    }).catch(function (error) {
+      toast(error.message || 'USB operation failed.');
+      showSourceStatus(error.message || 'USB operation failed.', true);
+    });
+  }
 
   function showSourceStatus(message, isError) {
     var status = byId('source-status');
@@ -260,6 +362,7 @@
         list.appendChild(element('div', 'media-empty', 'No recognized media or document files were found in this folder.'));
       }
       folders.forEach(function (folder) {
+        var row = element('div', 'media-row-container');
         var button = element('button', 'media-row folder-row');
         button.type = 'button';
         button.setAttribute('data-open-path', folder.path);
@@ -270,7 +373,9 @@
         copy.appendChild(element('small', '', 'Folder'));
         button.appendChild(copy);
         button.appendChild(element('span', 'media-row-arrow', '›'));
-        list.appendChild(button);
+        row.appendChild(button);
+        row.appendChild(makeManageButton(folder.path, folder.name, true));
+        list.appendChild(row);
       });
       media.forEach(function (item) {
         appendMediaRow(list, item, false);
@@ -319,6 +424,7 @@
   function appendMediaRow(container, item, isScanResult) {
     var id = String(state.nextId++);
     state.itemMap[id] = item;
+    var row = element('div', 'media-row-container');
     var button = element('button', 'media-row');
     button.type = 'button';
     button.setAttribute('data-media-file-id', id);
@@ -331,7 +437,9 @@
     copy.appendChild(element('small', '', label + ' · ' + (isScanResult ? item.location || item.path : item.path)));
     button.appendChild(copy);
     button.appendChild(element('span', 'media-row-arrow', formats && formats.isMedia(item.kind) ? '▶' : '›'));
-    container.appendChild(button);
+    row.appendChild(button);
+    row.appendChild(makeManageButton(item.path, item.name, false));
+    container.appendChild(row);
   }
 
   function renderLibrary(items, kind, message) {
@@ -736,7 +844,8 @@
   document.addEventListener('click', function (event) {
     var target = event.target;
     while (target && target !== document && !target.getAttribute('data-media-action') &&
-           !target.getAttribute('data-open-path') && !target.getAttribute('data-media-file-id')) {
+           !target.getAttribute('data-open-path') && !target.getAttribute('data-media-file-id') &&
+           !target.getAttribute('data-manage-path')) {
       target = target.parentNode;
     }
     if (!target || target === document) return;
@@ -756,6 +865,14 @@
     if (action === 'player-stop') { closePlayer(); return; }
     if (action === 'player-backward') { seekBy(-10); return; }
     if (action === 'player-forward') { seekBy(30); return; }
+    if (target.hasAttribute('data-manage-path')) {
+      manageMedia(
+        target.getAttribute('data-manage-path'),
+        target.getAttribute('data-manage-name') || 'selected item',
+        target.getAttribute('data-manage-directory') === 'true'
+      );
+      return;
+    }
     if (target.hasAttribute('data-open-path')) {
       browseTo(target.getAttribute('data-open-path'), target.getAttribute('data-open-title'));
       return;
