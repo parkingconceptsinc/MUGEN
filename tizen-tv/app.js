@@ -216,9 +216,39 @@
     if (key) showScreen(key);
   });
 
+  /* Mouse and keyboard are first-class inputs, alongside the TV remote. */
+  document.addEventListener('pointermove', function (event) {
+    if (!event || event.pointerType === 'touch') return;
+    document.body.classList.add('pointer-mode');
+    var target = event.target;
+    while (target && target !== document && !(target.matches && target.matches('button:not([disabled])'))) {
+      target = target.parentNode;
+    }
+    var oldHover = document.querySelectorAll('button.mouse-hover');
+    for (var i = 0; i < oldHover.length; i++) oldHover[i].classList.remove('mouse-hover');
+    if (target && target !== document) target.classList.add('mouse-hover');
+  }, { passive: true });
+
+  document.addEventListener('pointerdown', function (event) {
+    if (!event || event.pointerType === 'touch') return;
+    document.body.classList.add('pointer-mode');
+    var target = event.target;
+    while (target && target !== document && !(target.matches && target.matches('button:not([disabled])'))) {
+      target = target.parentNode;
+    }
+    if (target && target !== document) setFocus(target);
+  }, true);
+
   document.addEventListener('keydown', function (event) {
+    document.body.classList.remove('pointer-mode');
     var key = event.key;
     var code = event.keyCode || event.which;
+    var target = event.target;
+    var tag = target && target.tagName ? target.tagName.toLowerCase() : '';
+    var editingControl = tag === 'input' || tag === 'textarea' || tag === 'select' ||
+      (target && target.isContentEditable);
+    /* Preserve native typing, range seeking, and select behavior. */
+    if (editingControl && key !== 'Escape' && key !== 'Backspace' && code !== 10009) return;
     if (key === 'Escape' || key === 'Backspace' || code === 10009) {
       event.preventDefault();
       goBack();
