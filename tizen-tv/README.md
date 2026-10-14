@@ -48,6 +48,12 @@ GitHub Actions workflow `.github/workflows/tizen-tv-checks.yml` checks JavaScrip
 - [Handling USB Storages](https://developer.samsung.com/smarttv/develop/guides/data-handling/handling-usb-storages.html)
 - [Playback Using AVPlay](https://developer.samsung.com/smarttv/develop/guides/multimedia/media-playback/using-avplay.html)
 
+## Package artifact
+
+The GitHub Actions workflow `.github/workflows/mugen-tizen-package.yml` validates the TV source and publishes a downloadable artifact named **MUGEN-Tizen-TV-source** (ZIP plus SHA-256 checksum) for 30 days. Run it from **Actions → MUGEN Tizen TV package → Run workflow**, or push a change to `feature/tizen-tv`.
+
+**This ZIP is a source bundle, not an installable TV application.** A Samsung Tizen install package must be built by a compatible Tizen Studio/TV SDK and signed with an authorized Samsung certificate profile to produce a valid `.wgt`. The CI workflow does not create or sign a WGT, and it does not contain certificates or private keys.
+
 ## Build and install
 
 1. Confirm the complete model code and firmware through **Settings → Support → About This TV**.
