@@ -100,7 +100,9 @@
     click('[data-screen="library"]');await wait(100);
     const list=doc().getElementById('library-list');
     check(list && list.textContent.includes('Demo Book.epub'),'All-formats scan did not expose sample EPUB');
-    list.querySelector('[data-media-file-id]').click();await wait(40);
+    const epubRow=Array.from(list.querySelectorAll('[data-media-file-id]')).find(row=>row.textContent.includes('Demo Book.epub'));
+    check(epubRow,'All-formats scan did not render the EPUB row');
+    epubRow.click();await wait(40);
     check(!doc().getElementById('reader-overlay').hidden,'Recognized non-native document should show an honest status panel');
     check(doc().getElementById('reader-content').textContent.includes('Reader engine required'),'EPUB screen pretended to render a book');
     click('[data-media-action="reader-close"]');
