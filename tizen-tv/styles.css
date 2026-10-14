@@ -209,7 +209,6 @@ kbd{font:inherit;font-size:9px;padding:3px 5px;border:1px solid #34343d;border-r
 
 
 /* MUGEN TV refinement: reduce navigation noise and prioritize the real workflows. */
-.destination-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
 .destination{min-height:104px;padding:18px 20px;gap:16px}
 .destination-copy b{font-size:17px}
 .destination-copy small{font-size:12px}
@@ -276,7 +275,6 @@ kbd{font:inherit;font-size:9px;padding:3px 5px;border:1px solid #34343d;border-r
 
 
 /* Unified format library and document reader */
-.destination-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
 .destination-library{background:linear-gradient(145deg,#211b2c,#111519);border-color:#44334f}
 .destination-library .destination-symbol{background:#31243c;color:#d8b5f2}
 .reader-overlay{position:fixed;inset:0;z-index:120;background:#0a0b0f;color:#f4f4f6;padding:26px 4vw;display:flex;flex-direction:column;gap:14px}
@@ -293,7 +291,6 @@ kbd{font:inherit;font-size:9px;padding:3px 5px;border:1px solid #34343d;border-r
 .reader-unavailable{max-width:760px;margin:auto;padding:36px}
 .reader-unavailable h3{font-size:26px}
 .reader-unavailable p{font-size:17px;line-height:1.6;color:#b9bbc4}
-@media(max-width:1250px){.destination-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-height:720px){.reader-overlay{padding:14px 3vw;gap:8px}.reader-topline{padding-bottom:8px}.reader-frame{min-height:280px}}
 
 .media-row-container{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:stretch;margin-bottom:7px}
