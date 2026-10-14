@@ -74,7 +74,7 @@
     return button;
   }
   function rootPath(path) {
-    return safeText(path).replace(/\\+$/, '').replace(/\/$/, '');
+    return safeText(path).replace(/\/+$/, '');
   }
   function joinPath(parent, name) {
     var base = rootPath(parent);
@@ -366,6 +366,7 @@
       var queue = roots.slice();
       var visited = {};
       var found = [];
+      var foundPaths = {};
       var scanned = 0;
       var maxDirectories = 240;
       var maxResults = 1200;
@@ -388,7 +389,8 @@
             }
           } else {
             var itemKind = classify(name);
-            if (itemKind === kind && found.length < maxResults) {
+            if (itemKind === kind && !foundPaths[path] && found.length < maxResults) {
+              foundPaths[path] = true;
               found.push({ name: name, path: path, uri: fileUri(path), kind: itemKind, location: entry.label });
             }
           }
@@ -414,26 +416,7 @@
   function ensureWebApis() {
     if (window.webapis && window.webapis.avplay) return Promise.resolve(window.webapis);
     if (!window.tizen) return Promise.reject(new Error('AVPlay is available only inside a Samsung Tizen TV app or compatible emulator.'));
-    return new Promise(function (resolve, reject) {
-      var existing = document.getElementById('samsung-webapis-script');
-      if (existing) {
-        existing.addEventListener('load', function () {
-          if (window.webapis && window.webapis.avplay) resolve(window.webapis);
-          else reject(new Error('Samsung WebAPI loaded, but AVPlay was not exposed.'));
-        });
-        existing.addEventListener('error', function () { reject(new Error('Could not load the Samsung TV media engine.')); });
-        return;
-      }
-      var script = document.createElement('script');
-      script.id = 'samsung-webapis-script';
-      script.src = '$WEBAPIS/webapis/webapis.js';
-      script.onload = function () {
-        if (window.webapis && window.webapis.avplay) resolve(window.webapis);
-        else reject(new Error('Samsung AVPlay is not available on this runtime.'));
-      };
-      script.onerror = function () { reject(new Error('Samsung WebAPI library did not load.')); };
-      document.head.appendChild(script);
-    });
+    return Promise.reject(new Error('Samsung WebAPI did not initialize. Check the TV WebAPI library and firmware compatibility.'));
   }
 
   function playerStatus(message, isError) {
