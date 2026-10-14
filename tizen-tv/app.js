@@ -38,9 +38,9 @@
       button: 'Back to Home', target: 'home', symbol: '▣', variant: 'photo'
     },
     'now-playing': {
-      title: 'Now Playing', kicker: 'THE LISTENING SPACE', subtitle: 'Playback controls will live here when media is loaded.', icon: '◉',
+      title: 'Now Playing', kicker: 'YOUR CURRENT SESSION', subtitle: 'Playback status and controls for the active track.', icon: '◉',
       kind: 'empty', label: 'NOTHING PLAYING', heading: 'Ready when you are.',
-      body: 'No track is loaded. The playback engine and media source adapter are still to be implemented for Tizen.',
+      body: 'Open a track from Music or Videos to start playback. Supported formats depend on the TV media engine.',
       button: 'Set up media sources', target: 'sources', symbol: '◉'
     },
     queue: {
