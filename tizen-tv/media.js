@@ -227,7 +227,7 @@
       if (state.screen === 'music') scanLibrary('audio');
       else if (state.screen === 'videos') scanLibrary('video');
       else if (state.screen === 'library') scanLibrary('all');
-      refreshSources();
+      if (!state.currentPath) refreshSources();
     }).catch(function (error) {
       toast(error.message || 'USB operation failed.');
       showSourceStatus(error.message || 'USB operation failed.', true);
