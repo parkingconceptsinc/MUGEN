@@ -124,8 +124,8 @@ fun EqualizerSection(modifier: Modifier) {
                 "Balance",
                 when {
                     abs(s.balance) < 0.01f -> "Center"
-                    s.balance < 0 -> "I ${(-s.balance * 100).roundToInt()}%"
-                    else -> "D ${(s.balance * 100).roundToInt()}%"
+                    s.balance < 0 -> "L ${(-s.balance * 100).roundToInt()}%"
+                    else -> "R ${(s.balance * 100).roundToInt()}%"
                 },
                 s.balance, -1f..1f, onReset = { s = s.copy(balance = 0f) },
             ) { s = s.copy(balance = (it * 20).roundToInt() / 20f) }
