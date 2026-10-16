@@ -902,10 +902,10 @@ private fun SettingsSection(library: List<LibraryItem>, themePref: String, onThe
     Column(modifier.verticalScroll(rememberScrollState())) {
         SettingsCard("Appearance") {
             Text("Theme", color = c.text, fontWeight = FontWeight.SemiBold)
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 8.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 8.dp)) {
                 listOf("system" to "System", "light" to "Light", "dark" to "Dark").forEach { (id, label) -> Chip(label, themePref == id) { onTheme(id) } }
             }
-            Text("The sidebar keeps its artwork and typography in both themes, matching the web app.", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+            Text("Choose System to follow your device, or lock MUGEN to Light or Dark mode.", color = c.muted, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 8.dp))
         }
         SettingsCard("Playback") {
             var speed by remember { mutableFloatStateOf(player.playbackParameters.speed) }
@@ -923,7 +923,7 @@ private fun SettingsSection(library: List<LibraryItem>, themePref: String, onThe
                 "${library.count { it.kind == "audio" }} tracks · ${library.count { it.kind == "videos" }} videos · ${library.count { it.kind == "books" }} books · ${library.count { it.kind == "comics" }} comics",
                 color = c.text, fontSize = 14.sp,
             )
-            Text("Files stay where they are; MUGEN remembers their locations and your reading progress.", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
+            Text("Your media stays in its original location. MUGEN saves library references and reading progress, including for supported removable storage.", color = c.muted, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 5.dp, bottom = 10.dp))
             MenuItem(if (coversCleared) "✓ Artwork cache cleared" else "Regenerate artwork cache") { Covers.clear(context); coversCleared = true }
             MenuItem("Clear reading progress", danger = true) { confirm = true }
         }
@@ -948,7 +948,7 @@ private fun SettingsSection(library: List<LibraryItem>, themePref: String, onThe
 private fun SettingsCard(title: String, content: @Composable ColumnScope.() -> Unit) {
     val c = LocalMortimerColors.current
     SectionLabel(title)
-    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp).background(c.panel, RoundedCornerShape(16.dp)).padding(14.dp), content = content)
+    Column(Modifier.fillMaxWidth().padding(bottom = 12.dp).clip(RoundedCornerShape(18.dp)).background(c.panel).padding(horizontal = 16.dp, vertical = 15.dp), verticalArrangement = Arrangement.spacedBy(2.dp), content = content)
 }
 
 @Composable
