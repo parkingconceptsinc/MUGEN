@@ -502,6 +502,34 @@ private fun HomeSection(library: List<LibraryItem>, modifier: Modifier, onGo: (S
     val reading = library.filter { (it.kind == "books" || it.kind == "comics") && it.started }.sortedByDescending { it.openedAt }.take(10)
     fun count(kind: String) = library.count { it.kind == kind }
     Column(modifier.verticalScroll(rememberScrollState())) {
+        // Compact cinematic hero: visual hierarchy first, library shortcuts second.
+        Box(
+            Modifier.fillMaxWidth().padding(bottom = 14.dp).clip(RoundedCornerShape(24.dp))
+                .background(Brush.linearGradient(listOf(Color(0xFF28202A), Color(0xFF121218), Color(0xFF202029))))
+        ) {
+            Box(Modifier.align(Alignment.CenterEnd).size(150.dp).background(
+                Brush.radialGradient(listOf(c.accent.copy(alpha = 0.28f), Color.Transparent))
+            ))
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 19.dp)) {
+                Text("TU MUNDO. TU RITMO.", color = c.accent, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.1.sp)
+                Spacer(Modifier.height(5.dp))
+                Text("Todo lo que te mueve.", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 27.sp)
+                Text("Música, historias y recuerdos en un solo lugar.", color = Color(0xFFB9B5C0), fontSize = 12.sp, maxLines = 2)
+                Spacer(Modifier.height(15.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf("${count("audio")} pistas" to "♫", "${count("books") + count("comics")} lecturas" to "▤", "${count("videos")} vídeos" to "▶").forEach { (label, icon) ->
+                        Row(
+                            Modifier.clip(RoundedCornerShape(50)).background(Color(0x22FFFFFF)).padding(horizontal = 10.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(icon, color = c.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Spacer(Modifier.width(5.dp))
+                            Text(label, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+        }
         if (reading.isNotEmpty()) {
             SectionLabel("Seguir leyendo")
             LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(bottom = 10.dp)) {
@@ -746,14 +774,25 @@ private fun NowPlayingSection(player: Player, current: LibraryItem?, title: Stri
     LazyColumn(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         item {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                if (current != null) {
-                    CoverImage(current, Modifier.fillMaxWidth(0.72f).aspectRatio(1f).clip(RoundedCornerShape(22.dp)))
-                } else {
-                    Box(Modifier.fillMaxWidth(0.72f).aspectRatio(1f).clip(RoundedCornerShape(22.dp)).background(c.panel2), contentAlignment = Alignment.Center) {
-                        Text("♫", color = c.accent, fontSize = 64.sp)
+                Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
+                    Box(
+                        Modifier.fillMaxWidth(0.82f).aspectRatio(0.92f).clip(RoundedCornerShape(34.dp))
+                            .background(Brush.radialGradient(listOf(c.accent.copy(alpha = if (c.dark) 0.24f else 0.12f), Color.Transparent)))
+                    )
+                    if (current != null) {
+                        CoverImage(current, Modifier.fillMaxWidth(0.70f).aspectRatio(1f).clip(RoundedCornerShape(24.dp)))
+                    } else {
+                        Box(Modifier.fillMaxWidth(0.70f).aspectRatio(1f).clip(RoundedCornerShape(24.dp))
+                            .background(Brush.linearGradient(listOf(c.panel2, c.panel))), contentAlignment = Alignment.Center) {
+                            Text("♫", color = c.accent, fontSize = 64.sp, fontWeight = FontWeight.Black)
+                        }
                     }
                 }
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(13.dp))
+                Box(Modifier.clip(RoundedCornerShape(50)).background(c.accent.copy(alpha = if (c.dark) 0.14f else 0.10f)).padding(horizontal = 11.dp, vertical = 6.dp)) {
+                    Text("REPRODUCIENDO AHORA", color = c.accent, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp)
+                }
+                Spacer(Modifier.height(10.dp))
                 Text(title ?: current?.title ?: "", color = c.text, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Text(listOfNotNull(current?.artist?.ifBlank { null }, current?.album?.ifBlank { null }).joinToString(" · "), color = c.muted, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 error?.let { Text(it, color = Color(0xFFFF7A66), fontSize = 12.sp, modifier = Modifier.padding(top = 6.dp)) }
@@ -768,18 +807,21 @@ private fun NowPlayingSection(player: Player, current: LibraryItem?, title: Stri
                     Text(formatTime(seeking?.let { (it * duration).toLong() } ?: position), color = c.muted, fontSize = 12.sp, modifier = Modifier.weight(1f))
                     Text(formatTime(duration), color = c.muted, fontSize = 12.sp)
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(vertical = 10.dp)) {
+                // Keep the primary transport controls on one balanced row; secondary seeks live below.
+                Row(
+                    Modifier.fillMaxWidth().padding(top = 7.dp, bottom = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                ) {
                     key(queueVersion) {
-                        RoundButton("⤮", primary = player.shuffleModeEnabled) { player.shuffleModeEnabled = !player.shuffleModeEnabled }
+                        RoundButton("⤮", primary = player.shuffleModeEnabled, size = 40) { player.shuffleModeEnabled = !player.shuffleModeEnabled }
                     }
-                    RoundButton("⏮", primary = false) { player.seekToPrevious() }
-                    RoundButton("↺", primary = false) { player.seekTo((player.currentPosition - 10_000).coerceAtLeast(0)) }
-                    RoundButton(if (isPlaying) "Ⅱ" else "▶", primary = true, size = 64) { if (player.isPlaying) player.pause() else player.play() }
-                    RoundButton("↻", primary = false) { player.seekTo(player.currentPosition + 10_000) }
-                    RoundButton("⏭", primary = false) { if (player.hasNextMediaItem()) player.seekToNextMediaItem() }
+                    RoundButton("⏮", primary = false, size = 44) { player.seekToPrevious() }
+                    RoundButton(if (isPlaying) "Ⅱ" else "▶", primary = true, size = 62) { if (player.isPlaying) player.pause() else player.play() }
+                    RoundButton("⏭", primary = false, size = 44) { if (player.hasNextMediaItem()) player.seekToNextMediaItem() }
                     key(queueVersion) {
                         val mode = player.repeatMode
-                        RoundButton(if (mode == Player.REPEAT_MODE_ONE) "①" else "⟳", primary = mode != Player.REPEAT_MODE_OFF) {
+                        RoundButton(if (mode == Player.REPEAT_MODE_ONE) "①" else "⟳", primary = mode != Player.REPEAT_MODE_OFF, size = 40) {
                             player.repeatMode = when (mode) {
                                 Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
                                 Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
@@ -787,6 +829,15 @@ private fun NowPlayingSection(player: Player, current: LibraryItem?, title: Stri
                             }
                         }
                     }
+                }
+                Row(
+                    Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RoundButton("↺ 10", primary = false, size = 40) { player.seekTo((player.currentPosition - 10_000).coerceAtLeast(0)) }
+                    Spacer(Modifier.width(24.dp))
+                    RoundButton("10 ↻", primary = false, size = 40) { player.seekTo((player.currentPosition + 10_000).coerceAtMost(if (player.duration > 0) player.duration else Long.MAX_VALUE)) }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
                     listOf(0.75f, 1f, 1.25f, 1.5f, 2f).forEach { s ->
