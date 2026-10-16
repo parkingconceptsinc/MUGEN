@@ -3,6 +3,7 @@ package com.parkingconcepts.mortimer
 import android.content.Context
 import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
+import android.media.audiofx.Virtualizer
 import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
@@ -25,33 +26,37 @@ object AudioEffects {
     const val RANGE = 12f
 
     val PRESETS: LinkedHashMap<String, List<Float>> = linkedMapOf(
-        "Plano" to listOf(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f),
-        "Más graves" to listOf(7f, 6f, 5f, 3f, 1f, 0f, 0f, 0f, 0f, 0f),
-        "Menos graves" to listOf(-6f, -5f, -4f, -2f, -1f, 0f, 0f, 0f, 0f, 0f),
-        "Más agudos" to listOf(0f, 0f, 0f, 0f, 0f, 1f, 3f, 5f, 6f, 7f),
+        "Flat" to listOf(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f),
+        "Bass Boost" to listOf(7f, 6f, 5f, 3f, 1f, 0f, 0f, 0f, 0f, 0f),
+        "Bass Cut" to listOf(-6f, -5f, -4f, -2f, -1f, 0f, 0f, 0f, 0f, 0f),
+        "Treble Boost" to listOf(0f, 0f, 0f, 0f, 0f, 1f, 3f, 5f, 6f, 7f),
         "Rock" to listOf(5f, 4f, 3f, 1f, -1f, -1f, 1f, 3f, 4f, 5f),
         "Pop" to listOf(-1f, 1f, 3f, 4f, 3f, 1f, 0f, -1f, -1f, -1f),
         "Jazz" to listOf(3f, 2f, 1f, 2f, -1f, -1f, 0f, 1f, 2f, 3f),
-        "Clásica" to listOf(4f, 3f, 2f, 1f, -1f, -1f, 0f, 2f, 3f, 4f),
+        "Classical" to listOf(4f, 3f, 2f, 1f, -1f, -1f, 0f, 2f, 3f, 4f),
         "Hip-Hop" to listOf(6f, 5f, 2f, 3f, -1f, -1f, 1f, 0f, 2f, 3f),
-        "Electrónica" to listOf(5f, 4f, 1f, 0f, -2f, 2f, 1f, 1f, 4f, 5f),
+        "Electronic" to listOf(5f, 4f, 1f, 0f, -2f, 2f, 1f, 1f, 4f, 5f),
         "Dance" to listOf(4f, 6f, 4f, 0f, 0f, -2f, -2f, -2f, 0f, 0f),
-        "Latina" to listOf(3f, 2f, 0f, 0f, -1f, -1f, -1f, 0f, 3f, 4f),
-        "Reguetón" to listOf(6f, 5f, 3f, 0f, -1f, 0f, 1f, 2f, 3f, 3f),
-        "Voces" to listOf(-2f, -3f, -2f, 1f, 4f, 4f, 3f, 1f, 0f, -2f),
-        "Acústica" to listOf(4f, 4f, 3f, 1f, 2f, 1f, 3f, 3f, 3f, 2f),
-        "Sonoridad" to listOf(6f, 4f, 0f, 0f, -2f, 0f, -1f, -5f, 5f, 1f),
+        "Latin" to listOf(3f, 2f, 0f, 0f, -1f, -1f, -1f, 0f, 3f, 4f),
+        "Reggaeton" to listOf(6f, 5f, 3f, 0f, -1f, 0f, 1f, 2f, 3f, 3f),
+        "Vocals" to listOf(-2f, -3f, -2f, 1f, 4f, 4f, 3f, 1f, 0f, -2f),
+        "Acoustic" to listOf(4f, 4f, 3f, 1f, 2f, 1f, 3f, 3f, 3f, 2f),
+        "Loudness" to listOf(6f, 4f, 0f, 0f, -2f, 0f, -1f, -5f, 5f, 1f),
     )
 
     data class Settings(
         val enabled: Boolean = false,
-        val preset: String = "Plano",
+        val preset: String = "Flat",
         val bands: List<Float> = List(BANDS.size) { 0f },
         val preamp: Float = 0f,
         /** -1 (left) … 1 (right). */
         val balance: Float = 0f,
         /** 1 … 2 */
         val boost: Float = 1f,
+        /** Device-backed stereo virtualization; this is not Dolby-certified processing. */
+        val surroundEnabled: Boolean = false,
+        /** Virtualizer strength normalized to 0..1 for persistence and UI. */
+        val surroundStrength: Float = 0.5f,
     )
 
     private const val PREFS = "mortimer_prefs"
@@ -63,11 +68,26 @@ object AudioEffects {
             val arr = o.optJSONArray("bands") ?: JSONArray()
             Settings(
                 enabled = o.optBoolean("enabled", false),
-                preset = o.optString("preset", "Plano"),
+                preset = when (o.optString("preset", "Flat")) {
+                    "Plano" -> "Flat"
+                    "Más graves" -> "Bass Boost"
+                    "Menos graves" -> "Bass Cut"
+                    "Más agudos" -> "Treble Boost"
+                    "Clásica" -> "Classical"
+                    "Electrónica" -> "Electronic"
+                    "Latina" -> "Latin"
+                    "Reguetón" -> "Reggaeton"
+                    "Voces" -> "Vocals"
+                    "Acústica" -> "Acoustic"
+                    "Sonoridad" -> "Loudness"
+                    else -> o.optString("preset", "Flat")
+                },
                 bands = List(BANDS.size) { i -> arr.optDouble(i, 0.0).toFloat().coerceIn(-RANGE, RANGE) },
                 preamp = o.optDouble("preamp", 0.0).toFloat().coerceIn(-RANGE, RANGE),
                 balance = o.optDouble("balance", 0.0).toFloat().coerceIn(-1f, 1f),
                 boost = o.optDouble("boost", 1.0).toFloat().coerceIn(1f, 2f),
+                surroundEnabled = o.optBoolean("surroundEnabled", false),
+                surroundStrength = o.optDouble("surroundStrength", 0.5).toFloat().coerceIn(0f, 1f),
             )
         }.getOrDefault(Settings())
     }
@@ -77,6 +97,7 @@ object AudioEffects {
             .put("enabled", s.enabled).put("preset", s.preset)
             .put("bands", JSONArray(s.bands.map { it.toDouble() }))
             .put("preamp", s.preamp.toDouble()).put("balance", s.balance.toDouble()).put("boost", s.boost.toDouble())
+            .put("surroundEnabled", s.surroundEnabled).put("surroundStrength", s.surroundStrength.toDouble())
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("audio_effects", o.toString()).apply()
     }
 
@@ -99,6 +120,7 @@ object AudioEffects {
 
     private var equalizer: Equalizer? = null
     private var loudness: LoudnessEnhancer? = null
+    private var virtualizer: Virtualizer? = null
     private var current = Settings()
 
     /** True once the player's audio session has an equalizer this device supports. */
@@ -109,6 +131,7 @@ object AudioEffects {
         release()
         equalizer = runCatching { Equalizer(0, sessionId) }.getOrNull()
         loudness = runCatching { LoudnessEnhancer(sessionId) }.getOrNull()
+        virtualizer = runCatching { Virtualizer(0, sessionId) }.getOrNull()
         apply(load(context))
     }
 
@@ -116,8 +139,10 @@ object AudioEffects {
     fun release() {
         runCatching { equalizer?.release() }
         runCatching { loudness?.release() }
+        runCatching { virtualizer?.release() }
         equalizer = null
         loudness = null
+        virtualizer = null
     }
 
     /** Gain of the 10-band curve at [hz], interpolated on a log-frequency scale. */
@@ -159,19 +184,42 @@ object AudioEffects {
                 le.enabled = gainDb > 0.01f
             }
         }
+        virtualizer?.let { v ->
+            runCatching {
+                if (v.strengthSupported) {
+                    v.setStrength((s.surroundStrength.coerceIn(0f, 1f) * 1000).toInt().toShort())
+                    v.enabled = s.surroundEnabled
+                } else {
+                    v.enabled = false
+                }
+            }
+        }
     }
 
     fun currentSettings(): Settings = current
 }
 
-/** Scales the left or right channel of 16-bit stereo audio; other formats pass through untouched. */
+/**
+ * Applies left/right balance to stereo PCM. Media3 may negotiate float output on
+ * capable devices, so handle both PCM_16BIT and PCM_FLOAT instead of silently
+ * disabling balance on the float path.
+ */
 @UnstableApi
 class BalanceAudioProcessor : BaseAudioProcessor() {
     @Volatile
     var balance: Float = 0f
 
+    private var encoding: Int = C.ENCODING_INVALID
+
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
-        if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT || inputAudioFormat.channelCount != 2) return AudioProcessor.AudioFormat.NOT_SET
+        if (inputAudioFormat.channelCount != 2 ||
+            (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT &&
+                inputAudioFormat.encoding != C.ENCODING_PCM_FLOAT)
+        ) {
+            encoding = C.ENCODING_INVALID
+            return AudioProcessor.AudioFormat.NOT_SET
+        }
+        encoding = inputAudioFormat.encoding
         return inputAudioFormat
     }
 
@@ -179,15 +227,22 @@ class BalanceAudioProcessor : BaseAudioProcessor() {
         val remaining = inputBuffer.remaining()
         if (remaining == 0) return
         val out = replaceOutputBuffer(remaining)
-        val b = balance
-        if (abs(b) < 0.001f) {
+        val b = balance.coerceIn(-1f, 1f)
+        if (abs(b) < 0.001f || encoding == C.ENCODING_INVALID) {
             out.put(inputBuffer)
         } else {
             val left = if (b > 0f) 1f - b else 1f
             val right = if (b < 0f) 1f + b else 1f
-            while (inputBuffer.remaining() >= 4) {
-                out.putShort((inputBuffer.getShort() * left).toInt().toShort())
-                out.putShort((inputBuffer.getShort() * right).toInt().toShort())
+            if (encoding == C.ENCODING_PCM_FLOAT) {
+                while (inputBuffer.remaining() >= 8) {
+                    out.putFloat((inputBuffer.getFloat() * left).coerceIn(-1f, 1f))
+                    out.putFloat((inputBuffer.getFloat() * right).coerceIn(-1f, 1f))
+                }
+            } else {
+                while (inputBuffer.remaining() >= 4) {
+                    out.putShort((inputBuffer.getShort().toInt() * left).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort())
+                    out.putShort((inputBuffer.getShort().toInt() * right).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort())
+                }
             }
             while (inputBuffer.hasRemaining()) out.put(inputBuffer.get())
         }

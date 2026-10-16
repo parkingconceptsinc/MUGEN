@@ -133,12 +133,12 @@ private fun copyToCache(context: Context, uri: Uri, name: String, onProgress: (I
                 if (total > 0) onProgress((copied * 100 / total).toInt())
             }
         }
-    } ?: error("No se pudo leer el archivo. Vuelve a importarlo.")
+    } ?: error("Could not read the file. Import it again.")
     return target
 }
 
 fun rarErrorMessage(error: Throwable): String =
-    "No se pudo abrir el archivo comprimido: " + (error.message ?: error.javaClass.simpleName)
+    "Could not open the archive: " + (error.message ?: error.javaClass.simpleName)
 
 /** Opens a comic or PDF as pages. Runs on a background thread. */
 fun openPageSource(context: Context, uri: Uri, format: String, onProgress: (String) -> Unit): PageSource {
@@ -150,14 +150,14 @@ fun openPageSource(context: Context, uri: Uri, format: String, onProgress: (Stri
     val stamp = System.currentTimeMillis()
     return when (kind) {
         "pdf" -> {
-            val fd = context.contentResolver.openFileDescriptor(uri, "r") ?: error("No se pudo abrir el PDF.")
+            val fd = context.contentResolver.openFileDescriptor(uri, "r") ?: error("Could not open the PDF.")
             PdfPageSource(fd)
         }
         "rar" -> {
             val dir = File(context.cacheDir, "rar_$stamp").apply { mkdirs() }
             try {
-                val files = extractArchiveImages(context, uri, dir) { n -> onProgress("$n páginas") }
-                check(files.isNotEmpty()) { "El CBR no contiene páginas de imagen compatibles." }
+                val files = extractArchiveImages(context, uri, dir) { n -> onProgress("$n pages") }
+                check(files.isNotEmpty()) { "This CBR file contains no supported image pages." }
                 FolderPageSource(dir, files)
             } catch (error: Throwable) {
                 dir.deleteRecursively()
@@ -169,11 +169,11 @@ fun openPageSource(context: Context, uri: Uri, format: String, onProgress: (Stri
             val file = copyToCache(context, uri, "comic_$stamp.zip") { pct -> onProgress("$pct%") }
             val source = runCatching { ZipPageSource(file, deleteOnClose = true) }.getOrElse {
                 file.delete()
-                error("El archivo no es un CBZ válido.")
+                error("This is not a valid CBZ archive.")
             }
             if (source.count == 0) {
                 source.close()
-                error("El archivo no contiene páginas de imagen compatibles.")
+                error("This archive contains no supported image pages.")
             }
             source
         }
@@ -182,7 +182,7 @@ fun openPageSource(context: Context, uri: Uri, format: String, onProgress: (Stri
 
 /** Opens [uri] with libarchive (RAR4, RAR5, 7z, ZIP…) and visits every entry header. */
 private inline fun forEachArchiveEntry(context: Context, uri: Uri, visit: (archive: Long, entry: Long, name: String, isFile: Boolean) -> Boolean) {
-    val pfd = context.contentResolver.openFileDescriptor(uri, "r") ?: error("No se pudo leer el archivo.")
+    val pfd = context.contentResolver.openFileDescriptor(uri, "r") ?: error("Could not read the file.")
     pfd.use {
         val archive = Archive.readNew()
         try {
