@@ -372,15 +372,23 @@ private fun MortimerApp(
     BackHandler(enabled = section != "home") { section = "home" }
 
     @Composable
-    fun Body(modifier: Modifier, wide: Boolean) {
-        Box(modifier.background(c.bg)) {
+    fun Body(modifier: Modifier, wide: Boolean, compact: Boolean) {
+        Box(modifier.background(c.bg), contentAlignment = Alignment.TopCenter) {
             if (c.dark && (section == "home" || section == "music")) {
                 Image(
                     painter = painterResource(R.drawable.music_home_bg), contentDescription = null,
                     contentScale = ContentScale.Crop, alpha = 0.40f, modifier = Modifier.fillMaxSize(),
                 )
             }
-            Column(Modifier.fillMaxSize().statusBarsPadding().padding(horizontal = 18.dp)) {
+            // Keep the same visual hierarchy while preventing tablet layouts from stretching
+            // edge-to-edge. Very narrow phones get smaller gutters; landscape phones stay compact.
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .widthIn(max = if (wide) 1120.dp else 760.dp)
+                    .statusBarsPadding()
+                    .padding(horizontal = if (compact) 12.dp else 18.dp)
+            ) {
                 Spacer(Modifier.height(14.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (!wide) {
@@ -438,10 +446,14 @@ private fun MortimerApp(
     }
 
     BoxWithConstraints(Modifier.fillMaxSize().background(c.bg)) {
-        if (maxWidth >= 840.dp) {
+        // Width alone misclassifies many phones in landscape as tablets. Require enough
+        // vertical room before switching to the permanent tablet sidebar.
+        val wideLayout = maxWidth >= 840.dp && maxHeight >= 520.dp
+        val compactLayout = maxWidth < 360.dp
+        if (wideLayout) {
             Row(Modifier.fillMaxSize()) {
-                Sidebar(section, Modifier.width(260.dp).fillMaxHeight()) { section = it }
-                Body(Modifier.weight(1f).fillMaxHeight(), wide = true)
+                Sidebar(section, Modifier.width(248.dp).fillMaxHeight()) { section = it }
+                Body(Modifier.weight(1f).fillMaxHeight(), wide = true, compact = compactLayout)
             }
         } else {
             ModalNavigationDrawer(
@@ -452,7 +464,7 @@ private fun MortimerApp(
                     }
                 },
             ) {
-                Body(Modifier.fillMaxSize(), wide = false)
+                Body(Modifier.fillMaxSize(), wide = false, compact = compactLayout)
             }
         }
     }
