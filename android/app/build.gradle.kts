@@ -12,7 +12,7 @@ android {
         applicationId = "com.parkingconcepts.mortimer"
         minSdk = 26
         targetSdk = 35
-        versionCode = providers.gradleProperty("androidVersionCode").orElse("4").get().toInt()
+        versionCode = providers.gradleProperty("androidVersionCode").orElse("900").get().toInt()
         versionName = providers.gradleProperty("androidVersionName").orElse("0.9.0").get()
     }
 
@@ -59,4 +59,6 @@ dependencies {
     implementation("androidx.media3:media3-session:1.6.1")
     // CBR/CB7 comics (RAR4, RAR5, 7z) through libarchive, from Maven Central.
     implementation("me.zhanghai.android.libarchive:library:1.1.6")
+
+    testImplementation("junit:junit:4.13.2")
 }
