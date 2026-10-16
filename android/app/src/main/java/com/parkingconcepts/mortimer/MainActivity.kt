@@ -71,14 +71,16 @@ import kotlinx.coroutines.withContext
 class MainActivity : ComponentActivity() {
     private var controllerFuture: ListenableFuture<MediaController>? = null
     private val themePref = mutableStateOf("system")
+    private val palettePref = mutableStateOf("ember")
     private val resumeTick = mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         themePref.value = ThemePref.get(this)
+        palettePref.value = ThemePref.getPalette(this)
         setContent {
-            MortimerTheme(themePref.value) {
+            MortimerTheme(themePref.value, palettePref.value) {
                 Surface(Modifier.fillMaxSize(), color = LocalMortimerColors.current.bg) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("Starting MUGEN…", color = LocalMortimerColors.current.text)
@@ -104,6 +106,8 @@ class MainActivity : ComponentActivity() {
                                     player = controller,
                                     themePref = themePref.value,
                                     onTheme = { themePref.value = it; ThemePref.set(this, it) },
+                                    palettePref = palettePref.value,
+                                    onPalette = { palettePref.value = it; ThemePref.setPalette(this, it) },
                                     resumeTick = resumeTick.intValue,
                                     openSpotify = { launchSpotify() },
                                     openExternal = { uri, mime -> openExternal(uri, mime) },
@@ -224,6 +228,8 @@ private fun MortimerApp(
     player: Player,
     themePref: String,
     onTheme: (String) -> Unit,
+    palettePref: String,
+    onPalette: (String) -> Unit,
     resumeTick: Int,
     openSpotify: () -> Unit,
     openExternal: (Uri, String) -> Unit,
@@ -390,7 +396,7 @@ private fun MortimerApp(
                         HomeCard("♫", "Spotify", "Open the official Spotify app", "Open") { openSpotify() }
                         Text("Spotify plays in its official app. MUGEN uses its native player for local files.", color = c.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
                     }
-                    "settings" -> SettingsSection(library, themePref, onTheme, player, content, onEqualizer = { section = "eq" },
+                    "settings" -> SettingsSection(library, themePref, onTheme, palettePref, onPalette, player, content, onEqualizer = { section = "eq" },
                         onResetProgress = { commit(library.map { it.copy(progress = 0f, position = "", openedAt = 0) }) })
                 }
                 if (current != null && section != "playing" && section != "photos") {
@@ -894,7 +900,7 @@ private fun NowPlayingSection(player: Player, current: LibraryItem?, title: Stri
 }
 
 @Composable
-private fun SettingsSection(library: List<LibraryItem>, themePref: String, onTheme: (String) -> Unit, player: Player, modifier: Modifier, onEqualizer: () -> Unit, onResetProgress: () -> Unit) {
+private fun SettingsSection(library: List<LibraryItem>, themePref: String, onTheme: (String) -> Unit, palettePref: String, onPalette: (String) -> Unit, player: Player, modifier: Modifier, onEqualizer: () -> Unit, onResetProgress: () -> Unit) {
     val context = LocalContext.current
     val c = LocalMortimerColors.current
     var confirm by remember { mutableStateOf(false) }
@@ -906,6 +912,34 @@ private fun SettingsSection(library: List<LibraryItem>, themePref: String, onThe
                 listOf("system" to "System", "light" to "Light", "dark" to "Dark").forEach { (id, label) -> Chip(label, themePref == id) { onTheme(id) } }
             }
             Text("Choose System to follow your device, or lock MUGEN to Light or Dark mode.", color = c.muted, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 8.dp))
+            Spacer(Modifier.height(12.dp))
+            Text("Color theme", color = c.text, fontWeight = FontWeight.SemiBold)
+            Text("Choose an accent that carries through buttons, highlights, sliders, and artwork glow.", color = c.muted, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 3.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(top = 12.dp, bottom = 4.dp),
+            ) {
+                listOf(
+                    Triple("ember", "Ember", Color(0xFFFF7849)),
+                    Triple("ocean", "Ocean", Color(0xFF45B8FF)),
+                    Triple("emerald", "Emerald", Color(0xFF43D6A0)),
+                    Triple("violet", "Violet", Color(0xFFB69AFF)),
+                    Triple("rose", "Rose", Color(0xFFFF7EAB)),
+                    Triple("gold", "Gold", Color(0xFFFFCF5A)),
+                ).forEach { (id, label, swatch) ->
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.width(58.dp).clip(RoundedCornerShape(12.dp)).clickable { onPalette(id) }.padding(vertical = 5.dp),
+                    ) {
+                        Box(
+                            Modifier.size(34.dp).clip(CircleShape).background(if (palettePref == id) c.text else c.panel2).padding(3.dp)
+                                .clip(CircleShape).background(swatch),
+                        )
+                        Text(label, color = if (palettePref == id) c.accent else c.muted, fontSize = 11.sp, fontWeight = if (palettePref == id) FontWeight.Bold else FontWeight.Medium, modifier = Modifier.padding(top = 5.dp))
+                    }
+                }
+            }
         }
         SettingsCard("Playback") {
             var speed by remember { mutableFloatStateOf(player.playbackParameters.speed) }
