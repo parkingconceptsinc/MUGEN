@@ -247,13 +247,13 @@ private fun MortimerApp(
 
     fun addItems(found: List<LibraryItem>, kind: String) {
         scope.launch {
-            importing = "Añadiendo ${found.size} archivos…"
+            importing = "Adding ${found.size} files…"
             val known = library.map { it.uri }.toSet()
             val fresh = found.filter { it.uri !in known }
             val tagged = withContext(Dispatchers.IO) { if (kind == "audio") fresh.map { withAudioTags(context, it) } else fresh }
             val next = withContext(Dispatchers.IO) { LibraryStore.update(context) { list -> list + tagged.filter { t -> list.none { it.uri == t.uri } } } }
             library = next
-            importing = if (fresh.isEmpty() && found.isNotEmpty()) "Esos archivos ya estaban en la biblioteca." else if (found.isEmpty()) "No se encontraron archivos compatibles." else null
+            importing = if (fresh.isEmpty() && found.isNotEmpty()) "Those files are already in your library." else if (found.isEmpty()) "No compatible files found." else null
             if (importing != null) { delay(2500); importing = null }
         }
     }
@@ -263,7 +263,7 @@ private fun MortimerApp(
         if (uris.isNotEmpty()) {
             val kind = pickKind
             scope.launch {
-                importing = "Leyendo archivos…"
+                importing = "Reading files…"
                 val found = withContext(Dispatchers.IO) { itemsFromUris(context, uris, kind) }
                 addItems(found, kind)
             }
@@ -306,9 +306,9 @@ private fun MortimerApp(
             override fun onPlayerError(error: PlaybackException) {
                 playbackError = when (error.errorCode) {
                     PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED,
-                    PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES -> "Formato o códec no compatible con este dispositivo."
+                    PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES -> "This device does not support this format or codec."
                     PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND,
-                    PlaybackException.ERROR_CODE_IO_NO_PERMISSION -> "No se puede acceder al archivo. Vuelve a importarlo."
+                    PlaybackException.ERROR_CODE_IO_NO_PERMISSION -> "Cannot access this file. Import it again."
                     else -> "Could not play this file. Code: " + error.errorCodeName
                 }
             }
@@ -853,7 +853,7 @@ private fun NowPlayingSection(player: Player, current: LibraryItem?, title: Stri
                     }
                 }
                 Box(Modifier.padding(top = 10.dp)) { Chip("≋ Equalizer", AudioEffects.currentSettings().enabled) { onEqualizer() } }
-                if (queue.size > 1) Box(Modifier.fillMaxWidth().padding(top = 16.dp)) { SectionLabel("Cola · ${queue.size}") }
+                if (queue.size > 1) Box(Modifier.fillMaxWidth().padding(top = 16.dp)) { SectionLabel("QUEUE · ${queue.size}") }
             }
         }
         if (queue.size > 1) {
