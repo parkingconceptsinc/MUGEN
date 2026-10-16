@@ -80,7 +80,7 @@ class MainActivity : ComponentActivity() {
             MortimerTheme(themePref.value) {
                 Surface(Modifier.fillMaxSize(), color = LocalMortimerColors.current.bg) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Iniciando Mortimer Player…", color = LocalMortimerColors.current.text)
+                        Text("Starting MUGEN…", color = LocalMortimerColors.current.text)
                     }
                 }
             }
@@ -273,7 +273,7 @@ private fun MortimerApp(
         if (tree != null) {
             val kind = pickKind
             scope.launch {
-                importing = "Buscando en la carpeta…"
+                importing = "Scanning folder…"
                 val found = withContext(Dispatchers.IO) { runCatching { itemsFromTree(context, tree, kind) }.getOrDefault(emptyList()) }
                 addItems(found, kind)
             }
@@ -309,7 +309,7 @@ private fun MortimerApp(
                     PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES -> "Formato o códec no compatible con este dispositivo."
                     PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND,
                     PlaybackException.ERROR_CODE_IO_NO_PERMISSION -> "No se puede acceder al archivo. Vuelve a importarlo."
-                    else -> "No se pudo reproducir este archivo. Código: " + error.errorCodeName
+                    else -> "Could not play this file. Code: " + error.errorCodeName
                 }
             }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -355,7 +355,7 @@ private fun MortimerApp(
                         Spacer(Modifier.width(8.dp))
                     }
                     Column(Modifier.weight(1f)) {
-                        Text("MORTIMER PLAYER", color = c.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
+                        Text("MUGEN PLAYER", color = c.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                         Text(SECTIONS.first { it.id == section }.label, color = c.text, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
                     }
                 }
@@ -769,7 +769,7 @@ private fun NowPlayingSection(player: Player, current: LibraryItem?, title: Stri
     var seeking by remember { mutableStateOf<Float?>(null) }
     var speed by remember { mutableFloatStateOf(player.playbackParameters.speed) }
     if (current == null && player.currentMediaItem == null) {
-        Text("Nada se está reproduciendo. Elige una canción en Música.", color = c.muted, fontSize = 14.sp, modifier = modifier.padding(top = 20.dp))
+        Text("Nothing is playing yet. Choose a track in Music.", color = c.muted, fontSize = 14.sp, modifier = modifier.padding(top = 20.dp))
         return
     }
     val queue = remember(queueVersion, player.mediaItemCount) { (0 until player.mediaItemCount).map { player.getMediaItemAt(it) } }
@@ -846,7 +846,7 @@ private fun NowPlayingSection(player: Player, current: LibraryItem?, title: Stri
                         Chip("${if (s % 1f == 0f) s.toInt().toString() else s.toString()}×", speed == s) { speed = s; player.setPlaybackSpeed(s) }
                     }
                 }
-                Box(Modifier.padding(top = 10.dp)) { Chip("≋ Ecualizador", AudioEffects.currentSettings().enabled) { onEqualizer() } }
+                Box(Modifier.padding(top = 10.dp)) { Chip("≋ Equalizer", AudioEffects.currentSettings().enabled) { onEqualizer() } }
                 if (queue.size > 1) Box(Modifier.fillMaxWidth().padding(top = 16.dp)) { SectionLabel("Cola · ${queue.size}") }
             }
         }
@@ -897,11 +897,11 @@ private fun SettingsSection(library: List<LibraryItem>, themePref: String, onThe
         }
         SettingsCard("Library") {
             Text(
-                "${library.count { it.kind == "audio" }} canciones · ${library.count { it.kind == "videos" }} vídeos · ${library.count { it.kind == "books" }} libros · ${library.count { it.kind == "comics" }} cómics",
+                "${library.count { it.kind == "audio" }} tracks · ${library.count { it.kind == "videos" }} videos · ${library.count { it.kind == "books" }} books · ${library.count { it.kind == "comics" }} comics",
                 color = c.text, fontSize = 14.sp,
             )
             Text("Files stay where they are; MUGEN remembers their locations and your reading progress.", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
-            MenuItem(if (coversCleared) "✓ Portadas borradas" else "Regenerate artwork cache") { Covers.clear(context); coversCleared = true }
+            MenuItem(if (coversCleared) "✓ Artwork cache cleared" else "Regenerate artwork cache") { Covers.clear(context); coversCleared = true }
             MenuItem("Clear reading progress", danger = true) { confirm = true }
         }
         AppUpdateCard()
