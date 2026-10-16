@@ -33,7 +33,7 @@ jobs:
               exit 1
             fi
           done
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/mugen-release.jks"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/mortimer-release.jks"
           echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/mortimer-release.jks" >> "$GITHUB_ENV"
           keytool -list -keystore "$RUNNER_TEMP/mortimer-release.jks" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" >/dev/null
           echo "Release keystore and alias validated."
