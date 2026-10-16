@@ -96,7 +96,7 @@ fun MortimerTheme(pref: String, palette: String? = null, content: @Composable ()
     val base = if (dark) DarkBase else LightBase
     val c = base.copy(
         accent = if (dark) selected.accent else selected.accentLight,
-        onAccent = if (dark) selected.onAccent else Color(0xFFFFFAF7),
+        onAccent = if (dark) selected.onAccent else Color(0xFF191A20),
     )
     val scheme = if (dark) {
         darkColorScheme(
