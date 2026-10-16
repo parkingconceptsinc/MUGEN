@@ -485,7 +485,9 @@ private fun TabBar(section: String, onPick: (String) -> Unit) {
             val s = SECTIONS.first { it.id == id }
             val active = section == id
             Column(
-                Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).clickable { onPick(id) }.padding(vertical = 6.dp),
+                Modifier.weight(1f).clip(RoundedCornerShape(14.dp))
+                    .background(if (active) c.accent.copy(alpha = if (c.dark) 0.16f else 0.10f) else Color.Transparent)
+                    .clickable { onPick(id) }.padding(vertical = 7.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(s.icon, color = if (active) c.accent else c.muted, fontSize = 18.sp)
@@ -929,10 +931,16 @@ private fun SettingsCard(title: String, content: @Composable ColumnScope.() -> U
 @Composable
 private fun HomeCard(icon: String, title: String, subtitle: String, trailing: String, onClick: () -> Unit) {
     val c = LocalMortimerColors.current
-    Card(onClick = onClick, colors = CardDefaults.cardColors(containerColor = c.panel), shape = RoundedCornerShape(16.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Row(Modifier.fillMaxWidth().padding(15.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(44.dp).background(c.panel2, RoundedCornerShape(12.dp)), contentAlignment = Alignment.Center) {
-                Text(icon, color = c.accent, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+    Card(
+        onClick = onClick,
+        colors = CardDefaults.cardColors(containerColor = c.panel),
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (c.dark) 2.dp else 0.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
+    ) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 15.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(46.dp).background(c.accent.copy(alpha = if (c.dark) 0.14f else 0.10f), RoundedCornerShape(14.dp)), contentAlignment = Alignment.Center) {
+                Text(icon, color = c.accent, fontSize = 23.sp, fontWeight = FontWeight.Bold)
             }
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
                 Text(title, color = c.text, fontWeight = FontWeight.Bold, fontSize = 15.sp)
