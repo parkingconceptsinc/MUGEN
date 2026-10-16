@@ -115,7 +115,7 @@ class MainActivity : ComponentActivity() {
                         setContent {
                             MortimerTheme(themePref.value) {
                                 Surface(Modifier.fillMaxSize(), color = LocalMortimerColors.current.bg) {
-                                    Text("No se pudo iniciar el reproductor. Cierra y vuelve a abrir Mortimer Player.", color = LocalMortimerColors.current.text, modifier = Modifier.padding(24.dp))
+                                    Text("The player could not start. Close and reopen MUGEN.", color = LocalMortimerColors.current.text, modifier = Modifier.padding(24.dp))
                                 }
                             }
                         }
@@ -156,16 +156,16 @@ class MainActivity : ComponentActivity() {
 private data class Section(val id: String, val label: String, val icon: String)
 
 private val SECTIONS = listOf(
-    Section("home", "Inicio", "⌂"),
-    Section("music", "Música", "♫"),
-    Section("playing", "Reproduciendo", "◉"),
-    Section("videos", "Vídeos", "▶"),
-    Section("books", "Libros", "▤"),
-    Section("comics", "Cómics", "▧"),
-    Section("photos", "Fotos", "▦"),
-    Section("eq", "Ecualizador", "≋"),
-    Section("services", "Servicios", "♪"),
-    Section("settings", "Ajustes", "⚙"),
+    Section("home", "Home", "⌂"),
+    Section("music", "Music", "♫"),
+    Section("playing", "Now Playing", "◉"),
+    Section("videos", "Videos", "▶"),
+    Section("books", "Books", "▤"),
+    Section("comics", "Comics", "▧"),
+    Section("photos", "Photos", "▦"),
+    Section("eq", "Equalizer", "≋"),
+    Section("services", "Services", "♪"),
+    Section("settings", "Settings", "⚙"),
 )
 private val TABS = listOf("home", "music", "books", "comics", "photos")
 
@@ -386,8 +386,8 @@ private fun MortimerApp(
                     "photos" -> PhotosSection(content)
                     "eq" -> EqualizerSection(content)
                     "services" -> Column(content) {
-                        HomeCard("♫", "Spotify", "Abrir la aplicación oficial de Spotify", "Abrir") { openSpotify() }
-                        Text("Spotify se reproduce en su aplicación oficial. Mortimer Player utiliza su reproductor nativo para los archivos locales.", color = c.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
+                        HomeCard("♫", "Spotify", "Open the official Spotify app", "Open") { openSpotify() }
+                        Text("Spotify plays in its official app. MUGEN uses its native player for local files.", color = c.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
                     }
                     "settings" -> SettingsSection(library, themePref, onTheme, player, content, onEqualizer = { section = "eq" },
                         onResetProgress = { commit(library.map { it.copy(progress = 0f, position = "", openedAt = 0) }) })
@@ -513,13 +513,13 @@ private fun HomeSection(library: List<LibraryItem>, modifier: Modifier, onGo: (S
                 Brush.radialGradient(listOf(c.accent.copy(alpha = 0.28f), Color.Transparent))
             ))
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 19.dp)) {
-                Text("TU MUNDO. TU RITMO.", color = c.accent, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.1.sp)
+                Text("YOUR WORLD. YOUR RHYTHM.", color = c.accent, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 2.1.sp)
                 Spacer(Modifier.height(5.dp))
-                Text("Todo lo que te mueve.", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 27.sp)
-                Text("Música, historias y recuerdos en un solo lugar.", color = Color(0xFFB9B5C0), fontSize = 12.sp, maxLines = 2)
+                Text("Everything that moves you.", color = Color.White, fontSize = 23.sp, fontWeight = FontWeight.ExtraBold, lineHeight = 27.sp)
+                Text("Music, stories, and memories in one place.", color = Color(0xFFB9B5C0), fontSize = 12.sp, maxLines = 2)
                 Spacer(Modifier.height(15.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    listOf("${count("audio")} pistas" to "♫", "${count("books") + count("comics")} lecturas" to "▤", "${count("videos")} vídeos" to "▶").forEach { (label, icon) ->
+                    listOf("${count("audio")} tracks" to "♫", "${count("books") + count("comics")} reads" to "▤", "${count("videos")} videos" to "▶").forEach { (label, icon) ->
                         Row(
                             Modifier.clip(RoundedCornerShape(50)).background(Color(0x22FFFFFF)).padding(horizontal = 10.dp, vertical = 7.dp),
                             verticalAlignment = Alignment.CenterVertically,
@@ -533,7 +533,7 @@ private fun HomeSection(library: List<LibraryItem>, modifier: Modifier, onGo: (S
             }
         }
         if (reading.isNotEmpty()) {
-            SectionLabel("Seguir leyendo")
+            SectionLabel("Continue reading")
             LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(bottom = 10.dp)) {
                 items(reading, key = { it.uri }) { item ->
                     Column(Modifier.width(104.dp).clickable { openReader(context, item, openExternal = openExternal) }) {
@@ -548,13 +548,13 @@ private fun HomeSection(library: List<LibraryItem>, modifier: Modifier, onGo: (S
                 }
             }
         }
-        SectionLabel("Tu contenido")
-        HomeCard("♫", "Mi música", "Archivos del teléfono, SD o USB", "${count("audio")} canciones") { onGo("music") }
-        HomeCard("▶", "Vídeos", "Tus vídeos locales", "${count("videos")} vídeos") { onGo("videos") }
-        HomeCard("▤", "Libros", "EPUB, PDF y texto con tu progreso", "${count("books")} libros") { onGo("books") }
-        HomeCard("▧", "Cómics", "CBZ, CBR y PDF, modo manga y vertical", "${count("comics")} cómics") { onGo("comics") }
-        HomeCard("▦", "Fotos", "Álbum de fotos del teléfono", "Abrir") { onGo("photos") }
-        HomeCard("♪", "Servicios de música", "Spotify y servicios compatibles", "Conectar") { onGo("services") }
+        SectionLabel("Your library")
+        HomeCard("♫", "My Music", "Files from phone, SD card, or USB", "${count("audio")} tracks") { onGo("music") }
+        HomeCard("▶", "Videos", "Your local videos", "${count("videos")} videos") { onGo("videos") }
+        HomeCard("▤", "Books", "EPUB, PDF, and text with saved progress", "${count("books")} books") { onGo("books") }
+        HomeCard("▧", "Comics", "CBZ, CBR, and PDF with manga and vertical reading", "${count("comics")} comics") { onGo("comics") }
+        HomeCard("▦", "Photos", "Your device photo gallery", "Open") { onGo("photos") }
+        HomeCard("♪", "Music services", "Spotify and supported services", "Connect") { onGo("services") }
         Spacer(Modifier.height(12.dp))
     }
 }
@@ -578,9 +578,9 @@ private fun MusicSection(
     var menu by remember { mutableStateOf<LibraryItem?>(null) }
     val audio = remember(library) { library.filter { it.kind == "audio" }.sortedBy { naturalKey(it.title) } }
     fun groupKey(item: LibraryItem) = when (view) {
-        "artists" -> item.artist.ifBlank { "Artista desconocido" }
-        "albums" -> item.album.ifBlank { "Álbum desconocido" }
-        else -> item.folder.ifBlank { "Sin carpeta" }
+        "artists" -> item.artist.ifBlank { "Unknown artist" }
+        "albums" -> item.album.ifBlank { "Unknown album" }
+        else -> item.folder.ifBlank { "No folder" }
     }
     val q = query.trim().lowercase()
     val filtered = audio.filter { q.isEmpty() || it.title.lowercase().contains(q) || it.artist.lowercase().contains(q) || it.album.lowercase().contains(q) }
@@ -588,17 +588,17 @@ private fun MusicSection(
 
     Column(modifier.fillMaxWidth()) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 10.dp)) {
-            ActionButton("＋ Añadir música", primary = true, onClick = onAddFiles)
-            ActionButton("▤ Carpeta", primary = false, onClick = onAddFolder)
-            if (filtered.isNotEmpty()) ActionButton("⤮ Aleatorio", primary = false) { onPlay(filtered.shuffled(), 0) }
+            ActionButton("＋ Add music", primary = true, onClick = onAddFiles)
+            ActionButton("▤ Add folder", primary = false, onClick = onAddFolder)
+            if (filtered.isNotEmpty()) ActionButton("⤮ Shuffle", primary = false) { onPlay(filtered.shuffled(), 0) }
         }
         if (audio.isEmpty()) {
-            Text("Elige archivos de audio o una carpeta entera del teléfono, una tarjeta SD o una memoria USB.", color = c.muted, fontSize = 14.sp, modifier = Modifier.padding(vertical = 18.dp))
+            Text("Choose audio files or an entire folder from your phone, SD card, or USB drive.", color = c.muted, fontSize = 14.sp, modifier = Modifier.padding(vertical = 18.dp))
             return@Column
         }
-        SearchBox(query, "Buscar canciones, artistas o álbumes", { query = it })
+        SearchBox(query, "Search songs, artists, or albums", { query = it })
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(vertical = 10.dp).horizontalScroll(rememberScrollState())) {
-            listOf("songs" to "Canciones", "artists" to "Artistas", "albums" to "Álbumes", "folders" to "Carpetas").forEach { (id, label) ->
+            listOf("songs" to "Songs", "artists" to "Artists", "albums" to "Albums", "folders" to "Folders").forEach { (id, label) ->
                 Chip(label, view == id) { view = id; group = null }
             }
         }
@@ -614,7 +614,7 @@ private fun MusicSection(
                         CoverImage(tracks.first(), Modifier.size(48.dp).clip(RoundedCornerShape(8.dp)))
                         Column(Modifier.weight(1f).padding(start = 12.dp)) {
                             Text(name, color = c.text, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text("${tracks.size} canciones", color = c.muted, fontSize = 12.sp)
+                            Text("${tracks.size} tracks", color = c.muted, fontSize = 12.sp)
                         }
                         Text("›", color = c.muted, fontSize = 20.sp)
                     }
@@ -624,9 +624,9 @@ private fun MusicSection(
             val tracks = if (g != null) filtered.filter { groupKey(it) == g } else filtered
             if (g != null) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
-                    Chip("‹ Volver", false) { group = null }
+                    Chip("‹ Back", false) { group = null }
                     Text(g, color = c.text, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).padding(horizontal = 10.dp))
-                    Chip("▶ Todo", true) { onPlay(tracks, 0) }
+                    Chip("▶ Play all", true) { onPlay(tracks, 0) }
                 }
             }
             LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -641,7 +641,7 @@ private fun MusicSection(
                         CoverImage(item, Modifier.size(44.dp).clip(RoundedCornerShape(8.dp)))
                         Column(Modifier.weight(1f).padding(start = 12.dp)) {
                             Text(item.title, color = if (playing) c.accent else c.text, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(listOf(item.artist, item.album).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "Audio local" }, color = c.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(listOf(item.artist, item.album).filter { it.isNotBlank() }.joinToString(" · ").ifBlank { "Local audio" }, color = c.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                         Text("⋮", color = c.muted, fontSize = 18.sp, modifier = Modifier.clickable { menu = item }.padding(horizontal = 8.dp))
                     }
@@ -656,10 +656,10 @@ private fun MusicSection(
                 Text(item.title, color = c.text, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (item.artist.isNotBlank()) Text(item.artist, color = c.muted, fontSize = 12.sp)
                 Spacer(Modifier.height(10.dp))
-                MenuItem("▶ Reproducir") { menu = null; onPlay(listOf(item), 0) }
-                MenuItem("⤵ Reproducir a continuación") { menu = null; onQueue(item, true) }
-                MenuItem("＋ Añadir a la cola") { menu = null; onQueue(item, false) }
-                MenuItem("🗑 Quitar de la biblioteca", danger = true) { menu = null; onRemove(item) }
+                MenuItem("▶ Play") { menu = null; onPlay(listOf(item), 0) }
+                MenuItem("⤵ Play next") { menu = null; onQueue(item, true) }
+                MenuItem("＋ Add to queue") { menu = null; onQueue(item, false) }
+                MenuItem("🗑 Remove from library", danger = true) { menu = null; onRemove(item) }
             }
         }
     }
@@ -674,14 +674,14 @@ private fun VideosSection(library: List<LibraryItem>, modifier: Modifier, onAddF
     var menu by remember { mutableStateOf<LibraryItem?>(null) }
     Column(modifier.fillMaxWidth()) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 10.dp)) {
-            ActionButton("＋ Añadir vídeos", primary = true, onClick = onAddFiles)
-            ActionButton("▤ Carpeta", primary = false, onClick = onAddFolder)
+            ActionButton("＋ Add videos", primary = true, onClick = onAddFiles)
+            ActionButton("▤ Add folder", primary = false, onClick = onAddFolder)
         }
         if (videos.isEmpty()) {
-            Text("Selecciona vídeos del dispositivo, SD o USB.", color = c.muted, fontSize = 14.sp, modifier = Modifier.padding(vertical = 18.dp))
+            Text("Select videos from your device, SD card, or USB drive.", color = c.muted, fontSize = 14.sp, modifier = Modifier.padding(vertical = 18.dp))
             return@Column
         }
-        SearchBox(query, "Buscar vídeos", { query = it }, Modifier.padding(bottom = 10.dp))
+        SearchBox(query, "Search videos", { query = it }, Modifier.padding(bottom = 10.dp))
         val shown = videos.filter { query.isBlank() || it.title.contains(query.trim(), ignoreCase = true) }
         LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(shown, key = { it.uri }) { item ->
@@ -696,7 +696,7 @@ private fun VideosSection(library: List<LibraryItem>, modifier: Modifier, onAddF
                     }
                     Column(Modifier.weight(1f).padding(start = 12.dp)) {
                         Text(item.title.substringBeforeLast('.'), color = c.text, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        Text(item.folder.ifBlank { "Vídeo local" }, color = c.muted, fontSize = 12.sp, maxLines = 1)
+                        Text(item.folder.ifBlank { "Local video" }, color = c.muted, fontSize = 12.sp, maxLines = 1)
                     }
                 }
             }
@@ -707,8 +707,8 @@ private fun VideosSection(library: List<LibraryItem>, modifier: Modifier, onAddF
             Column(Modifier.fillMaxWidth().background(c.panel, RoundedCornerShape(20.dp)).padding(18.dp)) {
                 Text(item.title, color = c.text, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(10.dp))
-                MenuItem("▶ Reproducir") { menu = null; onPlay(item) }
-                MenuItem("🗑 Quitar de la biblioteca", danger = true) { menu = null; onRemove(item) }
+                MenuItem("▶ Play") { menu = null; onPlay(item) }
+                MenuItem("🗑 Remove from library", danger = true) { menu = null; onRemove(item) }
             }
         }
     }
@@ -877,46 +877,46 @@ private fun SettingsSection(library: List<LibraryItem>, themePref: String, onThe
     var confirm by remember { mutableStateOf(false) }
     var coversCleared by remember { mutableStateOf(false) }
     Column(modifier.verticalScroll(rememberScrollState())) {
-        SettingsCard("Apariencia") {
-            Text("Tema", color = c.text, fontWeight = FontWeight.SemiBold)
+        SettingsCard("Appearance") {
+            Text("Theme", color = c.text, fontWeight = FontWeight.SemiBold)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 8.dp)) {
-                listOf("system" to "Sistema", "light" to "Claro", "dark" to "Oscuro").forEach { (id, label) -> Chip(label, themePref == id) { onTheme(id) } }
+                listOf("system" to "System", "light" to "Light", "dark" to "Dark").forEach { (id, label) -> Chip(label, themePref == id) { onTheme(id) } }
             }
-            Text("La barra lateral conserva su imagen y sus letras en los dos modos, como en la web.", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
+            Text("The sidebar keeps its artwork and typography in both themes, matching the web app.", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 8.dp))
         }
-        SettingsCard("Reproducción") {
+        SettingsCard("Playback") {
             var speed by remember { mutableFloatStateOf(player.playbackParameters.speed) }
-            Text("Velocidad", color = c.text, fontWeight = FontWeight.SemiBold)
+            Text("Speed", color = c.text, fontWeight = FontWeight.SemiBold)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 8.dp).horizontalScroll(rememberScrollState())) {
                 listOf(0.75f, 1f, 1.25f, 1.5f, 2f).forEach { s ->
                     Chip("${if (s % 1f == 0f) s.toInt().toString() else s.toString()}×", speed == s) { speed = s; player.setPlaybackSpeed(s) }
                 }
             }
             Spacer(Modifier.height(6.dp))
-            MenuItem("≋ Ecualizador, balance y refuerzo de volumen") { onEqualizer() }
+            MenuItem("≋ Equalizer, balance, and volume boost") { onEqualizer() }
         }
-        SettingsCard("Biblioteca") {
+        SettingsCard("Library") {
             Text(
                 "${library.count { it.kind == "audio" }} canciones · ${library.count { it.kind == "videos" }} vídeos · ${library.count { it.kind == "books" }} libros · ${library.count { it.kind == "comics" }} cómics",
                 color = c.text, fontSize = 14.sp,
             )
-            Text("Los archivos se quedan donde están; Mortimer solo guarda dónde encontrarlos y tu progreso.", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
-            MenuItem(if (coversCleared) "✓ Portadas borradas" else "Volver a generar portadas") { Covers.clear(context); coversCleared = true }
-            MenuItem("Borrar el progreso de lectura", danger = true) { confirm = true }
+            Text("Files stay where they are; MUGEN remembers their locations and your reading progress.", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
+            MenuItem(if (coversCleared) "✓ Portadas borradas" else "Regenerate artwork cache") { Covers.clear(context); coversCleared = true }
+            MenuItem("Clear reading progress", danger = true) { confirm = true }
         }
         AppUpdateCard()
-        SettingsCard("Acerca de") {
-            Text("Mortimer Player ${BuildConfig.VERSION_NAME}", color = c.text, fontWeight = FontWeight.SemiBold)
-            Text("Música, vídeos, libros, cómics y fotos en una sola app.", color = c.muted, fontSize = 12.sp)
+        SettingsCard("About") {
+            Text("MUGEN ${BuildConfig.VERSION_NAME}", color = c.text, fontWeight = FontWeight.SemiBold)
+            Text("Music, videos, books, comics, and photos in one app.", color = c.muted, fontSize = 12.sp)
         }
     }
     if (confirm) {
         AlertDialog(
             onDismissRequest = { confirm = false },
-            title = { Text("¿Borrar el progreso?") },
-            text = { Text("Todos los libros y cómics volverán a empezar desde la primera página.") },
-            confirmButton = { TextButton(onClick = { confirm = false; onResetProgress() }) { Text("Borrar") } },
-            dismissButton = { TextButton(onClick = { confirm = false }) { Text("Cancelar") } },
+            title = { Text("Clear reading progress?") },
+            text = { Text("All books and comics will return to the first page.") },
+            confirmButton = { TextButton(onClick = { confirm = false; onResetProgress() }) { Text("Clear") } },
+            dismissButton = { TextButton(onClick = { confirm = false }) { Text("Cancel") } },
         )
     }
 }
