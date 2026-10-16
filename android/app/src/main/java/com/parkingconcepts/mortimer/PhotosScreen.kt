@@ -22,6 +22,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
@@ -201,9 +202,13 @@ fun PhotosSection(modifier: Modifier = Modifier) {
 
     Column(modifier.fillMaxWidth()) {
         if (access == "none") {
-            Column(Modifier.fillMaxWidth().padding(top = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 16.dp).clip(RoundedCornerShape(20.dp)).background(PhPanel).padding(horizontal = 22.dp, vertical = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.size(58.dp).clip(CircleShape).background(PhAccent.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+                    Text("▦", color = PhAccent, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(14.dp))
                 Text("Your photos, beautifully organized", color = PhText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text("MUGEN displays photos from your device without copying them. Photo access permission is required.", color = PhMuted, fontSize = 14.sp, modifier = Modifier.padding(vertical = 12.dp))
+                Text("MUGEN displays photos from your device without copying them. Photo access permission is required.", color = PhMuted, fontSize = 14.sp, lineHeight = 20.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(vertical = 12.dp))
                 Button(onClick = { launcher.launch(photoPermissions()) }, colors = ButtonDefaults.buttonColors(containerColor = PhAccent, contentColor = Color(0xFF111114))) { Text("Allow photo access") }
             }
         } else if (photos == null) {
@@ -211,7 +216,7 @@ fun PhotosSection(modifier: Modifier = Modifier) {
         } else {
         val all = photos!!
 
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().horizontalScroll(androidx.compose.foundation.rememberScrollState()).padding(bottom = 8.dp)) {
             if (bucket != null) {
                 PhotoChip("‹ Albums", false) { bucket = null }
                 Spacer(Modifier.width(8.dp))
@@ -221,7 +226,6 @@ fun PhotosSection(modifier: Modifier = Modifier) {
                     PhotoChip(name, tab == name) { tab = name; selected = null }
                     Spacer(Modifier.width(6.dp))
                 }
-                Spacer(Modifier.weight(1f))
             }
             if (bucket != null || tab != "Albums") {
                 PhotoChip("−", false) { columns = (columns + 1).coerceAtMost(7) }
@@ -259,7 +263,13 @@ fun PhotosSection(modifier: Modifier = Modifier) {
             else -> all
         }
         if (shown.isEmpty()) {
-            Text(if (tab == "Favorites") "Long-press a photo or tap the heart in the viewer to save it here." else "No photos found.", color = PhMuted, fontSize = 14.sp, modifier = Modifier.padding(top = 20.dp))
+            Column(Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(18.dp)).background(PhPanel).padding(horizontal = 18.dp, vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(if (tab == "Favorites") "♥" else "▦", color = PhAccent, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                Text(if (tab == "Favorites") "Your favorites live here" else "No photos found", color = PhText, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(4.dp))
+                Text(if (tab == "Favorites") "Long-press a photo or tap the heart in the viewer to save it here." else "Photos on your device will appear here when they are available.", color = PhMuted, fontSize = 13.sp, lineHeight = 19.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
         } else {
         val groups = remember(shown) { shown.groupBy { monthFormat.format(Date(it.takenAt)).replaceFirstChar { c -> c.titlecase() } } }
 
