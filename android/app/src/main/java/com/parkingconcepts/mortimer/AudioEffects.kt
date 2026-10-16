@@ -177,14 +177,27 @@ object AudioEffects {
     fun currentSettings(): Settings = current
 }
 
-/** Scales the left or right channel of 16-bit stereo audio; other formats pass through untouched. */
+/**
+ * Applies left/right balance to stereo PCM. Media3 may negotiate float output on
+ * capable devices, so handle both PCM_16BIT and PCM_FLOAT instead of silently
+ * disabling balance on the float path.
+ */
 @UnstableApi
 class BalanceAudioProcessor : BaseAudioProcessor() {
     @Volatile
     var balance: Float = 0f
 
+    private var encoding: Int = C.ENCODING_INVALID
+
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
-        if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT || inputAudioFormat.channelCount != 2) return AudioProcessor.AudioFormat.NOT_SET
+        if (inputAudioFormat.channelCount != 2 ||
+            (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT &&
+                inputAudioFormat.encoding != C.ENCODING_PCM_FLOAT)
+        ) {
+            encoding = C.ENCODING_INVALID
+            return AudioProcessor.AudioFormat.NOT_SET
+        }
+        encoding = inputAudioFormat.encoding
         return inputAudioFormat
     }
 
@@ -192,15 +205,22 @@ class BalanceAudioProcessor : BaseAudioProcessor() {
         val remaining = inputBuffer.remaining()
         if (remaining == 0) return
         val out = replaceOutputBuffer(remaining)
-        val b = balance
-        if (abs(b) < 0.001f) {
+        val b = balance.coerceIn(-1f, 1f)
+        if (abs(b) < 0.001f || encoding == C.ENCODING_INVALID) {
             out.put(inputBuffer)
         } else {
             val left = if (b > 0f) 1f - b else 1f
             val right = if (b < 0f) 1f + b else 1f
-            while (inputBuffer.remaining() >= 4) {
-                out.putShort((inputBuffer.getShort() * left).toInt().toShort())
-                out.putShort((inputBuffer.getShort() * right).toInt().toShort())
+            if (encoding == C.ENCODING_PCM_FLOAT) {
+                while (inputBuffer.remaining() >= 8) {
+                    out.putFloat((inputBuffer.getFloat() * left).coerceIn(-1f, 1f))
+                    out.putFloat((inputBuffer.getFloat() * right).coerceIn(-1f, 1f))
+                }
+            } else {
+                while (inputBuffer.remaining() >= 4) {
+                    out.putShort((inputBuffer.getShort().toInt() * left).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort())
+                    out.putShort((inputBuffer.getShort().toInt() * right).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort())
+                }
             }
             while (inputBuffer.hasRemaining()) out.put(inputBuffer.get())
         }
