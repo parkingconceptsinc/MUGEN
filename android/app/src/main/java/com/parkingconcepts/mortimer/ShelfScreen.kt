@@ -280,18 +280,18 @@ private fun ItemMenu(
             Spacer(Modifier.height(12.dp))
             if (details) {
                 DetailLine("Formato", item.format.uppercase())
-                if (item.size > 0) DetailLine("Tamaño", Formatter.formatShortFileSize(context, item.size))
-                if (item.pages > 0) DetailLine(if (item.format == "epub" || item.format == "txt") "Capítulos" else "Páginas", item.pages.toString())
-                DetailLine("Añadido", DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(item.addedAt)))
-                if (item.openedAt > 0) DetailLine("Última lectura", DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(item.openedAt)))
-                if (item.folder.isNotBlank()) DetailLine("Serie", item.folder)
+                if (item.size > 0) DetailLine("Size", Formatter.formatShortFileSize(context, item.size))
+                if (item.pages > 0) DetailLine(if (item.format == "epub" || item.format == "txt") "Chapters" else "Pages", item.pages.toString())
+                DetailLine("Added", DateFormat.getDateInstance(DateFormat.MEDIUM).format(Date(item.addedAt)))
+                if (item.openedAt > 0) DetailLine("Last read", DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(item.openedAt)))
+                if (item.folder.isNotBlank()) DetailLine("Series", item.folder)
                 Spacer(Modifier.height(8.dp))
                 MenuItem("‹ Volver") { details = false }
             } else {
                 MenuItem(if (item.started) "▶ Seguir leyendo" else "▶ Leer") { onOpen(false) }
                 if (item.openedAt > 0) MenuItem("↺ Leer desde el principio") { onOpen(true) }
-                if (item.finished) MenuItem("↶ Marcar como no leído") { onMark(false) } else MenuItem("✓ Marcar como leído") { onMark(true) }
-                MenuItem(if (item.kind == "books") "⇄ Mover a Cómics" else "⇄ Mover a Libros") { onMove() }
+                if (item.finished) MenuItem("↶ Mark as unread") { onMark(false) } else MenuItem("✓ Mark as read") { onMark(true) }
+                MenuItem(if (item.kind == "books") "⇄ Move to Comics" else "⇄ Move to Books") { onMove() }
                 MenuItem("ⓘ Detalles") { details = true }
                 MenuItem("🗑 Quitar de la biblioteca", danger = true) { onRemove() }
             }
