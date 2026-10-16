@@ -448,11 +448,11 @@ private fun MortimerApp(
     BoxWithConstraints(Modifier.fillMaxSize().background(c.bg)) {
         // Width alone misclassifies many phones in landscape as tablets. Require enough
         // vertical room before switching to the permanent tablet sidebar.
-        val wideLayout = maxWidth >= 840.dp && maxHeight >= 520.dp
+        val wideLayout = maxWidth >= 720.dp && maxHeight >= 600.dp
         val compactLayout = maxWidth < 360.dp
         if (wideLayout) {
             Row(Modifier.fillMaxSize()) {
-                Sidebar(section, Modifier.width(248.dp).fillMaxHeight()) { section = it }
+                Sidebar(section, Modifier.width(if (maxWidth < 820.dp) 208.dp else 248.dp).fillMaxHeight()) { section = it }
                 Body(Modifier.weight(1f).fillMaxHeight(), wide = true, compact = compactLayout)
             }
         } else {
