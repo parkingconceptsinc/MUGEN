@@ -7,6 +7,7 @@ import android.content.ContentUris
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.core.content.ContextCompat
@@ -29,6 +30,7 @@ import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.ListeningExecutorService
 import com.google.common.util.concurrent.MoreExecutors
+import com.google.common.util.concurrent.SettableFuture
 import java.util.concurrent.Executors
 
 /**
@@ -74,11 +76,17 @@ class PlaybackService : MediaLibraryService() {
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 val uri = mediaItem?.localConfiguration?.uri ?: return
-                if (isKnownAudioUri(uri)) {
-                    getSharedPreferences("mortimer_library", MODE_PRIVATE)
-                        .edit()
-                        .putString(LAST_PLAYED_URI_KEY, uri.toString())
-                        .apply()
+                // Checking imported SAF entries reads persistent storage; keep that work
+                // off the player/application thread so transitions stay responsive.
+                runCatching {
+                    libraryExecutor.execute {
+                        if (isKnownAudioUri(uri)) {
+                            getSharedPreferences("mortimer_library", MODE_PRIVATE)
+                                .edit()
+                                .putString(LAST_PLAYED_URI_KEY, uri.toString())
+                                .apply()
+                        }
+                    }
                 }
             }
         })
@@ -134,12 +142,25 @@ class PlaybackService : MediaLibraryService() {
             query: String,
             params: MediaLibraryService.LibraryParams?
         ): ListenableFuture<LibraryResult<Void>> {
-            return libraryExecutor.submit<LibraryResult<Void>> {
-                val results = findAudioMatches(query)
-                rememberSearchResults(query, results)
-                session.notifySearchResultChanged(browser, query, results.size, params)
-                LibraryResult.ofVoid()
+            val resultFuture = SettableFuture.create<LibraryResult<Void>>()
+            libraryExecutor.execute {
+                try {
+                    val results = findAudioMatches(query)
+                    rememberSearchResults(query, results)
+                    // MediaLibrarySession notifications belong on the player application looper.
+                    Handler(player.applicationLooper).post {
+                        try {
+                            session.notifySearchResultChanged(browser, query, results.size, params)
+                            resultFuture.set(LibraryResult.ofVoid())
+                        } catch (failure: Throwable) {
+                            resultFuture.setException(failure)
+                        }
+                    }
+                } catch (failure: Throwable) {
+                    resultFuture.setException(failure)
+                }
             }
+            return resultFuture
         }
 
         override fun onGetSearchResult(
