@@ -218,7 +218,7 @@ private fun openBook(context: Context, uri: Uri, title: String, format: String):
                 out.write(buf, 0, n)
             }
             out.toByteArray()
-        } ?: error("No se pudo leer el archivo.")
+        } ?: error("Could not read the file.")
         val text = decodeText(bytes).replace("\r\n", "\n")
         val body = text.split(Regex("\n\\s*\n")).joinToString("\n") { para ->
             "<p>" + escapeHtml(para.trim()).replace("\n", "<br>") + "</p>"
@@ -228,11 +228,11 @@ private fun openBook(context: Context, uri: Uri, title: String, format: String):
     }
     val file = File(context.cacheDir, "book_${System.currentTimeMillis()}.epub")
     context.contentResolver.openInputStream(uri)?.use { input -> file.outputStream().use { input.copyTo(it) } }
-        ?: error("No se pudo leer el archivo EPUB.")
-    val zip = try { ZipFile(file) } catch (e: Exception) { file.delete(); error("El archivo no es un EPUB válido.") }
+        ?: error("Could not read the EPUB file.")
+    val zip = try { ZipFile(file) } catch (e: Exception) { file.delete(); error("This is not a valid EPUB file.") }
     try {
         val pkg = EpubPackage.read(zip)
-        check(pkg.spine.isNotEmpty()) { "El EPUB no contiene capítulos." }
+        check(pkg.spine.isNotEmpty()) { "This EPUB contains no chapters." }
         return OpenedBook(pkg.title ?: title, pkg.spine, pkg.toc, zip, file, emptyMap())
     } catch (e: Exception) {
         zip.close(); file.delete()
@@ -262,7 +262,7 @@ class EpubReaderActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val uri = intent.data ?: run { finish(); return }
-        val title = intent.getStringExtra(EXTRA_TITLE) ?: displayName(this, uri, "Libro")
+        val title = intent.getStringExtra(EXTRA_TITLE) ?: displayName(this, uri, "Book")
         val format = intent.getStringExtra(EXTRA_FORMAT) ?: formatOf(title, "books")
         val fromStart = intent.getBooleanExtra(EXTRA_FROM_START, false)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -337,7 +337,7 @@ private fun BookReader(
             fraction = parts?.getOrNull(1)?.toFloatOrNull()?.coerceIn(0f, 1f) ?: 0f
             pending[0] = fraction
             book = b
-        }.onFailure { error = it.message ?: "No se pudo abrir el libro." }
+        }.onFailure { error = it.message ?: "Could not open this book." }
     }
     DisposableEffect(book) {
         val b = book
@@ -478,7 +478,7 @@ private fun BookReader(
                             Column(Modifier.weight(1f).padding(horizontal = 6.dp)) {
                                 Text(b.title, color = theme.fg, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 val label = b.toc.lastOrNull { b.chapters.indexOf(it.href.substringBefore('#')) in 0..chapter }?.label
-                                Text(label ?: "Capítulo ${chapter + 1} de ${b.chapters.size}", color = theme.fg.copy(alpha = 0.65f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(label ?: "Chapter ${chapter + 1} of ${b.chapters.size}", color = theme.fg.copy(alpha = 0.65f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                             if (b.toc.isNotEmpty()) ReaderButton("☰", theme.fg) { sheet = "toc" }
                             ReaderButton("Aa", theme.fg) { sheet = "settings" }
@@ -504,7 +504,7 @@ private fun BookReader(
                             )
                             ReaderButton("›", theme.fg) { turn(1) }
                         }
-                        val pageText = if (settings.paged && pageInfo.second > 0) " · página ${pageInfo.first + 1} de ${pageInfo.second}" else ""
+                        val pageText = if (settings.paged && pageInfo.second > 0) " · page ${pageInfo.first + 1} of ${pageInfo.second}" else ""
                         Text("${((dragging ?: overall) * 100).toInt()}%$pageText", color = theme.fg.copy(alpha = 0.7f), fontSize = 12.sp, modifier = Modifier.align(Alignment.CenterHorizontally))
                     }
                 }
@@ -514,10 +514,10 @@ private fun BookReader(
                         Modifier.align(Alignment.Center).padding(24.dp).background(theme.bg, RoundedCornerShape(18.dp)).padding(22.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Text("Has terminado el libro", color = theme.fg, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                        Text("You have finished this book", color = theme.fg, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Spacer(Modifier.height(14.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            ReaderButton("Seguir aquí", theme.fg) { finished = false }
+                            ReaderButton("Continue reading", theme.fg) { finished = false }
                             ReaderButton("Volver a la biblioteca", DarkColors.accent) { onClose() }
                         }
                     }
@@ -542,7 +542,7 @@ private fun BookReader(
                         }
                     }
                     "settings" -> ReaderSheet("Texto", theme, onClose = { sheet = null }) {
-                        Text("Tamaño · ${settings.fontSize}%", color = theme.fg, fontSize = 13.sp)
+                        Text("Text size · ${settings.fontSize}%", color = theme.fg, fontSize = 13.sp)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             ReaderButton("A−", theme.fg) { settings = settings.copy(fontSize = (settings.fontSize - 10).coerceAtLeast(70)) }
                             Slider(
@@ -556,7 +556,7 @@ private fun BookReader(
                         ChoiceRow("Letra", BOOK_FONTS.toList(), settings.font, theme) { settings = settings.copy(font = it) }
                         ChoiceRow("Interlineado", listOf(1.3f to "1.3", 1.6f to "1.6", 1.9f to "1.9", 2.2f to "2.2"), settings.lineHeight, theme) { settings = settings.copy(lineHeight = it) }
                         ChoiceRow("Tema", BOOK_THEMES.map { it.key to it.value.label }, settings.theme, theme) { settings = settings.copy(theme = it) }
-                        ChoiceRow("Lectura", listOf(true to "Páginas", false to "Continua"), settings.paged, theme) { settings = settings.copy(paged = it) }
+                        ChoiceRow("Reading mode", listOf(true to "Paged", false to "Continuous"), settings.paged, theme) { settings = settings.copy(paged = it) }
                     }
                 }
             }
