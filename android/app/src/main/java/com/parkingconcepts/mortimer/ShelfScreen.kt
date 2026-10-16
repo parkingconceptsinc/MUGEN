@@ -36,7 +36,7 @@ import androidx.compose.ui.window.Dialog
 import java.text.DateFormat
 import java.util.Date
 
-/** Opens a book or comic in the right reader, or in another app when Mortimer can't read it. */
+/** Opens a book or comic in the right reader, or in another app when MUGEN cannot read it. */
 fun openReader(context: Context, item: LibraryItem, fromStart: Boolean = false, openExternal: (LibraryItem) -> Unit) {
     val intent = when (item.format) {
         "epub", "txt" -> Intent(context, EpubReaderActivity::class.java).apply {
@@ -108,7 +108,7 @@ fun ShelfSection(
     var sort by remember(kind) { mutableStateOf(prefs.getString("shelf_sort", "recent") ?: "recent") }
     var series by remember(kind) { mutableStateOf<String?>(null) }
     var menu by remember { mutableStateOf<LibraryItem?>(null) }
-    val noun = if (kind == "books") "libros" else "cómics"
+    val noun = if (kind == "books") "books" else "comics"
 
     val shelf = library.filter { it.kind == kind }
     val folders = remember(shelf) { shelf.map { it.folder }.filter { it.isNotBlank() }.distinct().sortedBy { it.lowercase() } }
@@ -124,16 +124,26 @@ fun ShelfSection(
     val reading = remember(shelf) { shelf.filter { it.started }.sortedByDescending { it.openedAt }.take(12) }
 
     Column(modifier.fillMaxWidth()) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 10.dp)) {
-            ActionButton("＋ Archivos", primary = true, onClick = onAddFiles)
-            ActionButton("▤ Carpeta", primary = false, onClick = onAddFolder)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp)) {
+            ActionButton("＋ Add files", primary = true, onClick = onAddFiles)
+            ActionButton("▤ Add folder", primary = false, onClick = onAddFolder)
         }
         if (shelf.isEmpty()) {
-            Text(
-                if (kind == "books") "Tu estantería está vacía. Añade EPUB, PDF o TXT desde el teléfono, una SD o un USB, o elige una carpeta entera."
-                else "Tu estantería de cómics está vacía. Añade CBZ, CBR o PDF, o elige una carpeta y cada subcarpeta se convertirá en una serie.",
-                color = c.muted, fontSize = 14.sp, modifier = Modifier.padding(vertical = 18.dp),
-            )
+            Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 16.dp).clip(RoundedCornerShape(20.dp)).background(c.panel).padding(horizontal = 20.dp, vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.size(56.dp).clip(CircleShape).background(c.accent.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
+                    Text(if (kind == "books") "▤" else "▧", color = c.accent, fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(if (kind == "books") "Your bookshelf starts here" else "Build your comic collection", color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(5.dp))
+                Text(
+                    if (kind == "books") "Add EPUB, PDF, or TXT files from your phone, SD card, or USB drive. You can also scan an entire folder."
+                    else "Add CBZ, CBR, or PDF files, or scan a folder to organize its subfolders as series.",
+                    color = c.muted, fontSize = 13.sp, lineHeight = 19.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                )
+                Spacer(Modifier.height(14.dp))
+                ActionButton("＋ Add your first files", primary = true, onClick = onAddFiles)
+            }
             return@Column
         }
         LazyVerticalGrid(
@@ -144,12 +154,12 @@ fun ShelfSection(
             modifier = Modifier.weight(1f),
         ) {
             item(span = { GridItemSpan(maxLineSpan) }) {
-                SearchBox(query, "Buscar en $noun", { query = it })
+                SearchBox(query, "Search $noun", { query = it })
             }
             if (reading.isNotEmpty() && query.isEmpty() && series == null) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     Column {
-                        SectionLabel("Seguir leyendo")
+                        SectionLabel("Continue reading")
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             items(reading, key = { it.uri }) { item ->
                                 Box(Modifier.width(112.dp)) {
@@ -164,13 +174,13 @@ fun ShelfSection(
                 Column {
                     if (folders.size > 1) {
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState()).padding(bottom = 8.dp)) {
-                            Chip("Todas", series == null) { series = null }
+                            Chip("All", series == null) { series = null }
                             folders.forEach { f -> Chip(f, series == f) { series = if (series == f) null else f } }
                         }
                     }
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text("${shown.size} $noun", color = c.muted, fontSize = 12.sp, modifier = Modifier.weight(1f))
-                        listOf("recent" to "Recientes", "title" to "Título", "added" to "Añadidos").forEach { (value, label) ->
+                        listOf("recent" to "Recent", "title" to "Title", "added" to "Added").forEach { (value, label) ->
                             Chip(label, sort == value) { sort = value; prefs.edit().putString("shelf_sort", value).apply() }
                         }
                     }
