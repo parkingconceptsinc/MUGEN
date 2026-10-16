@@ -15,6 +15,13 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -42,6 +49,7 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
@@ -399,15 +407,42 @@ private fun MortimerApp(
                     }
                     Column(Modifier.weight(1f)) {
                         Text("MUGEN PLAYER", color = c.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
-                        Text(SECTIONS.first { it.id == section }.label, color = c.text, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold)
+                        Text(SECTIONS.first { it.id == section }.label, color = c.text, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.headlineMedium.copy(shadow = androidx.compose.ui.graphics.Shadow(color = c.accent.copy(alpha = 0.24f), blurRadius = 14f)))
                     }
                 }
                 importing?.let {
                     Text(it, color = c.accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
                 }
                 Spacer(Modifier.height(12.dp))
-                val content = Modifier.weight(1f)
-                when (section) {
+                AnimatedContent(
+                    targetState = section,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .pointerInput(section) {
+                            var horizontalDistance = 0f
+                            detectHorizontalDragGestures(
+                                onHorizontalDrag = { _, dragAmount -> horizontalDistance += dragAmount },
+                                onDragEnd = {
+                                    val swipeableSections = listOf("videos", "books", "comics")
+                                    val index = swipeableSections.indexOf(section)
+                                    if (index >= 0 && kotlin.math.abs(horizontalDistance) >= 72.dp.toPx()) {
+                                        val direction = if (horizontalDistance < 0f) 1 else -1
+                                        section = swipeableSections[(index + direction + swipeableSections.size) % swipeableSections.size]
+                                    }
+                                    horizontalDistance = 0f
+                                },
+                                onDragCancel = { horizontalDistance = 0f },
+                            )
+                        },
+                    transitionSpec = {
+                        (fadeIn(tween(180)) + slideInHorizontally(tween(220)) { it / 12 }) togetherWith
+                            (fadeOut(tween(120)) + slideOutHorizontally(tween(180)) { -it / 12 })
+                    },
+                    label = "MUGEN section transition",
+                ) { targetSection ->
+                    val content = Modifier.fillMaxSize()
+                    when (targetSection) {
                     "home" -> HomeSection(library, content, onGo = { section = it }, openExternal = { openExternal(it.androidUri, mimeForItem(it)) })
                     "music" -> MusicSection(library, currentUri, content, onAddFiles = { addFiles("audio") }, onAddFolder = { addFolder("audio") },
                         onPlay = { list, i -> playList(list, i) },
@@ -422,8 +457,8 @@ private fun MortimerApp(
                         onPlay = { item -> videoOpen = item; player.setMediaItem(mediaItemFor(item)); player.prepare(); player.play() },
                         onRemove = { item -> Covers.forget(context, item.uri); commit(library.filter { it.uri != item.uri }) })
                     "books", "comics" -> ShelfSection(
-                        kind = section, library = library, modifier = content,
-                        onAddFiles = { addFiles(section) }, onAddFolder = { addFolder(section) },
+                        kind = targetSection, library = library, modifier = content,
+                        onAddFiles = { addFiles(targetSection) }, onAddFolder = { addFolder(targetSection) },
                         onChange = { commit(it) }, openExternal = { openExternal(it.androidUri, mimeForItem(it)) },
                     )
                     "photos" -> PhotosSection(content)
@@ -434,6 +469,7 @@ private fun MortimerApp(
                     }
                     "settings" -> SettingsSection(library, themePref, onTheme, palettePref, onPalette, player, content, onEqualizer = { section = "eq" },
                         onResetProgress = { commit(library.map { it.copy(progress = 0f, position = "", openedAt = 0) }) })
+                    }
                 }
                 if (current != null && section != "playing" && section != "photos") {
                     MiniPlayer(player, current, currentTitle, isPlaying, playbackError) { section = "playing" }
