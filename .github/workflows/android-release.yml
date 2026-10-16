@@ -70,12 +70,13 @@ jobs:
           apksigner_path="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -n 1)"
           test -x "$apksigner_path" || { echo "::error::Android apksigner tool was not found."; exit 1; }
           "$apksigner_path" verify --verbose --print-certs "$apk"
-          sha256sum "$apk" | awk '{ print $1 "  app-release.apk" }' > "$apk.sha256"
+          cp "$apk" "$RUNNER_TEMP/MUGEN.apk"
+          sha256sum "$RUNNER_TEMP/MUGEN.apk" | awk '{ print $1 "  MUGEN.apk" }' > "$RUNNER_TEMP/MUGEN.apk.sha256"
       - name: Publish APK release
         uses: softprops/action-gh-release@v2
         with:
           name: MUGEN APK v${{ steps.version.outputs.name }}
           generate_release_notes: true
           files: |
-            android/app/build/outputs/apk/release/app-release.apk
-            android/app/build/outputs/apk/release/app-release.apk.sha256
+            ${{ runner.temp }}/MUGEN.apk
+            ${{ runner.temp }}/MUGEN.apk.sha256

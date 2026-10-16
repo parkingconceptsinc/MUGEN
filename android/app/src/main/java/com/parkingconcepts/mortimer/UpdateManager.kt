@@ -38,9 +38,9 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
-private data class MortimerRelease(val tag: String, val versionCode: Int, val apkUrl: String, val apkName: String)
+private data class MugenRelease(val tag: String, val versionCode: Int, val apkUrl: String, val apkName: String)
 
-private fun fetchLatestMortimerRelease(): MortimerRelease {
+private fun fetchLatestMugenRelease(): MugenRelease {
     val connection = (URL("https://api.github.com/repos/parkingconceptsinc/MUGEN/releases?per_page=100").openConnection() as HttpURLConnection).apply {
         requestMethod = "GET"
         connectTimeout = 8000
@@ -53,7 +53,7 @@ private fun fetchLatestMortimerRelease(): MortimerRelease {
             throw IllegalStateException("GitHub update check failed (HTTP ${connection.responseCode}). Check your connection and try again.")
         }
         val releases = connection.inputStream.bufferedReader(Charsets.UTF_8).use { org.json.JSONArray(it.readText()) }
-        var best: MortimerRelease? = null
+        var best: MugenRelease? = null
         for (releaseIndex in 0 until releases.length()) {
             val releaseJson = releases.optJSONObject(releaseIndex) ?: continue
             if (releaseJson.optBoolean("draft", false) || releaseJson.optBoolean("prerelease", false)) continue
@@ -66,15 +66,15 @@ private fun fetchLatestMortimerRelease(): MortimerRelease {
                 val asset = assets.optJSONObject(assetIndex) ?: continue
                 val name = asset.optString("name")
                 val url = asset.optString("browser_download_url")
-                if (name.equals("app-release.apk", ignoreCase = true) && isTrustedGitHubReleaseAsset(url)) {
-                    val candidate = MortimerRelease(tag, versionCode, url, name)
+                if (name.equals("MUGEN.apk", ignoreCase = true) && isTrustedGitHubReleaseAsset(url)) {
+                    val candidate = MugenRelease(tag, versionCode, url, name)
                     if (best == null || candidate.versionCode > best.versionCode) best = candidate
                     break
                 }
             }
         }
         return best ?: throw IllegalStateException(
-            "No Android update is published yet. A signed APK must be attached to a GitHub Release tagged android-vMAJOR.MINOR.PATCH."
+            "No MUGEN Android update is published yet. A signed MUGEN.apk must be attached to a GitHub Release tagged android-vMAJOR.MINOR.PATCH."
         )
     } finally {
         connection.disconnect()
@@ -87,9 +87,9 @@ internal fun AppUpdateCard() {
     val c = LocalMortimerColors.current
     val scope = rememberCoroutineScope()
     var checking by remember { mutableStateOf(false) }
-    var release by remember { mutableStateOf<MortimerRelease?>(null) }
+    var release by remember { mutableStateOf<MugenRelease?>(null) }
     var downloadedName by remember { mutableStateOf<String?>(null) }
-    var downloadingRelease by remember { mutableStateOf<MortimerRelease?>(null) }
+    var downloadingRelease by remember { mutableStateOf<MugenRelease?>(null) }
     var downloadId by remember { mutableStateOf<Long?>(null) }
     var message by remember { mutableStateOf("Checking for updates…") }
 
@@ -99,7 +99,7 @@ internal fun AppUpdateCard() {
         message = "Checking for updates…"
         scope.launch {
             try {
-                val latest = withContext(Dispatchers.IO) { fetchLatestMortimerRelease() }
+                val latest = withContext(Dispatchers.IO) { fetchLatestMugenRelease() }
                 release = if (latest.versionCode > BuildConfig.VERSION_CODE) latest else null
                 message = if (release != null) "Version ${latest.tag} is available." else "You're using the latest published version."
             } catch (error: Exception) {
