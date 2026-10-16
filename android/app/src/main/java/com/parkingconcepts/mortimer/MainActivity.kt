@@ -41,6 +41,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -494,6 +496,8 @@ private fun VideoPlayerDialog(
     val c = LocalMortimerColors.current
     var controlsVisible by remember(item.uri) { mutableStateOf(true) }
     var isPlaying by remember(item.uri) { mutableStateOf(player.isPlaying) }
+    var interactionTick by remember(item.uri) { mutableIntStateOf(0) }
+    var seekFeedback by remember(item.uri) { mutableStateOf<String?>(null) }
     var seeking by remember(item.uri) { mutableStateOf<Float?>(null) }
     var speedMenu by remember { mutableStateOf(false) }
     var fitMenu by remember { mutableStateOf(false) }
@@ -510,10 +514,16 @@ private fun VideoPlayerDialog(
         player.addListener(listener)
         onDispose { player.removeListener(listener) }
     }
-    LaunchedEffect(controlsVisible, isPlaying, error) {
-        if (controlsVisible && isPlaying && error == null) {
+    LaunchedEffect(controlsVisible, isPlaying, error, interactionTick) {
+        if (controlsVisible && isPlaying && error == null && !speedMenu && !fitMenu && seeking == null) {
             delay(4200)
             controlsVisible = false
+        }
+    }
+    LaunchedEffect(seekFeedback) {
+        if (seekFeedback != null) {
+            delay(750)
+            seekFeedback = null
         }
     }
 
@@ -547,13 +557,40 @@ private fun VideoPlayerDialog(
                 modifier = Modifier.fillMaxSize(),
             )
 
-            // Transparent tap target lets the viewer reveal controls without fighting the sliders.
+            // Tap toggles chrome; double-tap left/right skips 10 seconds like a modern mobile player.
             Box(
-                Modifier.fillMaxSize().clickable(
-                    indication = null,
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                ) { controlsVisible = !controlsVisible }
+                Modifier.fillMaxSize().pointerInput(item.uri, controlsVisible) {
+                    detectTapGestures(
+                        onTap = {
+                            controlsVisible = !controlsVisible
+                            interactionTick++
+                        },
+                        onDoubleTap = { offset ->
+                            val fraction = offset.x / size.width.coerceAtLeast(1)
+                            if (fraction < 0.35f) {
+                                player.seekTo((player.currentPosition - 10_000L).coerceAtLeast(0L))
+                                seekFeedback = "−10 sec"
+                            } else if (fraction > 0.65f) {
+                                val end = player.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
+                                player.seekTo((player.currentPosition + 10_000L).coerceAtMost(end))
+                                seekFeedback = "+10 sec"
+                            } else {
+                                if (player.isPlaying) player.pause() else player.play()
+                            }
+                            controlsVisible = true
+                            interactionTick++
+                        },
+                    )
+                }
             )
+            seekFeedback?.let { feedback ->
+                Box(
+                    Modifier.align(Alignment.Center).clip(RoundedCornerShape(24.dp))
+                        .background(Color(0xB8000000)).padding(horizontal = 22.dp, vertical = 14.dp)
+                ) {
+                    Text(feedback, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+            }
 
             if (controlsVisible || error != null) {
                 Box(
@@ -642,15 +679,18 @@ private fun VideoPlayerDialog(
                             VideoControlButton("−10", "Back 10 seconds", size = if (compact) 38 else 44) {
                                 player.seekTo((player.currentPosition - 10_000L).coerceAtLeast(0L))
                                 controlsVisible = true
+                                interactionTick++
                             }
                             VideoControlButton(if (isPlaying) "Ⅱ" else "▶", if (isPlaying) "Pause" else "Play", primary = true, size = if (compact) 48 else 58) {
                                 if (player.isPlaying) player.pause() else player.play()
                                 controlsVisible = true
+                                interactionTick++
                             }
                             VideoControlButton("+10", "Forward 10 seconds", size = if (compact) 38 else 44) {
                                 val end = player.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
                                 player.seekTo((player.currentPosition + 10_000L).coerceAtMost(end))
                                 controlsVisible = true
+                                interactionTick++
                             }
                             if (!compact) SpeedControl(speed, speedMenu, onOpen = { speedMenu = true }, onDismiss = { speedMenu = false }, onSelect = { rate ->
                                 speed = rate
