@@ -40,8 +40,8 @@ data class LibraryItem(
         get() = when {
             finished -> "Finished"
             openedAt == 0L || progress <= 0f -> if (pages > 0 && (format == "cbz" || format == "cbr" || format == "pdf")) "$pages pages" else format.uppercase()
-            format == "epub" || format == "txt" -> "${(progress * 100).toInt().coerceAtLeast(1)}% leído"
-            else -> "Página ${position.toIntOrNull()?.plus(1) ?: 1} de $pages"
+            format == "epub" || format == "txt" -> "${(progress * 100).toInt().coerceAtLeast(1)}% read"
+            else -> "Page ${position.toIntOrNull()?.plus(1) ?: 1} of $pages"
         }
 
     fun toJson(): JSONObject = JSONObject()
@@ -53,7 +53,7 @@ data class LibraryItem(
     companion object {
         fun fromJson(o: JSONObject) = LibraryItem(
             uri = o.getString("uri"),
-            title = o.optString("title", "Archivo"),
+            title = o.optString("title", "File"),
             kind = o.optString("kind", "books"),
             format = o.optString("format", "other"),
             folder = o.optString("folder", ""),
@@ -164,7 +164,7 @@ fun persistReadPermission(context: Context, uri: Uri) {
 /** Builds library items for files picked one by one. */
 fun itemsFromUris(context: Context, uris: List<Uri>, kind: String): List<LibraryItem> = uris.map { uri ->
     persistReadPermission(context, uri)
-    val name = displayName(context, uri, "Archivo")
+    val name = displayName(context, uri, "File")
     LibraryItem(uri = uri.toString(), title = name, kind = kind, format = formatOf(name, kind), size = fileSize(context, uri))
 }
 
