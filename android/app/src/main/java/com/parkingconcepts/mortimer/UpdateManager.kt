@@ -125,8 +125,8 @@ internal fun AppUpdateCard() {
                         val latest = release ?: return@Button
                         try {
                             val request = DownloadManager.Request(Uri.parse(latest.apkUrl))
-                                .setTitle("Mortimer Player update ${latest.tag}")
-                                .setDescription("Downloading the official Mortimer Player APK")
+                                .setTitle("MUGEN update ${latest.tag}")
+                                .setDescription("Downloading the official MUGEN APK")
                                 .setMimeType("application/vnd.android.package-archive")
                                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                                 .setAllowedOverMetered(true)
@@ -153,7 +153,7 @@ internal fun AppUpdateCard() {
                         return@Button
                     }
                     if (!context.packageManager.canRequestPackageInstalls()) {
-                        message = "Allow installs from Mortimer Player in Android Settings, then return and tap Install update."
+                        message = "Allow installs from MUGEN in Android Settings, then return and tap Install update."
                         context.startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                         return@Button
                     }
