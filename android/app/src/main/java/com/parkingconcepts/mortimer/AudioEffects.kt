@@ -3,6 +3,7 @@ package com.parkingconcepts.mortimer
 import android.content.Context
 import android.media.audiofx.Equalizer
 import android.media.audiofx.LoudnessEnhancer
+import android.media.audiofx.Virtualizer
 import androidx.annotation.OptIn
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
@@ -52,6 +53,10 @@ object AudioEffects {
         val balance: Float = 0f,
         /** 1 … 2 */
         val boost: Float = 1f,
+        /** Device-backed stereo virtualization; this is not Dolby-certified processing. */
+        val surroundEnabled: Boolean = false,
+        /** Virtualizer strength normalized to 0..1 for persistence and UI. */
+        val surroundStrength: Float = 0.5f,
     )
 
     private const val PREFS = "mortimer_prefs"
@@ -81,6 +86,8 @@ object AudioEffects {
                 preamp = o.optDouble("preamp", 0.0).toFloat().coerceIn(-RANGE, RANGE),
                 balance = o.optDouble("balance", 0.0).toFloat().coerceIn(-1f, 1f),
                 boost = o.optDouble("boost", 1.0).toFloat().coerceIn(1f, 2f),
+                surroundEnabled = o.optBoolean("surroundEnabled", false),
+                surroundStrength = o.optDouble("surroundStrength", 0.5).toFloat().coerceIn(0f, 1f),
             )
         }.getOrDefault(Settings())
     }
@@ -90,6 +97,7 @@ object AudioEffects {
             .put("enabled", s.enabled).put("preset", s.preset)
             .put("bands", JSONArray(s.bands.map { it.toDouble() }))
             .put("preamp", s.preamp.toDouble()).put("balance", s.balance.toDouble()).put("boost", s.boost.toDouble())
+            .put("surroundEnabled", s.surroundEnabled).put("surroundStrength", s.surroundStrength.toDouble())
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString("audio_effects", o.toString()).apply()
     }
 
@@ -112,6 +120,7 @@ object AudioEffects {
 
     private var equalizer: Equalizer? = null
     private var loudness: LoudnessEnhancer? = null
+    private var virtualizer: Virtualizer? = null
     private var current = Settings()
 
     /** True once the player's audio session has an equalizer this device supports. */
@@ -122,6 +131,7 @@ object AudioEffects {
         release()
         equalizer = runCatching { Equalizer(0, sessionId) }.getOrNull()
         loudness = runCatching { LoudnessEnhancer(sessionId) }.getOrNull()
+        virtualizer = runCatching { Virtualizer(0, sessionId) }.getOrNull()
         apply(load(context))
     }
 
@@ -129,8 +139,10 @@ object AudioEffects {
     fun release() {
         runCatching { equalizer?.release() }
         runCatching { loudness?.release() }
+        runCatching { virtualizer?.release() }
         equalizer = null
         loudness = null
+        virtualizer = null
     }
 
     /** Gain of the 10-band curve at [hz], interpolated on a log-frequency scale. */
@@ -170,6 +182,16 @@ object AudioEffects {
                 val gainDb = (if (s.enabled) maxOf(0f, s.preamp) else 0f) + 20f * log10(s.boost)
                 le.setTargetGain((gainDb * 100).toInt())
                 le.enabled = gainDb > 0.01f
+            }
+        }
+        virtualizer?.let { v ->
+            runCatching {
+                if (v.strengthSupported) {
+                    v.setStrength((s.surroundStrength.coerceIn(0f, 1f) * 1000).toInt().toShort())
+                    v.enabled = s.surroundEnabled
+                } else {
+                    v.enabled = false
+                }
             }
         }
     }
