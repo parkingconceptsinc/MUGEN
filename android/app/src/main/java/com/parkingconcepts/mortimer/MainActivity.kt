@@ -451,7 +451,7 @@ private fun Sidebar(section: String, modifier: Modifier, onPick: (String) -> Uni
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0x33000000), Color(0x99000000)))))
         Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 20.dp)) {
             Text(
-                "MORTIMER\nPLAYER", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Black, letterSpacing = 3.sp, lineHeight = 24.sp,
+                "MUGEN\nPLAYER", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Black, letterSpacing = 3.sp, lineHeight = 24.sp,
                 style = TextStyle(shadow = Shadow(color = accent, blurRadius = 24f)),
                 modifier = Modifier.padding(start = 10.dp, bottom = 22.dp),
             )
