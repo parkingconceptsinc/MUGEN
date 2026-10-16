@@ -67,8 +67,10 @@ jobs:
         run: |
           apk="app/build/outputs/apk/release/app-release.apk"
           test -s "$apk" || { echo "::error::Release APK is missing or empty."; exit 1; }
-          apksigner verify --verbose --print-certs "$apk"
-          sha256sum "$apk" > "$apk.sha256"
+          apksigner_path="$(find "$ANDROID_HOME/build-tools" -maxdepth 2 -type f -name apksigner | sort -V | tail -n 1)"
+          test -x "$apksigner_path" || { echo "::error::Android apksigner tool was not found."; exit 1; }
+          "$apksigner_path" verify --verbose --print-certs "$apk"
+          sha256sum "$apk" | awk '{ print $1 "  app-release.apk" }' > "$apk.sha256"
       - name: Publish APK release
         uses: softprops/action-gh-release@v2
         with:
