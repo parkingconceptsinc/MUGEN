@@ -935,7 +935,7 @@ private fun SettingsSection(library: List<LibraryItem>, themePref: String, onThe
                         Box(
                             Modifier.size(34.dp).clip(CircleShape).background(if (palettePref == id) c.text else c.panel2).padding(3.dp)
                                 .clip(CircleShape).background(swatch),
-                        )
+                        ) {}
                         Text(label, color = if (palettePref == id) c.accent else c.muted, fontSize = 11.sp, fontWeight = if (palettePref == id) FontWeight.Bold else FontWeight.Medium, modifier = Modifier.padding(top = 5.dp))
                     }
                 }
