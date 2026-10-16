@@ -174,9 +174,35 @@ private val SECTIONS = listOf(
 )
 private val TABS = listOf("home", "music", "books", "comics", "photos")
 
+/**
+ * SAF content URIs often end in an opaque document ID instead of a filename.
+ * Explicitly set the container MIME type for video files so Media3 does not
+ * have to guess the container from a URI that has no extension.
+ */
+private fun videoMimeType(name: String): String? = when (extensionOf(name)) {
+    "mp4" -> "video/mp4"
+    "m4v" -> "video/x-m4v"
+    "mkv" -> "video/x-matroska"
+    "webm" -> "video/webm"
+    "mov" -> "video/quicktime"
+    "avi" -> "video/avi"
+    "3gp", "3g2" -> "video/3gpp"
+    "ts", "m2ts", "mts" -> "video/mp2t"
+    "mpg", "mpeg" -> "video/mpeg"
+    "wmv" -> "video/x-ms-wmv"
+    "flv" -> "video/x-flv"
+    "ogv" -> "video/ogg"
+    else -> null
+}
+
 private fun mediaItemFor(item: LibraryItem): MediaItem = MediaItem.Builder()
     .setUri(item.androidUri)
     .setMediaId(item.uri)
+    .apply {
+        if (item.kind == "videos" || item.format == "video") {
+            videoMimeType(item.title)?.let { setMimeType(it) }
+        }
+    }
     .setMediaMetadata(
         MediaMetadata.Builder()
             .setTitle(item.title)
@@ -433,11 +459,42 @@ private fun MortimerApp(
         Dialog(onDismissRequest = { videoOpen = null; player.pause() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
             Box(Modifier.fillMaxSize().background(Color.Black)) {
                 AndroidView(
-                    factory = { ctx -> PlayerView(ctx).apply { this.player = player; useController = true; setShowNextButton(false); setShowPreviousButton(false) } },
+                    factory = { ctx -> PlayerView(ctx).apply {
+                        this.player = player
+                        useController = true
+                        setShowNextButton(false)
+                        setShowPreviousButton(false)
+                        setKeepContentOnPlayerReset(true)
+                        setShutterBackgroundColor(android.graphics.Color.BLACK)
+                    } },
                     update = { it.player = player },
                     onRelease = { it.player = null },
                     modifier = Modifier.fillMaxSize(),
                 )
+                playbackError?.let { message ->
+                    Column(
+                        Modifier.align(Alignment.Center).padding(24.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xE6202028)).padding(18.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text("VIDEO PLAYBACK FAILED", color = Color.White, fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.height(8.dp))
+                        Text(message, color = Color.White, textAlign = TextAlign.Center)
+                        Spacer(Modifier.height(12.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = {
+                                playbackError = null
+                                player.seekTo(0)
+                                player.prepare()
+                                player.play()
+                            }) { Text("Retry", color = Color.White) }
+                            TextButton(onClick = { videoOpen = null; player.pause(); playbackError = null }) {
+                                Text("Close", color = Color.White)
+                            }
+                        }
+                    }
+                }
                 Row(Modifier.fillMaxWidth().statusBarsPadding().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(44.dp).clip(CircleShape).background(Color(0x66000000)).clickable { videoOpen = null; player.pause() }, contentAlignment = Alignment.Center) {
                         Text("✕", color = Color.White, fontSize = 18.sp)
