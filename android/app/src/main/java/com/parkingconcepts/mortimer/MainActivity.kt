@@ -41,6 +41,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -494,6 +496,8 @@ private fun VideoPlayerDialog(
     val c = LocalMortimerColors.current
     var controlsVisible by remember(item.uri) { mutableStateOf(true) }
     var isPlaying by remember(item.uri) { mutableStateOf(player.isPlaying) }
+    var interactionTick by remember(item.uri) { mutableIntStateOf(0) }
+    var seekFeedback by remember(item.uri) { mutableStateOf<String?>(null) }
     var seeking by remember(item.uri) { mutableStateOf<Float?>(null) }
     var speedMenu by remember { mutableStateOf(false) }
     var fitMenu by remember { mutableStateOf(false) }
@@ -510,10 +514,16 @@ private fun VideoPlayerDialog(
         player.addListener(listener)
         onDispose { player.removeListener(listener) }
     }
-    LaunchedEffect(controlsVisible, isPlaying, error) {
-        if (controlsVisible && isPlaying && error == null) {
+    LaunchedEffect(controlsVisible, isPlaying, error, interactionTick, speedMenu, fitMenu, seeking) {
+        if (controlsVisible && isPlaying && error == null && !speedMenu && !fitMenu && seeking == null) {
             delay(4200)
             controlsVisible = false
+        }
+    }
+    LaunchedEffect(seekFeedback) {
+        if (seekFeedback != null) {
+            delay(750)
+            seekFeedback = null
         }
     }
 
@@ -547,13 +557,40 @@ private fun VideoPlayerDialog(
                 modifier = Modifier.fillMaxSize(),
             )
 
-            // Transparent tap target lets the viewer reveal controls without fighting the sliders.
+            // Tap toggles chrome; double-tap left/right skips 10 seconds like a modern mobile player.
             Box(
-                Modifier.fillMaxSize().clickable(
-                    indication = null,
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
-                ) { controlsVisible = !controlsVisible }
+                Modifier.fillMaxSize().pointerInput(item.uri, controlsVisible) {
+                    detectTapGestures(
+                        onTap = {
+                            controlsVisible = !controlsVisible
+                            interactionTick++
+                        },
+                        onDoubleTap = { offset ->
+                            val fraction = offset.x / size.width.coerceAtLeast(1)
+                            if (fraction < 0.35f) {
+                                player.seekTo((player.currentPosition - 10_000L).coerceAtLeast(0L))
+                                seekFeedback = "−10 sec"
+                            } else if (fraction > 0.65f) {
+                                val end = player.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
+                                player.seekTo((player.currentPosition + 10_000L).coerceAtMost(end))
+                                seekFeedback = "+10 sec"
+                            } else {
+                                if (player.isPlaying) player.pause() else player.play()
+                            }
+                            controlsVisible = true
+                            interactionTick++
+                        },
+                    )
+                }
             )
+            seekFeedback?.let { feedback ->
+                Box(
+                    Modifier.align(Alignment.Center).clip(RoundedCornerShape(24.dp))
+                        .background(Color(0xB8000000)).padding(horizontal = 22.dp, vertical = 14.dp)
+                ) {
+                    Text(feedback, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                }
+            }
 
             if (controlsVisible || error != null) {
                 Box(
@@ -597,73 +634,79 @@ private fun VideoPlayerDialog(
                     }
                 }
 
-                Box(
-                    Modifier.fillMaxWidth().height(184.dp).align(Alignment.BottomCenter)
-                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xF0000000))))
-                )
-                Column(
+                BoxWithConstraints(
                     Modifier.fillMaxWidth().align(Alignment.BottomCenter).navigationBarsPadding()
-                        .padding(horizontal = 18.dp, vertical = 12.dp),
                 ) {
-                    Slider(
-                        value = (seeking ?: if (duration > 0) position.toFloat() / duration else 0f).coerceIn(0f, 1f),
-                        onValueChange = { seeking = it },
-                        onValueChangeFinished = {
-                            seeking?.let { fraction ->
-                                if (duration > 0) player.seekTo((fraction * duration).toLong())
-                            }
-                            seeking = null
-                        },
-                        colors = SliderDefaults.colors(
-                            thumbColor = c.accent,
-                            activeTrackColor = c.accent,
-                            inactiveTrackColor = Color.White.copy(alpha = 0.35f),
-                        ),
+                    val compact = maxHeight < 430.dp || maxWidth < 380.dp
+                    Box(
+                        Modifier.fillMaxWidth().height(if (compact) 146.dp else 184.dp)
+                            .align(Alignment.BottomCenter)
+                            .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xF0000000))))
                     )
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text(formatTime(seeking?.let { (it * duration).toLong() } ?: position),
-                            color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                        Spacer(Modifier.weight(1f))
-                        Text("-" + formatTime((duration - (seeking?.let { (it * duration).toLong() } ?: position)).coerceAtLeast(0L)),
-                            color = Color.White.copy(alpha = 0.72f), fontSize = 12.sp)
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    Column(
+                        Modifier.fillMaxWidth().align(Alignment.BottomCenter)
+                            .padding(horizontal = if (compact) 10.dp else 18.dp, vertical = if (compact) 4.dp else 12.dp),
                     ) {
-                        VideoControlButton("−10", "Back 10 seconds") {
-                            player.seekTo((player.currentPosition - 10_000L).coerceAtLeast(0L))
-                            controlsVisible = true
-                        }
-                        VideoControlButton(if (isPlaying) "Ⅱ" else "▶", if (isPlaying) "Pause" else "Play", primary = true, size = 58) {
-                            if (player.isPlaying) player.pause() else player.play()
-                            controlsVisible = true
-                        }
-                        VideoControlButton("+10", "Forward 10 seconds") {
-                            val end = player.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
-                            player.seekTo((player.currentPosition + 10_000L).coerceAtMost(end))
-                            controlsVisible = true
-                        }
-                        Box {
-                            Text(
-                                "${"%.2f".format(speed)}×", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                                modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0x66000000))
-                                    .clickable { speedMenu = true }.padding(horizontal = 12.dp, vertical = 10.dp),
-                            )
-                            DropdownMenu(expanded = speedMenu, onDismissRequest = { speedMenu = false }) {
-                                listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f).forEach { rate ->
-                                    DropdownMenuItem(
-                                        text = { Text(if (rate == 1f) "Normal" else "${rate}×") },
-                                        onClick = {
-                                            speed = rate
-                                            player.playbackParameters = androidx.media3.common.PlaybackParameters(rate, player.playbackParameters.pitch)
-                                            speedMenu = false
-                                            controlsVisible = true
-                                        },
-                                    )
+                        Slider(
+                            value = (seeking ?: if (duration > 0) position.toFloat() / duration else 0f).coerceIn(0f, 1f),
+                            onValueChange = { seeking = it },
+                            onValueChangeFinished = {
+                                seeking?.let { fraction ->
+                                    if (duration > 0) player.seekTo((fraction * duration).toLong())
                                 }
+                                seeking = null
+                            },
+                            modifier = Modifier.height(if (compact) 30.dp else 40.dp),
+                            colors = SliderDefaults.colors(
+                                thumbColor = c.accent,
+                                activeTrackColor = c.accent,
+                                inactiveTrackColor = Color.White.copy(alpha = 0.35f),
+                            ),
+                        )
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(formatTime(seeking?.let { (it * duration).toLong() } ?: position),
+                                color = Color.White, fontSize = if (compact) 10.sp else 12.sp, fontWeight = FontWeight.Medium)
+                            Spacer(Modifier.weight(1f))
+                            Text("-" + formatTime((duration - (seeking?.let { (it * duration).toLong() } ?: position)).coerceAtLeast(0L)),
+                                color = Color.White.copy(alpha = 0.72f), fontSize = if (compact) 10.sp else 12.sp)
+                        }
+                        Spacer(Modifier.height(if (compact) 2.dp else 8.dp))
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceEvenly,
+                        ) {
+                            VideoControlButton("−10", "Back 10 seconds", size = if (compact) 38 else 44) {
+                                player.seekTo((player.currentPosition - 10_000L).coerceAtLeast(0L))
+                                controlsVisible = true
+                                interactionTick++
+                            }
+                            VideoControlButton(if (isPlaying) "Ⅱ" else "▶", if (isPlaying) "Pause" else "Play", primary = true, size = if (compact) 48 else 58) {
+                                if (player.isPlaying) player.pause() else player.play()
+                                controlsVisible = true
+                                interactionTick++
+                            }
+                            VideoControlButton("+10", "Forward 10 seconds", size = if (compact) 38 else 44) {
+                                val end = player.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
+                                player.seekTo((player.currentPosition + 10_000L).coerceAtMost(end))
+                                controlsVisible = true
+                                interactionTick++
+                            }
+                            if (!compact) SpeedControl(speed, speedMenu, onOpen = { speedMenu = true }, onDismiss = { speedMenu = false }, onSelect = { rate ->
+                                speed = rate
+                                player.playbackParameters = androidx.media3.common.PlaybackParameters(rate, player.playbackParameters.pitch)
+                                speedMenu = false
+                                controlsVisible = true
+                            })
+                        }
+                        if (compact) {
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                                SpeedControl(speed, speedMenu, onOpen = { speedMenu = true }, onDismiss = { speedMenu = false }, onSelect = { rate ->
+                                    speed = rate
+                                    player.playbackParameters = androidx.media3.common.PlaybackParameters(rate, player.playbackParameters.pitch)
+                                    speedMenu = false
+                                    controlsVisible = true
+                                })
                             }
                         }
                     }
@@ -687,6 +730,31 @@ private fun VideoPlayerDialog(
                         OutlinedButton(onClick = { onErrorDismiss(); onClose() }) { Text("Close", color = Color.White) }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SpeedControl(
+    speed: Float,
+    expanded: Boolean,
+    onOpen: () -> Unit,
+    onDismiss: () -> Unit,
+    onSelect: (Float) -> Unit,
+) {
+    Box {
+        Text(
+            "${"%.2f".format(speed)}×", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+            modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0x66000000))
+                .clickable(onClick = onOpen).padding(horizontal = 12.dp, vertical = 8.dp),
+        )
+        DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
+            listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f).forEach { rate ->
+                DropdownMenuItem(
+                    text = { Text(if (rate == 1f) "Normal" else "${rate}×") },
+                    onClick = { onSelect(rate) },
+                )
             }
         }
     }
