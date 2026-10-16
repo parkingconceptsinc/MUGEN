@@ -1506,3 +1506,75 @@ body {
 :root[data-theme="light"] :is(.nowPlaying, .photoViewer, .reader) .iconBtn:hover { background: #ffffff12; }
 :root[data-theme="light"] :is(.nowPlaying, .photoViewer, .reader) .range::-webkit-slider-runnable-track { background: linear-gradient(to right, var(--accent) var(--pct), #ffffff26 var(--pct)); }
 :root[data-theme="light"] :is(.nowPlaying, .photoViewer, .reader) .range::-moz-range-track { background: #ffffff26; }
+
+
+/* Responsive control sizing audit — prevent clipped labels and inconsistent text scale. */
+:root {
+  --control-font: clamp(0.8125rem, 0.78rem + 0.12vw, 0.9375rem);
+  --control-line: 1.25;
+}
+button, input, select, textarea {
+  font: inherit;
+  min-width: 0;
+}
+button {
+  line-height: var(--control-line);
+  max-width: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+button :is(span, b, strong, small, em) {
+  min-width: 0;
+}
+:where(.pill, .chip, .tag, .badge, .filterPill, .tab, .tabBtn, .segmented button) {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-width: 0;
+  font-size: var(--control-font);
+  line-height: var(--control-line);
+  overflow-wrap: anywhere;
+  white-space: normal;
+  text-align: center;
+}
+:where(.pill, .chip, .filterPill, .tab, .tabBtn, .segmented button) {
+  padding-inline: clamp(0.55rem, 2.2vw, 1rem);
+}
+:where(.actions, .actionRow, .toolbar, .filters, .chipRow, .pillRow, .tabbar, .tabs) {
+  min-width: 0;
+  flex-wrap: wrap;
+}
+:where(.actions, .actionRow, .toolbar, .filters, .chipRow, .pillRow, .tabbar, .tabs) > * {
+  min-width: 0;
+  max-width: 100%;
+}
+:where(.trackText, .rowMain, .rowTitle, .cardTitle, .tile b, .tile strong, .trackTitle, .subtitle, .meta) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+:where(.trackText, .rowTitle, .cardTitle, .tile b, .tile strong, .trackTitle) {
+  line-height: 1.25;
+}
+img, video, iframe, canvas, svg {
+  max-width: 100%;
+}
+@media (max-width: 420px) {
+  :where(.panel, .sheet, .dialog, .card, .tile) { min-width: 0; }
+  :where(.pill, .chip, .filterPill, .tab, .tabBtn, .segmented button) {
+    padding-block: 0.45rem;
+    padding-inline: 0.6rem;
+  }
+  :where(.toolbar, .filters, .chipRow, .pillRow, .tabbar, .tabs) { gap: 0.4rem; }
+}
+@media (min-width: 421px) and (max-width: 760px) {
+  :where(.pill, .chip, .filterPill, .tab, .tabBtn, .segmented button) {
+    padding-inline: 0.8rem;
+  }
+}
+@media (min-width: 761px) {
+  :where(.pill, .chip, .filterPill, .tab, .tabBtn, .segmented button) {
+    white-space: nowrap;
+    overflow-wrap: normal;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+}
