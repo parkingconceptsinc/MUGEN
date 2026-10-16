@@ -587,13 +587,21 @@ private fun MusicSection(
     BackHandler(enabled = group != null) { group = null }
 
     Column(modifier.fillMaxWidth()) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp)) {
             ActionButton("＋ Add music", primary = true, onClick = onAddFiles)
             ActionButton("▤ Add folder", primary = false, onClick = onAddFolder)
             if (filtered.isNotEmpty()) ActionButton("⤮ Shuffle", primary = false) { onPlay(filtered.shuffled(), 0) }
         }
         if (audio.isEmpty()) {
-            Text("Choose audio files or an entire folder from your phone, SD card, or USB drive.", color = c.muted, fontSize = 14.sp, modifier = Modifier.padding(vertical = 18.dp))
+            Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 16.dp).clip(RoundedCornerShape(20.dp)).background(c.panel).padding(horizontal = 20.dp, vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.size(56.dp).clip(CircleShape).background(c.accent.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) { Text("♫", color = c.accent, fontSize = 28.sp, fontWeight = FontWeight.Bold) }
+                Spacer(Modifier.height(12.dp))
+                Text("Your music starts here", color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(5.dp))
+                Text("Add tracks or scan a folder on your phone, SD card, or USB drive. Your library stays available in MUGEN.", color = c.muted, fontSize = 13.sp, lineHeight = 19.sp, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(14.dp))
+                ActionButton("＋ Add your first tracks", primary = true, onClick = onAddFiles)
+            }
             return@Column
         }
         SearchBox(query, "Search songs, artists, or albums", { query = it })
@@ -673,12 +681,20 @@ private fun VideosSection(library: List<LibraryItem>, modifier: Modifier, onAddF
     var query by remember { mutableStateOf("") }
     var menu by remember { mutableStateOf<LibraryItem?>(null) }
     Column(modifier.fillMaxWidth()) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 10.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp)) {
             ActionButton("＋ Add videos", primary = true, onClick = onAddFiles)
             ActionButton("▤ Add folder", primary = false, onClick = onAddFolder)
         }
         if (videos.isEmpty()) {
-            Text("Select videos from your device, SD card, or USB drive.", color = c.muted, fontSize = 14.sp, modifier = Modifier.padding(vertical = 18.dp))
+            Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 16.dp).clip(RoundedCornerShape(20.dp)).background(c.panel).padding(horizontal = 20.dp, vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.size(56.dp).clip(CircleShape).background(c.accent.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) { Text("▶", color = c.accent, fontSize = 24.sp, fontWeight = FontWeight.Bold) }
+                Spacer(Modifier.height(12.dp))
+                Text("Your video library is ready", color = c.text, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(5.dp))
+                Text("Add individual videos or scan a folder on your phone, SD card, or USB drive.", color = c.muted, fontSize = 13.sp, lineHeight = 19.sp, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(14.dp))
+                ActionButton("＋ Add your first videos", primary = true, onClick = onAddFiles)
+            }
             return@Column
         }
         SearchBox(query, "Search videos", { query = it }, Modifier.padding(bottom = 10.dp))
