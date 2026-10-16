@@ -105,7 +105,7 @@ class PlaybackService : MediaLibraryService() {
                 .setMediaId(ROOT_ID)
                 .setMediaMetadata(
                     MediaMetadata.Builder()
-                        .setTitle("Mortimer Player")
+                        .setTitle("MUGEN" )
                         .setIsBrowsable(true)
                         .setIsPlayable(false)
                         .build()

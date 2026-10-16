@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "MortimerPlayer"
+rootProject.name = "MUGEN"
 include(":app")

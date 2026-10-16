@@ -1,4 +1,4 @@
-name: Deploy Mortimer Player
+name: Deploy MUGEN PWA
 on:
   push:
     branches: [main]
