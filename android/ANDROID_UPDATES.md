@@ -1,6 +1,6 @@
 # Android APK updates
 
-Mortimer Player checks the GitHub latest release from the native Settings screen. Releases must be tagged `android-vMAJOR.MINOR.PATCH` and include the signed APK asset. For example, the next patch after `0.9.0` is `android-v0.9.1`.
+MUGEN APK checks the GitHub latest release from the native Settings screen. Releases must be tagged `android-vMAJOR.MINOR.PATCH` and include the signed APK asset. For example, the next patch after `0.9.0` is `android-v0.9.1`.
 
 ## One-time signing setup
 
