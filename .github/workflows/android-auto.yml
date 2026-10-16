@@ -5,6 +5,7 @@ on:
     paths:
       - "android/**"
       - ".github/workflows/android-auto.yml"
+      - ".github/workflows/android-release.yml"
   push:
     branches: [main]
     paths:
