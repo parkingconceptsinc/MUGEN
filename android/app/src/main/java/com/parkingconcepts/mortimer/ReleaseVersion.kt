@@ -1,6 +1,6 @@
 package com.parkingconcepts.mortimer
 
-import android.net.Uri
+import java.net.URI
 
 /**
  * Accept only canonical Android release tags. Keep this mapping identical to
@@ -19,9 +19,12 @@ internal fun parseAndroidVersionCode(tag: String): Int? {
 
 /** Only allow the canonical HTTPS GitHub release download host. */
 internal fun isTrustedGitHubReleaseAsset(rawUrl: String): Boolean {
-    val uri = runCatching { Uri.parse(rawUrl) }.getOrNull() ?: return false
-    return uri.scheme.equals("https", ignoreCase = true) &&
+    val uri = runCatching { URI(rawUrl) }.getOrNull() ?: return false
+    return uri.isAbsolute &&
+        uri.scheme.equals("https", ignoreCase = true) &&
         uri.host.equals("github.com", ignoreCase = true) &&
         uri.userInfo == null &&
-        uri.port == -1
+        uri.port == -1 &&
+        uri.rawAuthority.equals("github.com", ignoreCase = true) &&
+        uri.rawPath.startsWith("/parkingconceptsinc/MUGEN/releases/download/")
 }
