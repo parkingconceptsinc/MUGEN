@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#080b10">
+  <title>MUGEN · Device Preview Lab</title>
+  <style>
+    :root{color-scheme:dark;--bg:#080b10;--panel:#111722;--line:#273243;--muted:#9aa8bb;--text:#f4f7fb;--accent:#9dfc52}
+    *{box-sizing:border-box}
+    body{margin:0;background:radial-gradient(ellipse at 50% -15%,#1c2a38 0,transparent 50%),var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+    button{font:inherit;cursor:pointer}
+    .shell{max-width:1500px;margin:auto;padding:24px clamp(14px,3vw,36px) 40px}
+    header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px}
+    .eyebrow{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);font-weight:800}
+    h1{font-size:clamp(25px,4vw,38px);line-height:1.1;margin:5px 0 8px;letter-spacing:-.04em}
+    .sub{color:var(--muted);max-width:720px;margin:0}
+    .pill{border:1px solid #3a4b60;background:#111a26;border-radius:999px;padding:8px 12px;color:#d9e4f0;white-space:nowrap;font-size:12px}
+    .grid{display:grid;grid-template-columns:minmax(280px, .8fr) minmax(460px,1.4fr);gap:20px;align-items:start}
+    .panel{background:linear-gradient(180deg,#121a26,#0d121b);border:1px solid var(--line);border-radius:20px;padding:18px;min-width:0;box-shadow:0 18px 60px #0005}
+    .panel-head{display:flex;align-items:start;justify-content:space-between;gap:12px;margin-bottom:14px}
+    h2{font-size:16px;margin:0 0 3px}.hint{font-size:12px;color:var(--muted);margin:0}
+    .frame-wrap{display:flex;justify-content:center;padding:8px 0 4px}
+    .device{background:#020305;border:2px solid #414957;box-shadow:0 0 0 5px #151c27,0 24px 50px #0009;overflow:hidden;position:relative}
+    .phone{width:min(100%,390px);aspect-ratio:390/844;border-radius:36px;padding:9px}
+    .phone-screen{height:100%;width:100%;border-radius:27px;overflow:hidden;background:#080c12;position:relative}
+    .phone-screen iframe{display:block;width:100%;height:100%;border:0;background:#080c12}
+    .phone-tag{position:absolute;top:9px;left:50%;transform:translateX(-50%);width:88px;height:18px;border-radius:0 0 13px 13px;background:#020305;z-index:2;pointer-events:none}
+    .car-panel{min-width:0}
+    .car-frame{display:flex;justify-content:center;padding:8px 0 4px}
+    .car{width:100%;max-width:800px;aspect-ratio:800/480;border-radius:24px;padding:8px;background:#020305}
+    .car-screen{width:100%;height:100%;border-radius:17px;overflow:hidden;background:#080b10;display:grid;grid-template-columns:64px 1fr}
+    .rail{background:#111720;border-right:1px solid #27303b;display:flex;flex-direction:column;align-items:center;gap:14px;padding:14px 6px}
+    .rail button{border:0;width:42px;height:42px;border-radius:14px;background:transparent;color:#9aa8bb;font-size:20px}
+    .rail button.active{background:#263c29;color:var(--accent);box-shadow:inset 0 0 0 1px #719f4b}
+    .rail .bottom{margin-top:auto}
+    .car-main{padding:clamp(12px,2.2vw,24px);display:grid;grid-template-columns:minmax(110px,.85fr) minmax(0,1.3fr);gap:clamp(12px,2vw,24px);align-items:center;min-width:0}
+    .art{aspect-ratio:1;border-radius:15px;background:linear-gradient(145deg,#273e49,#121a2b 55%,#263b24);display:grid;place-items:center;font-size:clamp(42px,7vw,72px);box-shadow:inset 0 0 0 1px #ffffff12;max-width:220px;width:100%}
+    .now{min-width:0}.label{color:var(--accent);font-size:10px;text-transform:uppercase;letter-spacing:.16em;font-weight:800}
+    .track{font-size:clamp(16px,2.5vw,25px);font-weight:750;letter-spacing:-.035em;line-height:1.12;margin:7px 0;overflow-wrap:anywhere}
+    .artist{color:#aab5c5;font-size:clamp(11px,1.4vw,14px)}
+    .progress{height:4px;background:#2a3441;border-radius:99px;margin:18px 0 7px;overflow:hidden}.progress span{display:block;height:100%;width:35%;background:var(--accent);border-radius:99px}
+    .times{display:flex;justify-content:space-between;color:#8795a8;font-size:10px}
+    .controls{display:flex;align-items:center;gap:clamp(8px,1.5vw,18px);margin-top:14px}
+    .controls button{border:0;color:#f2f6fa;background:#202a36;border-radius:50%;width:clamp(30px,4.5vw,42px);height:clamp(30px,4.5vw,42px);font-size:17px}
+    .controls .play{width:clamp(40px,5.5vw,52px);height:clamp(40px,5.5vw,52px);background:var(--accent);color:#10150b;font-weight:900}
+    .statusbar{position:absolute;top:11px;left:20px;right:20px;display:flex;justify-content:space-between;font-size:10px;color:#d6dfeb;pointer-events:none}
+    .car-footer{position:absolute;bottom:7px;left:85px;right:20px;display:flex;justify-content:space-between;color:#77869a;font-size:10px;pointer-events:none}
+    .notice{margin-top:14px;border:1px solid #3b4a5d;background:#101824;border-radius:12px;padding:11px 13px;color:#c2cddd;font-size:12px}
+    .notice strong{color:#fff}
+    .actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+    .actions button{border:1px solid #344256;background:#172231;color:#e8eef7;border-radius:10px;padding:9px 12px}
+    .actions button:hover{border-color:var(--accent)}
+    .mini-status{font-size:11px;color:var(--muted);margin-top:9px;min-height:16px}
+    @media(max-width:900px){.grid{grid-template-columns:1fr}.phone{width:min(100%,360px)}.car{max-width:760px}.shell{padding-top:18px}}
+    @media(max-width:520px){header{align-items:flex-start;flex-direction:column}.pill{white-space:normal}.panel{padding:13px;border-radius:16px}.car-screen{grid-template-columns:48px 1fr}.rail{padding:10px 3px;gap:9px}.rail button{width:36px;height:36px}.car-main{grid-template-columns:minmax(78px,.75fr) minmax(0,1.3fr);gap:10px;padding:12px}.car{border-radius:16px;padding:5px}.car-screen{border-radius:12px}.car-footer{left:58px;bottom:4px}.statusbar{top:7px;left:13px;right:13px}.progress{margin:10px 0 5px}.controls{margin-top:8px}}
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div><div class="eyebrow">MUGEN · Preview Lab</div><h1>Two screens. One player.</h1><p class="sub">Preview the MUGEN web app in a standard phone viewport and explore a separate Android Auto–style media screen.</p></div>
+      <div class="pill">UI simulation · not a vehicle connection</div>
+    </header>
+    <div class="grid">
+      <section class="panel" aria-labelledby="phone-title">
+        <div class="panel-head"><div><h2 id="phone-title">01 · Phone preview</h2><p class="hint">390 × 844 CSS pixels · portrait</p></div><span class="pill">PWA iframe</span></div>
+        <div class="frame-wrap"><div class="device phone"><div class="phone-screen"><div class="phone-tag"></div><iframe title="MUGEN phone preview" src="./index.html" loading="eager" allow="autoplay; fullscreen; encrypted-media" allowfullscreen></iframe></div></div></div>
+        <div class="notice">This frame loads the actual MUGEN web app at its normal entry point. If browser security or local-media permissions limit embedded playback, open MUGEN directly in a separate tab.</div>
+      </section>
+      <section class="panel car-panel" aria-labelledby="car-title">
+        <div class="panel-head"><div><h2 id="car-title">02 · Android Auto preview</h2><p class="hint">Landscape head-unit layout · interactive mock controls</p></div><span class="pill">Simulator</span></div>
+        <div class="car-frame"><div class="device car"><div class="car-screen">
+          <nav class="rail" aria-label="Simulated Android Auto navigation">
+            <button class="active" title="Now playing" aria-label="Now playing" data-view="now">♫</button>
+            <button title="Browse music" aria-label="Browse music" data-view="browse">▤</button>
+            <button title="Search" aria-label="Search" data-view="search">⌕</button>
+            <button class="bottom" title="Home" aria-label="Home" data-view="home">⌂</button>
+          </nav>
+          <div class="car-main" id="car-main">
+            <div class="art" aria-hidden="true">♫</div>
+            <div class="now">
+              <div class="label" id="mode-label">Now playing · MUGEN</div>
+              <div class="track" id="track-name">Your music, at a glance</div>
+              <div class="artist" id="artist-name">Connect the native player to show real media</div>
+              <div class="progress"><span id="progress-bar"></span></div>
+              <div class="times"><span id="elapsed">1:24</span><span id="duration">4:02</span></div>
+              <div class="controls">
+                <button aria-label="Previous track" id="prev">|◀</button><button class="play" aria-label="Play or pause" id="play">▶</button><button aria-label="Next track" id="next">▶|</button><button aria-label="Shuffle" id="shuffle">⤨</button>
+              </div>
+            </div>
+          </div>
+          <div class="statusbar"><span id="clock">10:27</span><span>▮▮▮　▰　◉</span></div>
+          <div class="car-footer"><span id="footer-left">Demo environment</span><span>Safe driving · glanceable controls</span></div>
+        </div></div></div>
+        <div class="actions"><button id="browse-btn">Browse demo library</button><button id="now-btn">Now playing</button><button id="reset-btn">Reset simulator</button></div>
+        <div class="mini-status" id="sim-status" aria-live="polite">Simulator ready. Controls change this mock screen only.</div>
+        <div class="notice"><strong>Important:</strong> this is a visual/interaction prototype, not a real Android Auto host. It cannot validate APK discovery, MediaLibraryService behavior, vehicle connection, or actual playback. Those still require native build checks and testing through Android Auto / DHU.</div>
+      </section>
+    </div>
+  </main>
+<script>
+  const tracks = [
+    {title:"Your music, at a glance",artist:"Connect the native player to show real media",elapsed:"1:24",duration:"4:02"},
+    {title:"Demo Library · Albums",artist:"Browse screen · example content only",elapsed:"0:00",duration:"—"},
+    {title:"Search MUGEN",artist:"Search should be wired to the native media session",elapsed:"—",duration:"—"}
+  ];
+  let current=0, playing=false, progress=35;
+  const $=id=>document.getElementById(id);
+  function render(){
+    const t=tracks[current];$('track-name').textContent=t.title;$('artist-name').textContent=t.artist;
+    $('elapsed').textContent=t.elapsed;$('duration').textContent=t.duration;$('progress-bar').style.width=progress+'%';
+    $('play').textContent=playing?'Ⅱ':'▶';$('play').setAttribute('aria-label',playing?'Pause demo':'Play demo');
+    $('mode-label').textContent=current===1?'Browse · MUGEN':current===2?'Search · MUGEN':'Now playing · MUGEN';
+    $('footer-left').textContent=playing?'Demo playback state: playing':'Demo playback state: paused';
+    document.querySelectorAll('[data-view]').forEach((b,i)=>b.classList.toggle('active',i===current));
+  }
+  function status(s){$('sim-status').textContent=s}
+  $('play').addEventListener('click',()=>{playing=!playing;render();status('Mock playback toggled. No audio is being played by the simulator.')});
+  $('next').addEventListener('click',()=>{current=(current+1)%tracks.length;progress=0;render();status('Moved to the next demo screen.')});
+  $('prev').addEventListener('click',()=>{current=(current+tracks.length-1)%tracks.length;progress=0;render();status('Moved to the previous demo screen.')});
+  $('shuffle').addEventListener('click',()=>{current=Math.floor(Math.random()*tracks.length);render();status('Demo shuffle selected a sample screen.')});
+  document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>{current=b.dataset.view==='browse'?1:b.dataset.view==='search'?2:0;render();status('Showing '+b.title.toLowerCase()+'. This is prototype-only navigation.')}));
+  $('browse-btn').addEventListener('click',()=>{current=1;render();status('Sample browse view selected; not connected to the actual MUGEN library.')});
+  $('now-btn').addEventListener('click',()=>{current=0;render();status('Returned to the mock Now Playing screen.')});
+  $('reset-btn').addEventListener('click',()=>{current=0;playing=false;progress=35;render();status('Simulator reset.')});
+  try{$('clock').textContent=new Intl.DateTimeFormat([], {hour:'numeric',minute:'2-digit'}).format(new Date())}catch(e){}
+  render();
+</script>
+</body>
+</html>
