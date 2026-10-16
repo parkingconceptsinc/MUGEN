@@ -7,6 +7,7 @@ import android.content.ContentUris
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.core.content.ContextCompat
@@ -27,6 +28,10 @@ import androidx.media3.session.MediaSession.MediaItemsWithStartPosition
 import com.google.common.collect.ImmutableList
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.ListeningExecutorService
+import com.google.common.util.concurrent.MoreExecutors
+import com.google.common.util.concurrent.SettableFuture
+import java.util.concurrent.Executors
 
 /**
  * Single Media3 library/session for the app UI and Android Auto.
@@ -37,6 +42,12 @@ class PlaybackService : MediaLibraryService() {
     private var librarySession: MediaLibrarySession? = null
     private lateinit var player: ExoPlayer
     private val searchResults = linkedMapOf<String, List<MediaItem>>()
+    // MediaStore queries and SAF-library reads must not run on Media3's service callback thread.
+    private val libraryExecutor: ListeningExecutorService = MoreExecutors.listeningDecorator(
+        Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "MUGEN-library").apply { isDaemon = true }
+        }
+    )
 
     @OptIn(UnstableApi::class)
     override fun onCreate() {
@@ -65,11 +76,17 @@ class PlaybackService : MediaLibraryService() {
         player.addListener(object : Player.Listener {
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 val uri = mediaItem?.localConfiguration?.uri ?: return
-                if (isKnownAudioUri(uri)) {
-                    getSharedPreferences("mortimer_library", MODE_PRIVATE)
-                        .edit()
-                        .putString(LAST_PLAYED_URI_KEY, uri.toString())
-                        .apply()
+                // Checking imported SAF entries reads persistent storage; keep that work
+                // off the player/application thread so transitions stay responsive.
+                runCatching {
+                    libraryExecutor.execute {
+                        if (isKnownAudioUri(uri)) {
+                            getSharedPreferences("mortimer_library", MODE_PRIVATE)
+                                .edit()
+                                .putString(LAST_PLAYED_URI_KEY, uri.toString())
+                                .apply()
+                        }
+                    }
                 }
             }
         })
@@ -108,12 +125,15 @@ class PlaybackService : MediaLibraryService() {
             if (parentId != ROOT_ID) {
                 return Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.of(), params))
             }
-            val allItems = loadAudioLibrary()
-            val from = (page * pageSize).coerceIn(0, allItems.size)
-            val to = (from + pageSize).coerceAtMost(allItems.size)
-            return Futures.immediateFuture(
+            return libraryExecutor.submit<LibraryResult<ImmutableList<MediaItem>>> {
+                val allItems = loadAudioLibrary()
+                // Use Long arithmetic so a malformed/very large page index cannot overflow Int.
+                val safePage = page.coerceAtLeast(0).toLong()
+                val safePageSize = pageSize.coerceAtLeast(0).toLong()
+                val from = (safePage * safePageSize).coerceIn(0L, allItems.size.toLong()).toInt()
+                val to = (from.toLong() + safePageSize).coerceAtMost(allItems.size.toLong()).toInt()
                 LibraryResult.ofItemList(ImmutableList.copyOf(allItems.subList(from, to)), params)
-            )
+            }
         }
 
         override fun onSearch(
@@ -122,10 +142,25 @@ class PlaybackService : MediaLibraryService() {
             query: String,
             params: MediaLibraryService.LibraryParams?
         ): ListenableFuture<LibraryResult<Void>> {
-            val results = findAudioMatches(query)
-            rememberSearchResults(query, results)
-            session.notifySearchResultChanged(browser, query, results.size, params)
-            return Futures.immediateFuture(LibraryResult.ofVoid())
+            val resultFuture = SettableFuture.create<LibraryResult<Void>>()
+            libraryExecutor.execute {
+                try {
+                    val results = findAudioMatches(query)
+                    rememberSearchResults(query, results)
+                    // MediaLibrarySession notifications belong on the player application looper.
+                    Handler(player.applicationLooper).post {
+                        try {
+                            session.notifySearchResultChanged(browser, query, results.size, params)
+                            resultFuture.set(LibraryResult.ofVoid())
+                        } catch (failure: Throwable) {
+                            resultFuture.setException(failure)
+                        }
+                    }
+                } catch (failure: Throwable) {
+                    resultFuture.setException(failure)
+                }
+            }
+            return resultFuture
         }
 
         override fun onGetSearchResult(
@@ -136,17 +171,17 @@ class PlaybackService : MediaLibraryService() {
             pageSize: Int,
             params: MediaLibraryService.LibraryParams?
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
-            val allMatches = searchResults[query] ?: findAudioMatches(query)
-            val from = (page.toLong() * pageSize.toLong())
-                .coerceIn(0L, allMatches.size.toLong()).toInt()
-            val to = (from.toLong() + pageSize.toLong())
-                .coerceAtMost(allMatches.size.toLong()).toInt()
-            return Futures.immediateFuture(
+            return libraryExecutor.submit<LibraryResult<ImmutableList<MediaItem>>> {
+                val allMatches = searchResults[query] ?: findAudioMatches(query)
+                val safePage = page.coerceAtLeast(0).toLong()
+                val safePageSize = pageSize.coerceAtLeast(0).toLong()
+                val from = (safePage * safePageSize).coerceIn(0L, allMatches.size.toLong()).toInt()
+                val to = (from.toLong() + safePageSize).coerceAtMost(allMatches.size.toLong()).toInt()
                 LibraryResult.ofItemList(
                     ImmutableList.copyOf(allMatches.subList(from, to)),
                     params
                 )
-            )
+            }
         }
 
         @UnstableApi
@@ -155,22 +190,25 @@ class PlaybackService : MediaLibraryService() {
             browser: MediaSession.ControllerInfo,
             mediaId: String
         ): ListenableFuture<LibraryResult<MediaItem>> {
-            val uri = runCatching { Uri.parse(mediaId) }.getOrNull()
-            if (uri == null || uri.scheme == null) {
-                return Futures.immediateFuture(LibraryResult.ofError(SessionError.ERROR_BAD_VALUE))
-            }
-            val item = MediaItem.Builder()
-                .setMediaId(uri.toString())
-                .setUri(uri)
-                .setMediaMetadata(
-                    MediaMetadata.Builder()
-                        .setTitle(displayName(uri))
-                        .setIsBrowsable(false)
-                        .setIsPlayable(true)
+            return libraryExecutor.submit<LibraryResult<MediaItem>> {
+                val uri = runCatching { Uri.parse(mediaId) }.getOrNull()
+                if (uri == null || uri.scheme == null) {
+                    LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)
+                } else {
+                    val item = MediaItem.Builder()
+                        .setMediaId(uri.toString())
+                        .setUri(uri)
+                        .setMediaMetadata(
+                            MediaMetadata.Builder()
+                                .setTitle(displayName(uri))
+                                .setIsBrowsable(false)
+                                .setIsPlayable(true)
+                                .build()
+                        )
                         .build()
-                )
-                .build()
-            return Futures.immediateFuture(LibraryResult.ofItem(item, null))
+                    LibraryResult.ofItem(item, null)
+                }
+            }
         }
 
         @UnstableApi
@@ -178,22 +216,16 @@ class PlaybackService : MediaLibraryService() {
             mediaSession: MediaSession,
             controller: MediaSession.ControllerInfo
         ): ListenableFuture<MediaItemsWithStartPosition> {
-            val library = loadAudioLibrary()
-            if (library.isEmpty()) {
-                return Futures.immediateFailedFuture(
-                    IllegalStateException("No local audio is available for playback resumption.")
-                )
-            }
-
-            val lastPlayed = lastPlayedItem(library)
-            val selectedIndex = library.indexOfFirst { it.mediaId == lastPlayed?.mediaId }
-                .takeIf { it >= 0 } ?: 0
-
-            // Media3 1.6.1 uses the two-argument callback, so return the queue
-            // and its saved starting track in one response.
-            return Futures.immediateFuture(
+            return libraryExecutor.submit<MediaItemsWithStartPosition> {
+                val library = loadAudioLibrary()
+                if (library.isEmpty()) {
+                    throw IllegalStateException("No local audio is available for playback resumption.")
+                }
+                val lastPlayed = lastPlayedItem(library)
+                val selectedIndex = library.indexOfFirst { it.mediaId == lastPlayed?.mediaId }
+                    .takeIf { it >= 0 } ?: 0
                 MediaItemsWithStartPosition(library, selectedIndex, C.TIME_UNSET)
-            )
+            }
         }
 
         override fun onAddMediaItems(
@@ -201,33 +233,35 @@ class PlaybackService : MediaLibraryService() {
             controller: MediaSession.ControllerInfo,
             mediaItems: List<MediaItem>
         ): ListenableFuture<List<MediaItem>> {
-            val resolved = mutableListOf<MediaItem>()
-            mediaItems.forEach { item ->
-                val searchQuery = item.requestMetadata.searchQuery
-                if (searchQuery != null) {
-                    val library = loadAudioLibrary()
-                    val selected = if (searchQuery.isBlank()) {
-                        lastPlayedItem(library) ?: library.firstOrNull()
+            return libraryExecutor.submit<List<MediaItem>> {
+                val resolved = mutableListOf<MediaItem>()
+                mediaItems.forEach { item ->
+                    val searchQuery = item.requestMetadata.searchQuery
+                    if (searchQuery != null) {
+                        val library = loadAudioLibrary()
+                        val selected = if (searchQuery.isBlank()) {
+                            lastPlayedItem(library) ?: library.firstOrNull()
+                        } else {
+                            findAudioMatches(searchQuery).firstOrNull()
+                        }
+                        if (selected != null) resolved += selected
                     } else {
-                        findAudioMatches(searchQuery).firstOrNull()
-                    }
-                    if (selected != null) resolved += selected
-                } else {
-                    resolveUri(item)?.let { uri ->
-                        resolved += MediaItem.Builder()
-                            .setMediaId(uri.toString())
-                            .setUri(uri)
-                            .setMediaMetadata(
-                                item.mediaMetadata.buildUpon()
-                                    .setTitle(item.mediaMetadata.title ?: displayName(uri))
-                                    .setIsPlayable(true)
-                                    .build()
-                            )
-                            .build()
+                        resolveUri(item)?.let { uri ->
+                            resolved += MediaItem.Builder()
+                                .setMediaId(uri.toString())
+                                .setUri(uri)
+                                .setMediaMetadata(
+                                    item.mediaMetadata.buildUpon()
+                                        .setTitle(item.mediaMetadata.title ?: displayName(uri))
+                                        .setIsPlayable(true)
+                                        .build()
+                                )
+                                .build()
+                        }
                     }
                 }
+                resolved
             }
-            return Futures.immediateFuture(resolved)
         }
 
         @UnstableApi
@@ -238,24 +272,17 @@ class PlaybackService : MediaLibraryService() {
             startIndex: Int,
             startPositionMs: Long
         ): ListenableFuture<MediaItemsWithStartPosition> {
-            // When Android Auto requests one song, expand it into the audio library
-            // and preserve the selected song as the queue's starting position.
-            if (mediaItems.size == 1) {
-                val selectedUri = resolveUri(mediaItems.first())
-                // Avoid rescanning the entire audio library when the app selects a
-                // single video or another non-audio item.
-                if (selectedUri != null && isKnownAudioUri(selectedUri)) {
-                    val queue = loadAudioLibrary()
-                    val selectedIndex = queue.indexOfFirst { it.localConfiguration?.uri == selectedUri }
-                    if (selectedIndex >= 0) {
-                        return Futures.immediateFuture(
-                            MediaItemsWithStartPosition(queue, selectedIndex, startPositionMs)
-                        )
+            return libraryExecutor.submit<MediaItemsWithStartPosition> {
+                if (mediaItems.size == 1) {
+                    val selectedUri = resolveUri(mediaItems.first())
+                    if (selectedUri != null && isKnownAudioUri(selectedUri)) {
+                        val queue = loadAudioLibrary()
+                        val selectedIndex = queue.indexOfFirst { it.localConfiguration?.uri == selectedUri }
+                        if (selectedIndex >= 0) {
+                            return@submit MediaItemsWithStartPosition(queue, selectedIndex, startPositionMs)
+                        }
                     }
                 }
-            }
-
-            return Futures.immediateFuture(
                 MediaItemsWithStartPosition(
                     mediaItems.mapNotNull { item ->
                         resolveUri(item)?.let { uri ->
@@ -274,7 +301,7 @@ class PlaybackService : MediaLibraryService() {
                     startIndex,
                     startPositionMs
                 )
-            )
+            }
         }
 
         private fun resolveUri(item: MediaItem): Uri? {
@@ -462,6 +489,7 @@ class PlaybackService : MediaLibraryService() {
         librarySession?.release()
         librarySession = null
         if (::player.isInitialized) player.release()
+        libraryExecutor.shutdownNow()
         super.onDestroy()
     }
 

@@ -450,9 +450,12 @@ private fun MortimerApp(
         // vertical room before switching to the permanent tablet sidebar.
         val wideLayout = maxWidth >= 720.dp && maxHeight >= 600.dp
         val compactLayout = maxWidth < 360.dp
+        // Resolve BoxWithConstraints measurements before entering RowScope, where
+        // maxWidth refers to a different layout receiver and does not compile.
+        val sidebarWidth = if (maxWidth < 820.dp) 208.dp else 248.dp
         if (wideLayout) {
             Row(Modifier.fillMaxSize()) {
-                Sidebar(section, Modifier.width(if (maxWidth < 820.dp) 208.dp else 248.dp).fillMaxHeight()) { section = it }
+                Sidebar(section, Modifier.width(sidebarWidth).fillMaxHeight()) { section = it }
                 Body(Modifier.weight(1f).fillMaxHeight(), wide = true, compact = compactLayout)
             }
         } else {
