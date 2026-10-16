@@ -40,15 +40,6 @@ import java.net.URL
 
 private data class MortimerRelease(val tag: String, val versionCode: Int, val apkUrl: String, val apkName: String)
 
-private fun parseVersionCode(tag: String): Int? {
-    val version = Regex("(?:android-)?v?(\\d+)\\.(\\d+)\\.(\\d+)").find(tag)?.groupValues ?: return null
-    val major = version[1].toIntOrNull() ?: return null
-    val minor = version[2].toIntOrNull() ?: return null
-    val patch = version[3].toIntOrNull() ?: return null
-    if (major > 20 || minor > 99 || patch > 99) return null
-    return major * 10000 + minor * 100 + patch
-}
-
 private fun fetchLatestMortimerRelease(): MortimerRelease {
     val connection = (URL("https://api.github.com/repos/parkingconceptsinc/MUGEN/releases?per_page=100").openConnection() as HttpURLConnection).apply {
         requestMethod = "GET"
@@ -69,15 +60,15 @@ private fun fetchLatestMortimerRelease(): MortimerRelease {
             val tag = releaseJson.optString("tag_name")
             // Ignore website/PWA releases. The Android updater must only use explicitly versioned APK releases.
             if (!tag.startsWith("android-v", ignoreCase = true)) continue
-            val versionCode = parseVersionCode(tag) ?: continue
+            val versionCode = parseAndroidVersionCode(tag) ?: continue
             val assets = releaseJson.optJSONArray("assets") ?: continue
             for (assetIndex in 0 until assets.length()) {
                 val asset = assets.optJSONObject(assetIndex) ?: continue
                 val name = asset.optString("name")
                 val url = asset.optString("browser_download_url")
-                if (name.endsWith(".apk", ignoreCase = true) && Uri.parse(url).host == "github.com") {
+                if (name.equals("app-release.apk", ignoreCase = true) && isTrustedGitHubReleaseAsset(url)) {
                     val candidate = MortimerRelease(tag, versionCode, url, name)
-                    if (best == null || candidate.versionCode > best!!.versionCode) best = candidate
+                    if (best == null || candidate.versionCode > best.versionCode) best = candidate
                     break
                 }
             }
