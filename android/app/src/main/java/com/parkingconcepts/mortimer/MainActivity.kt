@@ -514,7 +514,7 @@ private fun VideoPlayerDialog(
         player.addListener(listener)
         onDispose { player.removeListener(listener) }
     }
-    LaunchedEffect(controlsVisible, isPlaying, error, interactionTick) {
+    LaunchedEffect(controlsVisible, isPlaying, error, interactionTick, speedMenu, fitMenu, seeking) {
         if (controlsVisible && isPlaying && error == null && !speedMenu && !fitMenu && seeking == null) {
             delay(4200)
             controlsVisible = false
