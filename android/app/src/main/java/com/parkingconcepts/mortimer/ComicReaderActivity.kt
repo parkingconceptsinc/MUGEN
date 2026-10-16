@@ -91,7 +91,7 @@ class ComicReaderActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val uri = intent.data ?: run { finish(); return }
-        val title = intent.getStringExtra(EXTRA_TITLE) ?: displayName(this, uri, "Cómic")
+        val title = intent.getStringExtra(EXTRA_TITLE) ?: displayName(this, uri, "Comic")
         val format = intent.getStringExtra(EXTRA_FORMAT) ?: formatOf(title, "comics")
         val fromStart = intent.getBooleanExtra(EXTRA_FROM_START, false)
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -154,7 +154,7 @@ private fun ComicReader(
     LaunchedEffect(key) {
         withContext(Dispatchers.IO) {
             runCatching { openPageSource(context, uri, format) { pct -> loading = pct } }
-        }.onSuccess { source = it }.onFailure { error = it.message ?: "No se pudo abrir el archivo." }
+        }.onSuccess { source = it }.onFailure { error = it.message ?: "Could not open this file." }
     }
     DisposableEffect(source) {
         val s = source
@@ -171,7 +171,7 @@ private fun ComicReader(
             }
             src == null -> Column(Modifier.align(Alignment.Center), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Abriendo $title…", color = Color.White)
-                loading?.let { Text("Preparando páginas · $it", color = Color(0xAAFFFFFF), fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp)) }
+                loading?.let { Text("Preparing pages · $it", color = Color(0xAAFFFFFF), fontSize = 13.sp, modifier = Modifier.padding(top = 8.dp)) }
             }
             else -> ComicPages(src, key, title, fromStart, onClose, onChrome, onKeepAwake)
         }
@@ -336,7 +336,7 @@ private fun BoxScope.ComicPages(
             ChromeButton("‹", big = true) { onClose() }
             Column(Modifier.weight(1f).padding(horizontal = 6.dp)) {
                 Text(title.substringBeforeLast('.'), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text("Página ${page + 1} de $count", color = Color(0xAAFFFFFF), fontSize = 12.sp)
+                Text("Page ${page + 1} of $count", color = Color(0xAAFFFFFF), fontSize = 12.sp)
             }
             ChromeButton("▦") { sheet = "pages" }
             ChromeButton("⚙") { sheet = "settings" }
@@ -368,20 +368,20 @@ private fun BoxScope.ComicPages(
             Text("Has llegado al final", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)
             Spacer(Modifier.height(14.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ChromeButton("Seguir aquí") { finished = false }
+                ChromeButton("Continue reading") { finished = false }
                 ChromeButton("Volver a la biblioteca", accent = true) { onClose() }
             }
         }
     }
 
     when (sheet) {
-        "settings" -> ComicSheet("Lectura", onClose = { sheet = null }) {
-            OptionRow("Modo", listOf("paged" to "Página", "double" to "Doble", "vertical" to "Vertical"), settings.mode) { settings = settings.copy(mode = it) }
-            OptionRow("Dirección", listOf(false to "Izq. → der.", true to "Manga (der. → izq.)"), settings.rtl) { settings = settings.copy(rtl = it) }
-            OptionRow("Ajuste", listOf("screen" to "Pantalla", "width" to "Ancho"), settings.fit) { settings = settings.copy(fit = it) }
-            OptionRow("Pantalla encendida", listOf(true to "Sí", false to "No"), settings.keepAwake) { settings = settings.copy(keepAwake = it) }
+        "settings" -> ComicSheet("Reading", onClose = { sheet = null }) {
+            OptionRow("Layout", listOf("paged" to "Single page", "double" to "Double page", "vertical" to "Vertical scroll"), settings.mode) { settings = settings.copy(mode = it) }
+            OptionRow("Reading direction", listOf(false to "Left → right", true to "Manga (right → left)"), settings.rtl) { settings = settings.copy(rtl = it) }
+            OptionRow("Fit", listOf("screen" to "Fit screen", "width" to "Fit width"), settings.fit) { settings = settings.copy(fit = it) }
+            OptionRow("Keep screen awake", listOf(true to "On", false to "Off"), settings.keepAwake) { settings = settings.copy(keepAwake = it) }
         }
-        "pages" -> ComicSheet("Páginas", onClose = { sheet = null }) {
+        "pages" -> ComicSheet("Pages", onClose = { sheet = null }) {
             val grid = rememberLazyGridState(initialFirstVisibleItemIndex = page)
             LazyVerticalGrid(columns = GridCells.Adaptive(84.dp), state = grid, modifier = Modifier.heightIn(max = 480.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(count) { index ->
@@ -483,11 +483,11 @@ private fun PageImage(
     val current = bitmap
     when {
         current != null -> Image(
-            current.asImageBitmap(), contentDescription = "Página ${index + 1}", contentScale = contentScale, alignment = alignment,
+            current.asImageBitmap(), contentDescription = "Page ${index + 1}", contentScale = contentScale, alignment = alignment,
             modifier = if (tall) modifier.aspectRatio(current.width.toFloat() / current.height.coerceAtLeast(1)) else modifier,
         )
         failed -> Box(if (tall) modifier.aspectRatio(0.7f) else modifier, contentAlignment = Alignment.Center) {
-            Text("No se pudo cargar la página ${index + 1}", color = Color(0x99FFFFFF), fontSize = 13.sp)
+            Text("Could not load page ${index + 1}", color = Color(0x99FFFFFF), fontSize = 13.sp)
         }
         else -> Box((if (tall) modifier.aspectRatio(0.7f) else modifier).background(Color(0xFF0E0E12)))
     }
