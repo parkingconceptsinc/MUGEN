@@ -62,7 +62,7 @@ fun EqualizerSection(modifier: Modifier) {
             )
         }
         if (!AudioEffects.available) {
-            Text("Este dispositivo no permite ecualizar el reproductor. El balance y el refuerzo de volumen sí funcionan.", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
+            Text("This device does not support equalizing the player. Balance and volume boost are still available.", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 8.dp))
         }
 
         Column(Modifier.fillMaxWidth().background(c.panel, RoundedCornerShape(16.dp)).padding(14.dp)) {
@@ -92,18 +92,18 @@ fun EqualizerSection(modifier: Modifier) {
                     Text(hzLabel(hz), color = c.muted, fontSize = 12.sp, modifier = Modifier.width(36.dp))
                     Slider(
                         value = s.bands[i], valueRange = -AudioEffects.RANGE..AudioEffects.RANGE,
-                        onValueChange = { v -> s = s.copy(enabled = true, preset = "Personalizado", bands = s.bands.mapIndexed { j, b -> if (j == i) (v * 2).roundToInt() / 2f else b }) },
+                        onValueChange = { v -> s = s.copy(enabled = true, preset = "Custom", bands = s.bands.mapIndexed { j, b -> if (j == i) (v * 2).roundToInt() / 2f else b }) },
                         colors = SliderDefaults.colors(thumbColor = accent, activeTrackColor = accent, inactiveTrackColor = c.panel2),
                         modifier = Modifier.weight(1f).height(34.dp),
                     )
                     Text(signed(s.bands[i]), color = c.text, fontSize = 12.sp, modifier = Modifier.width(34.dp).clickable {
-                        s = s.copy(preset = "Personalizado", bands = s.bands.mapIndexed { j, b -> if (j == i) 0f else b })
+                        s = s.copy(preset = "Custom", bands = s.bands.mapIndexed { j, b -> if (j == i) 0f else b })
                     })
                 }
             }
         }
 
-        SectionLabel("Ajustes predefinidos")
+        SectionLabel("Presets")
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
             presets.forEach { (name, bands) ->
                 Chip(if (name in custom) "$name  ✕" else name, s.enabled && s.preset == name) {
@@ -111,40 +111,40 @@ fun EqualizerSection(modifier: Modifier) {
                     else s = s.copy(enabled = true, preset = name, bands = bands)
                 }
             }
-            Chip("＋ Guardar", false) { naming = true }
+            Chip("＋ Save", false) { naming = true }
         }
-        if (custom.isNotEmpty()) Text("Toca dos veces un ajuste tuyo para borrarlo.", color = c.muted, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
+        if (custom.isNotEmpty()) Text("Tap a custom preset twice to delete it.", color = c.muted, fontSize = 11.sp, modifier = Modifier.padding(top = 4.dp))
 
-        SectionLabel("Más ajustes")
+        SectionLabel("More settings")
         Column(Modifier.fillMaxWidth().background(c.panel, RoundedCornerShape(16.dp)).padding(14.dp)) {
-            EffectSlider("Preamplificador", "${signed(s.preamp, 1)} dB", s.preamp, -AudioEffects.RANGE..AudioEffects.RANGE, onReset = { s = s.copy(preamp = 0f) }) {
+            EffectSlider("Preamp", "${signed(s.preamp, 1)} dB", s.preamp, -AudioEffects.RANGE..AudioEffects.RANGE, onReset = { s = s.copy(preamp = 0f) }) {
                 s = s.copy(enabled = true, preamp = (it * 2).roundToInt() / 2f)
             }
             EffectSlider(
                 "Balance",
                 when {
-                    abs(s.balance) < 0.01f -> "Centro"
+                    abs(s.balance) < 0.01f -> "Center"
                     s.balance < 0 -> "I ${(-s.balance * 100).roundToInt()}%"
                     else -> "D ${(s.balance * 100).roundToInt()}%"
                 },
                 s.balance, -1f..1f, onReset = { s = s.copy(balance = 0f) },
             ) { s = s.copy(balance = (it * 20).roundToInt() / 20f) }
-            EffectSlider("Refuerzo de volumen", "${(s.boost * 100).roundToInt()}%", s.boost, 1f..2f, onReset = { s = s.copy(boost = 1f) }) {
+            EffectSlider("Volume boost", "${(s.boost * 100).roundToInt()}%", s.boost, 1f..2f, onReset = { s = s.copy(boost = 1f) }) {
                 s = s.copy(boost = (it * 20).roundToInt() / 20f)
             }
-            if (s.boost > 1.3f) Text("Un refuerzo alto puede distorsionar las canciones más fuertes.", color = c.muted, fontSize = 12.sp)
+            if (s.boost > 1.3f) Text("High volume boost may distort louder tracks.", color = c.muted, fontSize = 12.sp)
         }
         Spacer(Modifier.height(10.dp))
-        MenuItem("↺ Restablecer todos los efectos") { s = AudioEffects.Settings() }
-        Text("Toca el valor de una banda para ponerla a cero. Los efectos se aplican a la música y a los vídeos.", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
+        MenuItem("↺ Reset all effects") { s = AudioEffects.Settings() }
+        Text("Tap a band value to reset it to zero. Effects apply to music and videos.", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
     }
 
     if (naming) {
-        var name by remember { mutableStateOf(if (s.preset == "Personalizado") "Mi ajuste" else "${s.preset} (mío)") }
+        var name by remember { mutableStateOf(if (s.preset == "Custom") "My preset" else "${s.preset} (custom)") }
         AlertDialog(
             onDismissRequest = { naming = false },
-            title = { Text("Guardar ajuste") },
-            text = { SearchBox(name, "Nombre", { name = it }) },
+            title = { Text("Save preset") },
+            text = { SearchBox(name, "Name", { name = it }) },
             confirmButton = {
                 TextButton(onClick = {
                     val n = name.trim()
@@ -154,23 +154,23 @@ fun EqualizerSection(modifier: Modifier) {
                         s = s.copy(preset = n)
                     }
                     naming = false
-                }) { Text("Guardar") }
+                }) { Text("Save") }
             },
-            dismissButton = { TextButton(onClick = { naming = false }) { Text("Cancelar") } },
+            dismissButton = { TextButton(onClick = { naming = false }) { Text("Cancel") } },
         )
     }
     deleting?.let { name ->
         AlertDialog(
             onDismissRequest = { deleting = null },
-            title = { Text("¿Borrar «$name»?") },
+            title = { Text("Delete “$name”? ") },
             confirmButton = {
                 TextButton(onClick = {
                     custom = custom - name
                     AudioEffects.saveCustomPresets(context, custom)
                     deleting = null
-                }) { Text("Borrar") }
+                }) { Text("Delete") }
             },
-            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancelar") } },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } },
         )
     }
 }
