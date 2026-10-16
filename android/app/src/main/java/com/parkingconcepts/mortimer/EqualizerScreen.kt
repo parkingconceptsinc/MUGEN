@@ -117,6 +117,30 @@ fun EqualizerSection(modifier: Modifier) {
 
         SectionLabel("More settings")
         Column(Modifier.fillMaxWidth().background(c.panel, RoundedCornerShape(16.dp)).padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) {
+                    Text("3D virtual surround", color = c.text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    Text("Wider stereo effect; availability depends on the device.", color = c.muted, fontSize = 11.sp)
+                }
+                Switch(
+                    checked = s.surroundEnabled,
+                    onCheckedChange = { s = s.copy(surroundEnabled = it) },
+                    colors = SwitchDefaults.colors(checkedTrackColor = accent, checkedThumbColor = c.onAccent),
+                )
+            }
+            if (s.surroundEnabled) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Surround strength", color = c.muted, fontSize = 12.sp, modifier = Modifier.width(112.dp))
+                    Slider(
+                        value = s.surroundStrength,
+                        valueRange = 0f..1f,
+                        onValueChange = { s = s.copy(surroundStrength = it) },
+                        colors = SliderDefaults.colors(thumbColor = accent, activeTrackColor = accent, inactiveTrackColor = c.panel2),
+                        modifier = Modifier.weight(1f),
+                    )
+                    Text("${(s.surroundStrength * 100).roundToInt()}%", color = c.text, fontSize = 12.sp)
+                }
+            }
             EffectSlider("Preamp", "${signed(s.preamp, 1)} dB", s.preamp, -AudioEffects.RANGE..AudioEffects.RANGE, onReset = { s = s.copy(preamp = 0f) }) {
                 s = s.copy(enabled = true, preamp = (it * 2).roundToInt() / 2f)
             }
@@ -136,7 +160,7 @@ fun EqualizerSection(modifier: Modifier) {
         }
         Spacer(Modifier.height(10.dp))
         MenuItem("↺ Reset all effects") { s = AudioEffects.Settings() }
-        Text("Tap a band value to reset it to zero. Effects apply to music and videos.", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
+        Text("Tap a band value to reset it to zero. Effects apply to music and videos. Virtual surround is not Dolby-certified 5.1 decoding.", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(vertical = 8.dp))
     }
 
     if (naming) {
