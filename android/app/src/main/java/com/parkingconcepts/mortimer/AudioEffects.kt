@@ -25,27 +25,27 @@ object AudioEffects {
     const val RANGE = 12f
 
     val PRESETS: LinkedHashMap<String, List<Float>> = linkedMapOf(
-        "Plano" to listOf(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f),
-        "Más graves" to listOf(7f, 6f, 5f, 3f, 1f, 0f, 0f, 0f, 0f, 0f),
-        "Menos graves" to listOf(-6f, -5f, -4f, -2f, -1f, 0f, 0f, 0f, 0f, 0f),
-        "Más agudos" to listOf(0f, 0f, 0f, 0f, 0f, 1f, 3f, 5f, 6f, 7f),
+        "Flat" to listOf(0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f),
+        "Bass Boost" to listOf(7f, 6f, 5f, 3f, 1f, 0f, 0f, 0f, 0f, 0f),
+        "Bass Cut" to listOf(-6f, -5f, -4f, -2f, -1f, 0f, 0f, 0f, 0f, 0f),
+        "Treble Boost" to listOf(0f, 0f, 0f, 0f, 0f, 1f, 3f, 5f, 6f, 7f),
         "Rock" to listOf(5f, 4f, 3f, 1f, -1f, -1f, 1f, 3f, 4f, 5f),
         "Pop" to listOf(-1f, 1f, 3f, 4f, 3f, 1f, 0f, -1f, -1f, -1f),
         "Jazz" to listOf(3f, 2f, 1f, 2f, -1f, -1f, 0f, 1f, 2f, 3f),
-        "Clásica" to listOf(4f, 3f, 2f, 1f, -1f, -1f, 0f, 2f, 3f, 4f),
+        "Classical" to listOf(4f, 3f, 2f, 1f, -1f, -1f, 0f, 2f, 3f, 4f),
         "Hip-Hop" to listOf(6f, 5f, 2f, 3f, -1f, -1f, 1f, 0f, 2f, 3f),
-        "Electrónica" to listOf(5f, 4f, 1f, 0f, -2f, 2f, 1f, 1f, 4f, 5f),
+        "Electronic" to listOf(5f, 4f, 1f, 0f, -2f, 2f, 1f, 1f, 4f, 5f),
         "Dance" to listOf(4f, 6f, 4f, 0f, 0f, -2f, -2f, -2f, 0f, 0f),
-        "Latina" to listOf(3f, 2f, 0f, 0f, -1f, -1f, -1f, 0f, 3f, 4f),
-        "Reguetón" to listOf(6f, 5f, 3f, 0f, -1f, 0f, 1f, 2f, 3f, 3f),
-        "Voces" to listOf(-2f, -3f, -2f, 1f, 4f, 4f, 3f, 1f, 0f, -2f),
-        "Acústica" to listOf(4f, 4f, 3f, 1f, 2f, 1f, 3f, 3f, 3f, 2f),
-        "Sonoridad" to listOf(6f, 4f, 0f, 0f, -2f, 0f, -1f, -5f, 5f, 1f),
+        "Latin" to listOf(3f, 2f, 0f, 0f, -1f, -1f, -1f, 0f, 3f, 4f),
+        "Reggaeton" to listOf(6f, 5f, 3f, 0f, -1f, 0f, 1f, 2f, 3f, 3f),
+        "Vocals" to listOf(-2f, -3f, -2f, 1f, 4f, 4f, 3f, 1f, 0f, -2f),
+        "Acoustic" to listOf(4f, 4f, 3f, 1f, 2f, 1f, 3f, 3f, 3f, 2f),
+        "Loudness" to listOf(6f, 4f, 0f, 0f, -2f, 0f, -1f, -5f, 5f, 1f),
     )
 
     data class Settings(
         val enabled: Boolean = false,
-        val preset: String = "Plano",
+        val preset: String = "Flat",
         val bands: List<Float> = List(BANDS.size) { 0f },
         val preamp: Float = 0f,
         /** -1 (left) … 1 (right). */
@@ -63,7 +63,7 @@ object AudioEffects {
             val arr = o.optJSONArray("bands") ?: JSONArray()
             Settings(
                 enabled = o.optBoolean("enabled", false),
-                preset = o.optString("preset", "Plano"),
+                preset = o.optString("preset", "Flat"),
                 bands = List(BANDS.size) { i -> arr.optDouble(i, 0.0).toFloat().coerceIn(-RANGE, RANGE) },
                 preamp = o.optDouble("preamp", 0.0).toFloat().coerceIn(-RANGE, RANGE),
                 balance = o.optDouble("balance", 0.0).toFloat().coerceIn(-1f, 1f),
