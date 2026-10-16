@@ -456,53 +456,258 @@ private fun MortimerApp(
     }
 
     videoOpen?.let { item ->
-        Dialog(onDismissRequest = { videoOpen = null; player.pause() }, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-            Box(Modifier.fillMaxSize().background(Color.Black)) {
-                AndroidView(
-                    factory = { ctx -> PlayerView(ctx).apply {
+        VideoPlayerDialog(
+            item = item,
+            player = player,
+            error = playbackError,
+            onErrorDismiss = { playbackError = null },
+            onRetry = {
+                playbackError = null
+                player.seekTo(0)
+                player.prepare()
+                player.play()
+            },
+            onClose = {
+                videoOpen = null
+                player.pause()
+                playbackError = null
+            },
+        )
+    }
+}
+
+
+/**
+ * Full-screen, touch-first video player. Controls are deliberately designed for phones:
+ * high-contrast cinematic chrome, precise seeking, ±10-second jumps, speed and fit controls.
+ */
+@androidx.media3.common.util.UnstableApi
+@Composable
+private fun VideoPlayerDialog(
+    item: LibraryItem,
+    player: Player,
+    error: String?,
+    onErrorDismiss: () -> Unit,
+    onRetry: () -> Unit,
+    onClose: () -> Unit,
+) {
+    val c = LocalMortimerColors.current
+    var controlsVisible by remember(item.uri) { mutableStateOf(true) }
+    var isPlaying by remember(item.uri) { mutableStateOf(player.isPlaying) }
+    var seeking by remember(item.uri) { mutableStateOf<Float?>(null) }
+    var speedMenu by remember { mutableStateOf(false) }
+    var fitMenu by remember { mutableStateOf(false) }
+    var speed by remember(item.uri) { mutableFloatStateOf(player.playbackParameters.speed) }
+    var fitMode by remember(item.uri) { mutableIntStateOf(androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT) }
+    var playerView by remember { mutableStateOf<PlayerView?>(null) }
+    val (position, duration) = rememberPosition(player, true)
+
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
+            override fun onPlaybackStateChanged(playbackState: Int) { isPlaying = player.isPlaying }
+        }
+        player.addListener(listener)
+        onDispose { player.removeListener(listener) }
+    }
+    LaunchedEffect(controlsVisible, isPlaying, error) {
+        if (controlsVisible && isPlaying && error == null) {
+            delay(4200)
+            controlsVisible = false
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false,
+        ),
+    ) {
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
                         this.player = player
-                        useController = true
-                        setShowNextButton(false)
-                        setShowPreviousButton(false)
+                        useController = false
+                        resizeMode = fitMode
                         setKeepContentOnPlayerReset(true)
                         setShutterBackgroundColor(android.graphics.Color.BLACK)
-                    } },
-                    update = { it.player = player },
-                    onRelease = { it.player = null },
-                    modifier = Modifier.fillMaxSize(),
+                        keepScreenOn = true
+                        playerView = this
+                    }
+                },
+                update = {
+                    it.player = player
+                    it.resizeMode = fitMode
+                    it.keepScreenOn = true
+                    playerView = it
+                },
+                onRelease = { it.player = null; it.keepScreenOn = false },
+                modifier = Modifier.fillMaxSize(),
+            )
+
+            // Transparent tap target lets the viewer reveal controls without fighting the sliders.
+            Box(
+                Modifier.fillMaxSize().clickable(
+                    indication = null,
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                ) { controlsVisible = !controlsVisible }
+            )
+
+            if (controlsVisible || error != null) {
+                Box(
+                    Modifier.fillMaxWidth().height(132.dp).align(Alignment.TopCenter)
+                        .background(Brush.verticalGradient(listOf(Color(0xE6000000), Color.Transparent)))
                 )
-                playbackError?.let { message ->
-                    Column(
-                        Modifier.align(Alignment.Center).padding(24.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(Color(0xE6202028)).padding(18.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text("VIDEO PLAYBACK FAILED", color = Color.White, fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.height(8.dp))
-                        Text(message, color = Color.White, textAlign = TextAlign.Center)
-                        Spacer(Modifier.height(12.dp))
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TextButton(onClick = {
-                                playbackError = null
-                                player.seekTo(0)
-                                player.prepare()
-                                player.play()
-                            }) { Text("Retry", color = Color.White) }
-                            TextButton(onClick = { videoOpen = null; player.pause(); playbackError = null }) {
-                                Text("Close", color = Color.White)
+                Row(
+                    Modifier.fillMaxWidth().align(Alignment.TopCenter).statusBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        Modifier.size(44.dp).clip(CircleShape).background(Color(0x66000000))
+                            .clickable(onClick = onClose),
+                        contentAlignment = Alignment.Center,
+                    ) { Text("✕", color = Color.White, fontSize = 20.sp) }
+                    Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                        Text(item.title.substringBeforeLast('.'), color = Color.White, fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("MUGEN VIDEO", color = Color.White.copy(alpha = 0.68f), fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold, letterSpacing = 1.7.sp)
+                    }
+                    Box {
+                        Text(
+                            "FIT ▾", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0x66000000))
+                                .clickable { fitMenu = true }.padding(horizontal = 13.dp, vertical = 10.dp),
+                        )
+                        DropdownMenu(expanded = fitMenu, onDismissRequest = { fitMenu = false }) {
+                            listOf(
+                                "Fit screen" to androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT,
+                                "Fill screen" to androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL,
+                                "Crop / zoom" to androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
+                            ).forEach { (label, mode) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    onClick = { fitMode = mode; playerView?.resizeMode = mode; fitMenu = false },
+                                )
                             }
                         }
                     }
                 }
-                Row(Modifier.fillMaxWidth().statusBarsPadding().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(44.dp).clip(CircleShape).background(Color(0x66000000)).clickable { videoOpen = null; player.pause() }, contentAlignment = Alignment.Center) {
-                        Text("✕", color = Color.White, fontSize = 18.sp)
+
+                Box(
+                    Modifier.fillMaxWidth().height(184.dp).align(Alignment.BottomCenter)
+                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xF0000000))))
+                )
+                Column(
+                    Modifier.fillMaxWidth().align(Alignment.BottomCenter).navigationBarsPadding()
+                        .padding(horizontal = 18.dp, vertical = 12.dp),
+                ) {
+                    Slider(
+                        value = (seeking ?: if (duration > 0) position.toFloat() / duration else 0f).coerceIn(0f, 1f),
+                        onValueChange = { seeking = it },
+                        onValueChangeFinished = {
+                            seeking?.let { fraction ->
+                                if (duration > 0) player.seekTo((fraction * duration).toLong())
+                            }
+                            seeking = null
+                        },
+                        colors = SliderDefaults.colors(
+                            thumbColor = c.accent,
+                            activeTrackColor = c.accent,
+                            inactiveTrackColor = Color.White.copy(alpha = 0.35f),
+                        ),
+                    )
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Text(formatTime(seeking?.let { (it * duration).toLong() } ?: position),
+                            color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        Spacer(Modifier.weight(1f))
+                        Text("-" + formatTime((duration - (seeking?.let { (it * duration).toLong() } ?: position)).coerceAtLeast(0L)),
+                            color = Color.White.copy(alpha = 0.72f), fontSize = 12.sp)
                     }
-                    Text(item.title, color = Color.White, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 10.dp))
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        VideoControlButton("−10", "Back 10 seconds") {
+                            player.seekTo((player.currentPosition - 10_000L).coerceAtLeast(0L))
+                            controlsVisible = true
+                        }
+                        VideoControlButton(if (isPlaying) "Ⅱ" else "▶", if (isPlaying) "Pause" else "Play", primary = true, size = 58) {
+                            if (player.isPlaying) player.pause() else player.play()
+                            controlsVisible = true
+                        }
+                        VideoControlButton("+10", "Forward 10 seconds") {
+                            val end = player.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
+                            player.seekTo((player.currentPosition + 10_000L).coerceAtMost(end))
+                            controlsVisible = true
+                        }
+                        Box {
+                            Text(
+                                "${"%.2f".format(speed)}×", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0x66000000))
+                                    .clickable { speedMenu = true }.padding(horizontal = 12.dp, vertical = 10.dp),
+                            )
+                            DropdownMenu(expanded = speedMenu, onDismissRequest = { speedMenu = false }) {
+                                listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f).forEach { rate ->
+                                    DropdownMenuItem(
+                                        text = { Text(if (rate == 1f) "Normal" else "${rate}×") },
+                                        onClick = {
+                                            speed = rate
+                                            player.playbackParameters = androidx.media3.common.PlaybackParameters(rate, player.playbackParameters.pitch)
+                                            speedMenu = false
+                                            controlsVisible = true
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (error != null) {
+                Column(
+                    Modifier.align(Alignment.Center).padding(24.dp).fillMaxWidth()
+                        .clip(RoundedCornerShape(22.dp)).background(Color(0xF01B1B22)).padding(22.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text("CAN’T PLAY THIS VIDEO", color = Color.White, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
+                    Spacer(Modifier.height(8.dp))
+                    Text(error, color = Color.White.copy(alpha = 0.82f), textAlign = TextAlign.Center, fontSize = 14.sp)
+                    Spacer(Modifier.height(18.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Button(onClick = onRetry, colors = ButtonDefaults.buttonColors(containerColor = c.accent)) {
+                            Text("Try again", color = c.onAccent)
+                        }
+                        OutlinedButton(onClick = { onErrorDismiss(); onClose() }) { Text("Close", color = Color.White) }
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun VideoControlButton(
+    label: String,
+    description: String,
+    primary: Boolean = false,
+    size: Int = 44,
+    onClick: () -> Unit,
+) {
+    Box(
+        Modifier.size(size.dp).clip(CircleShape)
+            .background(if (primary) LocalMortimerColors.current.accent else Color(0x66000000))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, color = if (primary) LocalMortimerColors.current.onAccent else Color.White,
+            fontSize = if (label.length > 2) 12.sp else 21.sp, fontWeight = FontWeight.Bold)
     }
 }
 
