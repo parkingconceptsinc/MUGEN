@@ -50,9 +50,9 @@ fun EqualizerSection(modifier: Modifier) {
     Column(modifier.verticalScroll(rememberScrollState())) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
             Column(Modifier.weight(1f)) {
-                Text("Ecualizador", color = c.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Text("Equalizer", color = c.text, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text(
-                    if (s.enabled) s.preset + (if (s.preamp != 0f) " · preamplificador ${signed(s.preamp)} dB" else "") else "Apagado",
+                    if (s.enabled) s.preset + (if (s.preamp != 0f) " · preamp ${signed(s.preamp)} dB" else "") else "Off",
                     color = c.muted, fontSize = 12.sp,
                 )
             }
