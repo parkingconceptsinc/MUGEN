@@ -382,7 +382,9 @@ private fun MortimerApp(
     @Composable
     fun Body(modifier: Modifier, wide: Boolean, compact: Boolean) {
         Box(modifier.background(c.bg), contentAlignment = Alignment.TopCenter) {
-            if (c.dark && (section == "home" || section == "music")) {
+            // Keep the same branded backdrop across every Android section, not only Home and Music.
+            // The theme's base color remains underneath it, so Light mode keeps its intended appearance.
+            if (c.dark) {
                 Image(
                     painter = painterResource(R.drawable.music_home_bg), contentDescription = null,
                     contentScale = ContentScale.Crop, alpha = 0.40f, modifier = Modifier.fillMaxSize(),
