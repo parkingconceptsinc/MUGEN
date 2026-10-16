@@ -732,9 +732,15 @@ private fun rememberPosition(player: Player, active: Boolean): Pair<Long, Long> 
 private fun MiniPlayer(player: Player, current: LibraryItem, title: String?, isPlaying: Boolean, error: String?, onOpen: () -> Unit) {
     val c = LocalMortimerColors.current
     val (position, duration) = rememberPosition(player, isPlaying)
-    Column(Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(16.dp)).background(c.panel).clickable(onClick = onOpen)) {
-        Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            CoverImage(current, Modifier.size(42.dp).clip(RoundedCornerShape(8.dp)))
+    Column(
+        Modifier.fillMaxWidth().padding(top = 8.dp).clip(RoundedCornerShape(18.dp))
+            .background(Brush.horizontalGradient(listOf(c.panel, c.panel2.copy(alpha = if (c.dark) 0.92f else 0.72f))))
+            .clickable(onClick = onOpen)
+    ) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 11.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(46.dp).clip(RoundedCornerShape(10.dp)).background(c.accent.copy(alpha = if (c.dark) 0.14f else 0.08f)), contentAlignment = Alignment.Center) {
+                CoverImage(current, Modifier.fillMaxSize().clip(RoundedCornerShape(10.dp)))
+            }
             Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                 Text(title ?: current.title, color = c.text, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(error ?: current.artist.ifBlank { "Playing" }, color = if (error != null) Color(0xFFFF7A66) else c.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
