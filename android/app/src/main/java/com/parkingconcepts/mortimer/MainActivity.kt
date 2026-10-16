@@ -94,7 +94,7 @@ class MainActivity : ComponentActivity() {
                 runCatching { future.get() }.onSuccess { controller ->
                     if (!isFinishing && !isDestroyed) {
                         setContent {
-                            MortimerTheme(themePref.value) {
+                            MortimerTheme(themePref.value, palettePref.value) {
                                 val dark = LocalMortimerColors.current.dark
                                 SideEffect {
                                     WindowCompat.getInsetsController(window, window.decorView).apply {
@@ -118,7 +118,7 @@ class MainActivity : ComponentActivity() {
                 }.onFailure {
                     if (!isFinishing && !isDestroyed) {
                         setContent {
-                            MortimerTheme(themePref.value) {
+                            MortimerTheme(themePref.value, palettePref.value) {
                                 Surface(Modifier.fillMaxSize(), color = LocalMortimerColors.current.bg) {
                                     Text("The player could not start. Close and reopen MUGEN.", color = LocalMortimerColors.current.text, modifier = Modifier.padding(24.dp))
                                 }
