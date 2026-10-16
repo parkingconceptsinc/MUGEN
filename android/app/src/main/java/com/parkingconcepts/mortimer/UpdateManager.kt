@@ -50,30 +50,41 @@ private fun parseVersionCode(tag: String): Int? {
 }
 
 private fun fetchLatestMortimerRelease(): MortimerRelease {
-    val connection = (URL("https://api.github.com/repos/parkingconceptsinc/MUGEN/releases/latest").openConnection() as HttpURLConnection).apply {
+    val connection = (URL("https://api.github.com/repos/parkingconceptsinc/MUGEN/releases?per_page=100").openConnection() as HttpURLConnection).apply {
         requestMethod = "GET"
         connectTimeout = 8000
         readTimeout = 10000
         setRequestProperty("Accept", "application/vnd.github+json")
-        setRequestProperty("User-Agent", "Mortimer-Player-Android-Updater")
+        setRequestProperty("User-Agent", "MUGEN-Android-Updater")
     }
     try {
         if (connection.responseCode !in 200..299) {
-            throw IllegalStateException(if (connection.responseCode == 404) "No Android release has been published yet." else "GitHub update check failed (HTTP ${connection.responseCode}).")
+            throw IllegalStateException("GitHub update check failed (HTTP ${connection.responseCode}). Check your connection and try again.")
         }
-        val json = connection.inputStream.bufferedReader(Charsets.UTF_8).use { JSONObject(it.readText()) }
-        val tag = json.optString("tag_name")
-        val versionCode = parseVersionCode(tag) ?: throw IllegalStateException("The latest release tag must use android-vMAJOR.MINOR.PATCH, such as android-v0.7.3.")
-        val assets = json.optJSONArray("assets") ?: throw IllegalStateException("The latest release has no APK assets.")
-        for (index in 0 until assets.length()) {
-            val asset = assets.optJSONObject(index) ?: continue
-            val name = asset.optString("name")
-            val url = asset.optString("browser_download_url")
-            if (name.endsWith(".apk", ignoreCase = true) && Uri.parse(url).host == "github.com") {
-                return MortimerRelease(tag, versionCode, url, name)
+        val releases = connection.inputStream.bufferedReader(Charsets.UTF_8).use { org.json.JSONArray(it.readText()) }
+        var best: MortimerRelease? = null
+        for (releaseIndex in 0 until releases.length()) {
+            val releaseJson = releases.optJSONObject(releaseIndex) ?: continue
+            if (releaseJson.optBoolean("draft", false) || releaseJson.optBoolean("prerelease", false)) continue
+            val tag = releaseJson.optString("tag_name")
+            // Ignore website/PWA releases. The Android updater must only use explicitly versioned APK releases.
+            if (!tag.startsWith("android-v", ignoreCase = true)) continue
+            val versionCode = parseVersionCode(tag) ?: continue
+            val assets = releaseJson.optJSONArray("assets") ?: continue
+            for (assetIndex in 0 until assets.length()) {
+                val asset = assets.optJSONObject(assetIndex) ?: continue
+                val name = asset.optString("name")
+                val url = asset.optString("browser_download_url")
+                if (name.endsWith(".apk", ignoreCase = true) && Uri.parse(url).host == "github.com") {
+                    val candidate = MortimerRelease(tag, versionCode, url, name)
+                    if (best == null || candidate.versionCode > best!!.versionCode) best = candidate
+                    break
+                }
             }
         }
-        throw IllegalStateException("The latest release does not include an APK file.")
+        return best ?: throw IllegalStateException(
+            "No Android update is published yet. A signed APK must be attached to a GitHub Release tagged android-vMAJOR.MINOR.PATCH."
+        )
     } finally {
         connection.disconnect()
     }
@@ -87,6 +98,7 @@ internal fun AppUpdateCard() {
     var checking by remember { mutableStateOf(false) }
     var release by remember { mutableStateOf<MortimerRelease?>(null) }
     var downloadedName by remember { mutableStateOf<String?>(null) }
+    var downloadingRelease by remember { mutableStateOf<MortimerRelease?>(null) }
     var downloadId by remember { mutableStateOf<Long?>(null) }
     var message by remember { mutableStateOf("Checking for updates…") }
 
@@ -133,6 +145,7 @@ internal fun AppUpdateCard() {
                                 .setAllowedOverRoaming(false)
                                 .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, latest.apkName)
                             val manager = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
+                            downloadingRelease = latest
                             downloadId = manager.enqueue(request)
                             downloadedName = null
                             message = "Downloading ${latest.tag}…"
@@ -194,8 +207,8 @@ internal fun AppUpdateCard() {
                 if (it.moveToFirst()) {
                     when (it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
                         DownloadManager.STATUS_SUCCESSFUL -> {
-                            downloadedName = release?.apkName
-                            message = "Update downloaded. Tap Install update to continue."
+                            downloadedName = downloadingRelease?.apkName
+                            message = if (downloadingRelease != null) "Update downloaded. Tap Install update to continue." else "Download finished, but the update details were lost. Check for updates and download again."
                             finished = true
                         }
                         DownloadManager.STATUS_FAILED -> {
@@ -210,6 +223,7 @@ internal fun AppUpdateCard() {
             }
             if (finished) {
                 downloadId = null
+                downloadingRelease = null
                 break
             }
         }
