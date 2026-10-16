@@ -17,7 +17,7 @@
         android:allowBackup="true"
         android:icon="@drawable/ic_mortimer"
         android:roundIcon="@drawable/ic_mortimer"
-        android:label="Mortimer Player"
+        android:label="MUGEN"
         android:usesCleartextTraffic="false"
         android:theme="@android:style/Theme.Material.NoActionBar">
         <meta-data
@@ -61,8 +61,9 @@
 
         <service
             android:name=".PlaybackService"
+            android:label="MUGEN"
             android:exported="true"
-            android:permission="android.permission.MEDIA_CONTENT_CONTROL"
+            android:permission="android.permission.BIND_MEDIA_BROWSER_SERVICE"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaLibraryService" />
