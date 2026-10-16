@@ -138,7 +138,7 @@ private fun copyToCache(context: Context, uri: Uri, name: String, onProgress: (I
 }
 
 fun rarErrorMessage(error: Throwable): String =
-    "No se pudo abrir el archivo comprimido: " + (error.message ?: error.javaClass.simpleName)
+    "Could not open the archive: " + (error.message ?: error.javaClass.simpleName)
 
 /** Opens a comic or PDF as pages. Runs on a background thread. */
 fun openPageSource(context: Context, uri: Uri, format: String, onProgress: (String) -> Unit): PageSource {
@@ -150,7 +150,7 @@ fun openPageSource(context: Context, uri: Uri, format: String, onProgress: (Stri
     val stamp = System.currentTimeMillis()
     return when (kind) {
         "pdf" -> {
-            val fd = context.contentResolver.openFileDescriptor(uri, "r") ?: error("No se pudo abrir el PDF.")
+            val fd = context.contentResolver.openFileDescriptor(uri, "r") ?: error("Could not open the PDF.")
             PdfPageSource(fd)
         }
         "rar" -> {
