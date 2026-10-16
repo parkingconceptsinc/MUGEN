@@ -288,12 +288,12 @@ private fun ItemMenu(
                 Spacer(Modifier.height(8.dp))
                 MenuItem("‹ Volver") { details = false }
             } else {
-                MenuItem(if (item.started) "▶ Seguir leyendo" else "▶ Leer") { onOpen(false) }
-                if (item.openedAt > 0) MenuItem("↺ Leer desde el principio") { onOpen(true) }
+                MenuItem(if (item.started) "▶ Continue reading" else "▶ Read") { onOpen(false) }
+                if (item.openedAt > 0) MenuItem("↺ Read from beginning") { onOpen(true) }
                 if (item.finished) MenuItem("↶ Mark as unread") { onMark(false) } else MenuItem("✓ Mark as read") { onMark(true) }
                 MenuItem(if (item.kind == "books") "⇄ Move to Comics" else "⇄ Move to Books") { onMove() }
-                MenuItem("ⓘ Detalles") { details = true }
-                MenuItem("🗑 Quitar de la biblioteca", danger = true) { onRemove() }
+                MenuItem("ⓘ Details") { details = true }
+                MenuItem("🗑 Remove from library", danger = true) { onRemove() }
             }
         }
     }
