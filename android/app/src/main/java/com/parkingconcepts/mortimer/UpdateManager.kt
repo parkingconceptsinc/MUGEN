@@ -50,7 +50,7 @@ private fun parseVersionCode(tag: String): Int? {
 }
 
 private fun fetchLatestMortimerRelease(): MortimerRelease {
-    val connection = (URL("https://api.github.com/repos/parkingconceptsinc/Mortimer-player/releases/latest").openConnection() as HttpURLConnection).apply {
+    val connection = (URL("https://api.github.com/repos/parkingconceptsinc/MUGEN/releases/latest").openConnection() as HttpURLConnection).apply {
         requestMethod = "GET"
         connectTimeout = 8000
         readTimeout = 10000
@@ -172,7 +172,7 @@ internal fun AppUpdateCard() {
                 }
                 if (release == null) {
                     OutlinedButton(onClick = {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/parkingconceptsinc/Mortimer-player/releases")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/parkingconceptsinc/MUGEN/releases")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
                     }, modifier = Modifier.weight(1f)) { Text("Release page") }
                 }
             }
