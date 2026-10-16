@@ -737,7 +737,7 @@ private fun MiniPlayer(player: Player, current: LibraryItem, title: String?, isP
             CoverImage(current, Modifier.size(42.dp).clip(RoundedCornerShape(8.dp)))
             Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                 Text(title ?: current.title, color = c.text, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(error ?: current.artist.ifBlank { "Reproduciendo" }, color = if (error != null) Color(0xFFFF7A66) else c.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(error ?: current.artist.ifBlank { "Playing" }, color = if (error != null) Color(0xFFFF7A66) else c.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             RoundButton(if (isPlaying) "Ⅱ" else "▶", primary = true) { if (player.isPlaying) player.pause() else player.play() }
             Spacer(Modifier.width(6.dp))
@@ -792,7 +792,7 @@ private fun NowPlayingSection(player: Player, current: LibraryItem?, title: Stri
                 }
                 Spacer(Modifier.height(13.dp))
                 Box(Modifier.clip(RoundedCornerShape(50)).background(c.accent.copy(alpha = if (c.dark) 0.14f else 0.10f)).padding(horizontal = 11.dp, vertical = 6.dp)) {
-                    Text("REPRODUCIENDO AHORA", color = c.accent, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp)
+                    Text("NOW PLAYING", color = c.accent, fontSize = 9.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp)
                 }
                 Spacer(Modifier.height(10.dp))
                 Text(title ?: current?.title ?: "", color = c.text, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold, maxLines = 2, overflow = TextOverflow.Ellipsis)
