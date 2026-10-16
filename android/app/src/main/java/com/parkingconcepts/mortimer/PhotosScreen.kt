@@ -117,8 +117,8 @@ private fun queryPhotos(context: Context): List<DevicePhoto> {
                 DevicePhoto(
                     id = photoId,
                     uri = ContentUris.withAppendedId(collection, photoId),
-                    name = c.getString(name) ?: "Foto",
-                    bucket = c.getString(bucket) ?: "Sin carpeta",
+                    name = c.getString(name) ?: "Photo",
+                    bucket = c.getString(bucket) ?: "No folder",
                     takenAt = takenAt,
                     width = c.getInt(width),
                     height = c.getInt(height),
@@ -157,7 +157,7 @@ private fun sharePhotos(context: Context, photos: List<DevicePhoto>) {
     }
     intent.type = "image/*"
     intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    context.startActivity(Intent.createChooser(intent, "Compartir fotos"))
+    context.startActivity(Intent.createChooser(intent, "Share photos"))
 }
 
 private fun loadFavorites(context: Context): Set<Long> =
@@ -179,7 +179,7 @@ fun PhotosSection(modifier: Modifier = Modifier) {
     var refresh by remember { mutableIntStateOf(0) }
     var photos by remember { mutableStateOf<List<DevicePhoto>?>(null) }
     var favorites by remember { mutableStateOf(loadFavorites(context)) }
-    var tab by remember { mutableStateOf("Fotos") }
+    var tab by remember { mutableStateOf("Photos") }
     var bucket by remember { mutableStateOf<String?>(null) }
     var columns by remember { mutableIntStateOf(4) }
     var selected by remember { mutableStateOf<Set<Long>?>(null) }
@@ -202,28 +202,28 @@ fun PhotosSection(modifier: Modifier = Modifier) {
     Column(modifier.fillMaxWidth()) {
         if (access == "none") {
             Column(Modifier.fillMaxWidth().padding(top = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text("Tus fotos, ordenadas como un álbum", color = PhText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text("Mortimer Player lee las fotos del teléfono sin copiarlas. Necesita permiso para verlas.", color = PhMuted, fontSize = 14.sp, modifier = Modifier.padding(vertical = 12.dp))
-                Button(onClick = { launcher.launch(photoPermissions()) }, colors = ButtonDefaults.buttonColors(containerColor = PhAccent, contentColor = Color(0xFF111114))) { Text("Permitir acceso a fotos") }
+                Text("Your photos, beautifully organized", color = PhText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("MUGEN displays photos from your device without copying them. Photo access permission is required.", color = PhMuted, fontSize = 14.sp, modifier = Modifier.padding(vertical = 12.dp))
+                Button(onClick = { launcher.launch(photoPermissions()) }, colors = ButtonDefaults.buttonColors(containerColor = PhAccent, contentColor = Color(0xFF111114))) { Text("Allow photo access") }
             }
         } else if (photos == null) {
-            Text("Cargando fotos…", color = PhMuted, modifier = Modifier.padding(top = 20.dp))
+            Text("Loading photos…", color = PhMuted, modifier = Modifier.padding(top = 20.dp))
         } else {
         val all = photos!!
 
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
             if (bucket != null) {
-                PhotoChip("‹ Álbumes", false) { bucket = null }
+                PhotoChip("‹ Albums", false) { bucket = null }
                 Spacer(Modifier.width(8.dp))
                 Text(bucket!!, color = PhText, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
             } else {
-                listOf("Fotos", "Álbumes", "Favoritos").forEach { name ->
+                listOf("Photos", "Albums", "Favorites").forEach { name ->
                     PhotoChip(name, tab == name) { tab = name; selected = null }
                     Spacer(Modifier.width(6.dp))
                 }
                 Spacer(Modifier.weight(1f))
             }
-            if (bucket != null || tab != "Álbumes") {
+            if (bucket != null || tab != "Albums") {
                 PhotoChip("−", false) { columns = (columns + 1).coerceAtMost(7) }
                 Spacer(Modifier.width(4.dp))
                 PhotoChip("+", false) { columns = (columns - 1).coerceAtLeast(2) }
@@ -232,13 +232,13 @@ fun PhotosSection(modifier: Modifier = Modifier) {
 
         if (access == "partial") {
             Row(Modifier.fillMaxWidth().background(PhPanel, RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Solo ves las fotos que elegiste.", color = PhMuted, fontSize = 13.sp, modifier = Modifier.weight(1f))
-                Text("Elegir más", color = PhAccent, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.clickable { launcher.launch(photoPermissions()) }.padding(6.dp))
+                Text("You are viewing only the photos you selected.", color = PhMuted, fontSize = 13.sp, modifier = Modifier.weight(1f))
+                Text("Select more", color = PhAccent, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.clickable { launcher.launch(photoPermissions()) }.padding(6.dp))
             }
             Spacer(Modifier.height(8.dp))
         }
 
-        if (bucket == null && tab == "Álbumes") {
+        if (bucket == null && tab == "Albums") {
             val albums = remember(all) { all.groupBy { it.bucket }.entries.sortedByDescending { e -> e.value.first().takenAt } }
             LazyVerticalGrid(columns = GridCells.Adaptive(150.dp), modifier = Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 items(albums, key = { it.key }) { (name, list) ->
@@ -248,18 +248,18 @@ fun PhotosSection(modifier: Modifier = Modifier) {
                             modifier = Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(14.dp)).background(PhPanel2),
                         )
                         Text(name, color = PhText, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 6.dp))
-                        Text("${list.size} fotos", color = PhMuted, fontSize = 12.sp)
+                        Text("${list.size} photos", color = PhMuted, fontSize = 12.sp)
                     }
                 }
             }
         } else {
         val shown = when {
             bucket != null -> all.filter { it.bucket == bucket }
-            tab == "Favoritos" -> all.filter { it.id in favorites }
+            tab == "Favorites" -> all.filter { it.id in favorites }
             else -> all
         }
         if (shown.isEmpty()) {
-            Text(if (tab == "Favoritos") "Mantén pulsada una foto o toca el corazón en el visor para guardarla aquí." else "No se encontraron fotos.", color = PhMuted, fontSize = 14.sp, modifier = Modifier.padding(top = 20.dp))
+            Text(if (tab == "Favorites") "Long-press a photo or tap the heart in the viewer to save it here." else "No photos found.", color = PhMuted, fontSize = 14.sp, modifier = Modifier.padding(top = 20.dp))
         } else {
         val groups = remember(shown) { shown.groupBy { monthFormat.format(Date(it.takenAt)).replaceFirstChar { c -> c.titlecase() } } }
 
@@ -307,9 +307,9 @@ fun PhotosSection(modifier: Modifier = Modifier) {
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Text("${sel.size}", color = PhText, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 6.dp))
-                    PhotoChip("Todas", false) { selected = shown.map { it.id }.toSet() }
+                    PhotoChip("All", false) { selected = shown.map { it.id }.toSet() }
                     PhotoChip("♥ Favorito", false) { setFavorite(sel, !sel.all { it in favorites }); selected = null }
-                    PhotoChip("Compartir", false) { sharePhotos(context, shown.filter { it.id in sel }); selected = null }
+                    PhotoChip("Share", false) { sharePhotos(context, shown.filter { it.id in sel }); selected = null }
                     PhotoChip("✕", false) { selected = null }
                 }
             }
@@ -398,10 +398,10 @@ private fun PhotoViewerDialog(
                     Text("Detalles", color = PhText, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     Spacer(Modifier.height(10.dp))
                     InfoLine("Archivo", current.name)
-                    InfoLine("Fecha", DateFormat.getDateTimeInstance(DateFormat.FULL, DateFormat.SHORT).format(Date(current.takenAt)))
-                    if (current.width > 0) InfoLine("Tamaño", "${current.width} × ${current.height} · ${"%.1f".format(current.width * current.height / 1_000_000f)} MP")
+                    InfoLine("Date", DateFormat.getDateTimeInstance(DateFormat.FULL, DateFormat.SHORT).format(Date(current.takenAt)))
+                    if (current.width > 0) InfoLine("Dimensions", "${current.width} × ${current.height} · ${"%.1f".format(current.width * current.height / 1_000_000f)} MP")
                     InfoLine("Peso", Formatter.formatShortFileSize(context, current.size))
-                    InfoLine("Álbum", current.bucket)
+                    InfoLine("Album", current.bucket)
                     InfoLine("Formato", current.mime)
                 }
             }
