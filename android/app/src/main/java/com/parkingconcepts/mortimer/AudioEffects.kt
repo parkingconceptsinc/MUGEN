@@ -63,7 +63,20 @@ object AudioEffects {
             val arr = o.optJSONArray("bands") ?: JSONArray()
             Settings(
                 enabled = o.optBoolean("enabled", false),
-                preset = o.optString("preset", "Flat"),
+                preset = when (o.optString("preset", "Flat")) {
+                    "Plano" -> "Flat"
+                    "Más graves" -> "Bass Boost"
+                    "Menos graves" -> "Bass Cut"
+                    "Más agudos" -> "Treble Boost"
+                    "Clásica" -> "Classical"
+                    "Electrónica" -> "Electronic"
+                    "Latina" -> "Latin"
+                    "Reguetón" -> "Reggaeton"
+                    "Voces" -> "Vocals"
+                    "Acústica" -> "Acoustic"
+                    "Sonoridad" -> "Loudness"
+                    else -> o.optString("preset", "Flat")
+                },
                 bands = List(BANDS.size) { i -> arr.optDouble(i, 0.0).toFloat().coerceIn(-RANGE, RANGE) },
                 preamp = o.optDouble("preamp", 0.0).toFloat().coerceIn(-RANGE, RANGE),
                 balance = o.optDouble("balance", 0.0).toFloat().coerceIn(-1f, 1f),
