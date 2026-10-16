@@ -38,8 +38,8 @@ data class LibraryItem(
 
     val statusLabel: String
         get() = when {
-            finished -> "Leído"
-            openedAt == 0L || progress <= 0f -> if (pages > 0 && (format == "cbz" || format == "cbr" || format == "pdf")) "$pages páginas" else format.uppercase()
+            finished -> "Finished"
+            openedAt == 0L || progress <= 0f -> if (pages > 0 && (format == "cbz" || format == "cbr" || format == "pdf")) "$pages pages" else format.uppercase()
             format == "epub" || format == "txt" -> "${(progress * 100).toInt().coerceAtLeast(1)}% leído"
             else -> "Página ${position.toIntOrNull()?.plus(1) ?: 1} de $pages"
         }
@@ -208,7 +208,7 @@ fun itemsFromTree(context: Context, tree: Uri, kind: String): List<LibraryItem> 
         }
         if (depth < 5) dirs.forEach { (id, name) -> walk(id, name, depth + 1) }
     }
-    val rootName = rootId.substringAfterLast(':').substringAfterLast('/').ifBlank { "Carpeta" }
+    val rootName = rootId.substringAfterLast(':').substringAfterLast('/').ifBlank { "Folder" }
     walk(rootId, rootName, 0)
     return out
 }
