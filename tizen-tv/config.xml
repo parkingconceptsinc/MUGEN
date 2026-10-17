@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets" id="http://parkingconceptsinc.com/mortimerplayer/tizen" version="0.2.0" viewmodes="maximized">
+  <name>Mortimer Player</name>
+  <content src="index.html"/>
+  <description>Mortimer Player for Samsung Smart TVs</description>
+  <access origin="*" subdomains="true"/>
+  <tizen:application id="org.parkingconceptsinc.mortimer" package="MortimerTV" required_version="5.5"/>
+  <tizen:profile name="tv-samsung"/>
+  <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable" pointing-device-support="disable"/>
+  <feature name="http://tizen.org/feature/screen.size.normal"/>
+  <tizen:privilege name="http://tizen.org/privilege/filesystem.read"/>
+  <tizen:privilege name="http://tizen.org/privilege/filesystem.write"/>
+  <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+  <tizen:privilege name="http://tizen.org/privilege/mediastorage"/>
+  <tizen:privilege name="http://tizen.org/privilege/externalstorage"/>
+</widget>
