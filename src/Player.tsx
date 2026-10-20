@@ -1746,7 +1746,7 @@ export function Player() {
             </div>
           </aside>
 
-          <main className="main" onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd} onTouchCancel={() => { swipeStart.current = null; }}>
+          <main className="main" onTouchStart={handleSwipeStart} onTouchEnd={handleSwipeEnd} onTouchCancel={() => { swipeStart.current = null; }} onAnimationEnd={(event) => { if ((event.target as HTMLElement).classList.contains("screen")) setSwipeDirection(null); }}>
             <Library active={screen === "library"} />
             <NowPlaying active={screen === "player"} />
             {screen === "videos" && <Videos />}
