@@ -1612,11 +1612,11 @@ img, video, iframe, canvas, svg {
   .brand .logo { width: 44px; height: 44px; border-radius: 13px; }
   .brand b { display: none; }
   .sidebar nav { display: flex; flex-direction: column; gap: 4px; }
-  .sidebar nav button { justify-content: center; gap: 0; padding: 12px 8px; font-size: 0; }
+  .sidebar nav button { display: flex; align-items: center; justify-content: center; gap: 0; padding: 12px 8px; border: 0; border-radius: 10px; background: none; color: var(--muted); font-size: 0; }\n  .sidebar nav button:hover { background: #ffffff0a; color: var(--text); }\n  .sidebar nav button.active { background: #ffffff10; color: var(--text); }\n  .sidebar nav button.active svg { color: var(--accent); }
   .sidebar nav button svg { width: 20px; height: 20px; flex: none; }
   .sidebar nav em { display: none; }
   .sidebarActions { display: flex; flex-direction: column; gap: 6px; margin-top: auto; }
-  .sidebarActions button { justify-content: center; gap: 0; padding: 10px 8px; font-size: 0; }
+  .sidebarActions button { display: flex; align-items: center; justify-content: center; gap: 0; padding: 10px 8px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); font-size: 0; }\n  .sidebarActions button.accent { border-color: transparent; background: var(--accent); color: var(--on-accent); }
   .sidebarActions button svg { width: 18px; height: 18px; flex: none; }
   .tabbar { display: none; }
   .main, .miniPlayer { grid-column: 2; min-width: 0; }
