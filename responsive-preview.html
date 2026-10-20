@@ -15,36 +15,39 @@ p{margin:0;color:var(--muted)}.scope{border:1px solid var(--line);background:#12
 .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:18px 0}
 button,select{font:inherit;color:var(--text);background:#172231;border:1px solid #344256;border-radius:10px;padding:9px 12px;max-width:100%}
 button{cursor:pointer}button:hover{border-color:var(--accent)}button.active{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
-.grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;align-items:start}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px;align-items:start}
 .card{min-width:0;border:1px solid var(--line);background:linear-gradient(180deg,#121a26,#0d121b);border-radius:16px;padding:12px}
 .cardHead{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:10px}
 h2{font-size:14px;margin:0 0 2px}.dim{font-size:12px;color:var(--muted)}.tag{font-size:11px;border:1px solid #344256;border-radius:999px;padding:4px 7px;white-space:nowrap}
 .stage{min-height:230px;display:flex;justify-content:center;align-items:flex-start;overflow:auto;padding:8px 0 12px}
 .device{background:#020305;border:2px solid #414957;box-shadow:0 0 0 3px #151c27,0 16px 30px #0008;overflow:hidden;flex:none}
-.phone{width:100%;border-radius:25px;padding:6px;aspect-ratio:9/19.5}
+.phone{width:100%;border-radius:25px;padding:6px;aspect-ratio:auto}
 .screen{height:100%;width:100%;border-radius:19px;overflow:hidden;background:#080c12}
-iframe{display:block;width:100%;height:100%;border:0;background:#080c12}
+iframe{display:block;width:100%;height:100%;border:0;background:#080c12}.viewportFrame{position:relative;overflow:hidden;flex:none;border:2px solid #414957;border-radius:14px;background:#080c12;box-shadow:0 0 0 3px #151c27,0 16px 30px #0008}.viewportFrame iframe{position:absolute;top:0;left:0;max-width:none;transform-origin:top left}.desktopViewport{width:432px;height:270px}.desktopViewport iframe{width:1440px;height:900px;transform:scale(.3)}.tabletLandscape{width:410px;height:300px}.tabletLandscape iframe{width:820px;height:600px;transform:scale(.5)}.tabletPortrait{width:276px;height:369px}.tabletPortrait iframe{width:768px;height:1024px;transform:scale(.36)}
 .w320{width:min(100%,320px)}.w360{width:min(100%,360px)}.w390{width:min(100%,390px)}.w430{width:min(100%,430px)}
-.card[data-size="320"] .phone{width:280px}.card[data-size="360"] .phone{width:300px}.card[data-size="390"] .phone{width:320px}.card[data-size="430"] .phone{width:340px}
-.card[data-size="320"] .screen iframe{transform:scale(.875);transform-origin:top left;width:114.286%;height:114.286%}
-.card[data-size="360"] .screen iframe{transform:scale(.9375);transform-origin:top left;width:106.667%;height:106.667%}
-.card[data-size="390"] .screen iframe{transform:scale(1);transform-origin:top left;width:100%;height:100%}
-.card[data-size="430"] .screen iframe{transform:scale(1.0625);transform-origin:top left;width:94.118%;height:94.118%}
+.card[data-size="320"] .phone{width:284px;height:596px}.card[data-size="360"] .phone{width:300px;height:631px}.card[data-size="390"] .phone{width:320px;height:674px}.card[data-size="430"] .phone{width:340px;height:719px}
+.card[data-size="320"] .screen iframe{width:320px;height:693px;transform:scale(.8375);transform-origin:top left}
+.card[data-size="360"] .screen iframe{width:360px;height:780px;transform:scale(.788889);transform-origin:top left}
+.card[data-size="390"] .screen iframe{width:390px;height:844px;transform:scale(.779487);transform-origin:top left}
+.card[data-size="430"] .screen iframe{width:430px;height:932px;transform:scale(.753488);transform-origin:top left}
 .foot{font-size:12px;color:var(--muted);border-top:1px solid var(--line);padding-top:10px}
 .note{margin-top:18px;border:1px solid #3b4a5d;background:#101824;border-radius:12px;padding:12px 14px;color:#c2cddd;font-size:12px}
-@media(max-width:1150px){.grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.grid{grid-template-columns:1fr}}
 @media(max-width:620px){.grid{grid-template-columns:1fr}.card{padding:12px}.stage{min-height:200px}.card[data-size="320"] .phone{width:280px}.card[data-size="360"] .phone{width:300px}.card[data-size="390"] .phone{width:320px}.card[data-size="430"] .phone{width:340px}}
 </style></head>
 <body><main class="shell">
-<header><div><div class="eyebrow">MUGEN · Responsive Preview Lab</div><h1>One app, multiple phone sizes</h1><p>Compare the real MUGEN app in separate viewport frames before merging responsive changes.</p></div><div class="scope">Visual preview · not a device emulator</div></header>
-<div class="toolbar"><strong>Preview controls:</strong><button data-view="all" class="active">All sizes</button><button data-view="320">Compact · 320 px</button><button data-view="360">Small · 360 px</button><button data-view="390">Standard · 390 px</button><button data-view="430">Large · 430 px</button><button id="reload">Reload all frames</button></div>
+<header><div><div class="eyebrow">MUGEN · Responsive Preview Lab</div><h1>Desktop, tablet, and phone viewport audit</h1><p>Compare the real MUGEN app at fixed CSS viewport sizes across desktop, tablet, and phone layouts.</p></div><div class="scope">Visual preview · not a device emulator</div></header>
+<div class="toolbar"><strong>Preview controls:</strong><button data-view="all" class="active">All sizes</button><button data-view="320">Compact · 320 px</button><button data-view="360">Small · 360 px</button><button data-view="390">Standard · 390 px</button><button data-view="430">Large phone · 430 px</button><button data-view="tablet-landscape">Tablet landscape · 820 × 600</button><button data-view="tablet-portrait">Tablet portrait · 768 × 1024</button><button data-view="desktop">Desktop · 1440 × 900</button><button id="reload">Reload all frames</button></div>
 <section class="grid" id="grid">
 <article class="card" data-size="320"><div class="cardHead"><div><h2>Compact phone</h2><div class="dim">320 CSS px wide</div></div><span class="tag">Narrow</span></div><div class="stage"><div class="device phone w320"><div class="screen"><iframe title="MUGEN compact phone preview" src="./index.html" loading="lazy"></iframe></div></div></div><div class="foot">Check clipped labels, crowded toolbars, and long titles.</div></article>
 <article class="card" data-size="360"><div class="cardHead"><div><h2>Small phone</h2><div class="dim">360 CSS px wide</div></div><span class="tag">Small</span></div><div class="stage"><div class="device phone w360"><div class="screen"><iframe title="MUGEN small phone preview" src="./index.html" loading="lazy"></iframe></div></div></div><div class="foot">Check button padding, text scale, and touch targets.</div></article>
 <article class="card" data-size="390"><div class="cardHead"><div><h2>Standard phone</h2><div class="dim">390 CSS px wide</div></div><span class="tag">Baseline</span></div><div class="stage"><div class="device phone w390"><div class="screen"><iframe title="MUGEN standard phone preview" src="./index.html" loading="lazy"></iframe></div></div></div><div class="foot">Use as the baseline for spacing and alignment.</div></article>
 <article class="card" data-size="430"><div class="cardHead"><div><h2>Large phone</h2><div class="dim">430 CSS px wide</div></div><span class="tag">Large</span></div><div class="stage"><div class="device phone w430"><div class="screen"><iframe title="MUGEN large phone preview" src="./index.html" loading="lazy"></iframe></div></div></div><div class="foot">Check that controls do not look stretched or oversized.</div></article>
+<article class="card" data-size="tablet-landscape"><div class="cardHead"><div><h2>Tablet · landscape</h2><div class="dim">820 × 600 CSS px</div></div><span class="tag">Compact rail</span></div><div class="stage"><div class="viewportFrame tabletLandscape"><iframe title="MUGEN tablet landscape preview" src="./index.html" loading="lazy"></iframe></div></div><div class="foot">Check compact tablet navigation rail, mini-player, and content width.</div></article>
+<article class="card" data-size="tablet-portrait"><div class="cardHead"><div><h2>Tablet · portrait</h2><div class="dim">768 × 1024 CSS px</div></div><span class="tag">Portrait tablet</span></div><div class="stage"><div class="viewportFrame tabletPortrait"><iframe title="MUGEN tablet portrait preview" src="./index.html" loading="lazy"></iframe></div></div><div class="foot">Check bottom navigation, grids, and touch target spacing.</div></article>
+<article class="card" data-size="desktop"><div class="cardHead"><div><h2>Desktop</h2><div class="dim">1440 × 900 CSS px</div></div><span class="tag">PC</span></div><div class="stage"><div class="viewportFrame desktopViewport"><iframe title="MUGEN desktop preview" src="./index.html" loading="lazy"></iframe></div></div><div class="foot">Check sidebar proportions, content density, and wide-screen alignment.</div></article>
 </section>
-<div class="note"><strong>Important limitation:</strong> these frames load the real web app, but a GitHub Pages iframe is not a full device emulator. Local file permissions, installed-app behavior, native APK layouts, and touch/device-density differences cannot be proven here. Compare the layouts visually, then run browser tests and an APK build before merging.</div>
+<div class="note"><strong>Important limitation:</strong> each iframe uses a fixed CSS viewport and is scaled only for display inside this preview page. This is still not a full device emulator. Local file permissions, installed-app behavior, native APK layouts, and touch/device-density differences cannot be proven here. Compare the layouts visually, then run browser tests and an APK build before merging.</div>
 </main>
 <script>
 const cards=[...document.querySelectorAll('.card')], buttons=[...document.querySelectorAll('[data-view]')];
