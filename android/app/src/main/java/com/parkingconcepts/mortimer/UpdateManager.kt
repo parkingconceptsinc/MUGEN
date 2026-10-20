@@ -52,7 +52,7 @@ private fun fetchExpectedSha256(url: String): String {
     try {
         if (connection.responseCode !in 200..299) throw IllegalStateException("Could not download the APK checksum.")
         val line = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readLine().orEmpty() }
-        val hash = line.trim().substringBefore(Regex("\\s+")).lowercase()
+        val hash = line.trim().split(Regex("\\s+"), limit = 2).firstOrNull().orEmpty().lowercase()
         if (!hash.matches(Regex("[a-f0-9]{64}"))) throw IllegalStateException("The published APK checksum is invalid.")
         return hash
     } finally {
