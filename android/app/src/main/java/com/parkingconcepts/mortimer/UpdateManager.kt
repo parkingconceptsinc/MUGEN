@@ -131,7 +131,7 @@ internal fun AppUpdateCard() {
     var downloadedName by remember { mutableStateOf<String?>(null) }
     var downloadingRelease by remember { mutableStateOf<MugenRelease?>(null) }
     var downloadId by remember { mutableStateOf<Long?>(null) }
-    var message by remember { mutableStateOf("Checking for updates…") }
+    var message by remember { mutableStateOf("Updates are checked only when you tap Check for updates.") }
 
     fun checkForUpdates() {
         if (checking) return
@@ -149,8 +149,6 @@ internal fun AppUpdateCard() {
             }
         }
     }
-
-    LaunchedEffect(Unit) { checkForUpdates() }
 
     Card(
         colors = CardDefaults.cardColors(containerColor = c.panel),
@@ -212,7 +210,7 @@ internal fun AppUpdateCard() {
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { checkForUpdates() }, enabled = !checking, modifier = Modifier.weight(1f)) {
-                    Text(if (checking) "Checking…" else "Check again")
+                    Text(if (checking) "Checking…" else "Check for updates")
                 }
                 if (release == null) {
                     OutlinedButton(onClick = {
