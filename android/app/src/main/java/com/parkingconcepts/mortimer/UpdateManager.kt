@@ -38,7 +38,40 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
-private data class MugenRelease(val tag: String, val versionCode: Int, val apkUrl: String, val apkName: String)
+private data class MugenRelease(val tag: String, val versionCode: Int, val apkUrl: String, val checksumUrl: String, val apkName: String)
+
+private fun fetchExpectedSha256(url: String): String {
+    require(isTrustedGitHubReleaseAsset(url)) { "Untrusted checksum URL." }
+    val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+        requestMethod = "GET"
+        connectTimeout = 8000
+        readTimeout = 10000
+        setRequestProperty("Accept", "application/octet-stream")
+        setRequestProperty("User-Agent", "MUGEN-Android-Updater")
+    }
+    try {
+        if (connection.responseCode !in 200..299) throw IllegalStateException("Could not download the APK checksum.")
+        val line = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readLine().orEmpty() }
+        val hash = line.trim().substringBefore(Regex("\\s+")).lowercase()
+        if (!hash.matches(Regex("[a-f0-9]{64}"))) throw IllegalStateException("The published APK checksum is invalid.")
+        return hash
+    } finally {
+        connection.disconnect()
+    }
+}
+
+private fun sha256(file: File): String {
+    val digest = java.security.MessageDigest.getInstance("SHA-256")
+    file.inputStream().buffered().use { input ->
+        val buffer = ByteArray(16 * 1024)
+        while (true) {
+            val count = input.read(buffer)
+            if (count < 0) break
+            digest.update(buffer, 0, count)
+        }
+    }
+    return digest.digest().joinToString("") { "%02x".format(it) }
+}
 
 private fun fetchLatestMugenRelease(): MugenRelease {
     val connection = (URL("https://api.github.com/repos/parkingconceptsinc/MUGEN/releases?per_page=100").openConnection() as HttpURLConnection).apply {
@@ -62,19 +95,26 @@ private fun fetchLatestMugenRelease(): MugenRelease {
             if (!tag.startsWith("android-v", ignoreCase = true)) continue
             val versionCode = parseAndroidVersionCode(tag) ?: continue
             val assets = releaseJson.optJSONArray("assets") ?: continue
+            var apkUrl: String? = null
+            var checksumUrl: String? = null
             for (assetIndex in 0 until assets.length()) {
                 val asset = assets.optJSONObject(assetIndex) ?: continue
                 val name = asset.optString("name")
                 val url = asset.optString("browser_download_url")
-                if (name.equals("MUGEN.apk", ignoreCase = true) && isTrustedGitHubReleaseAsset(url)) {
-                    val candidate = MugenRelease(tag, versionCode, url, name)
-                    if (best == null || candidate.versionCode > best.versionCode) best = candidate
-                    break
+                if (!isTrustedGitHubReleaseAsset(url)) continue
+                when {
+                    name.equals("MUGEN.apk", ignoreCase = true) -> apkUrl = url
+                    name.equals("MUGEN.apk.sha256", ignoreCase = true) -> checksumUrl = url
                 }
+            }
+            // Only offer an update when the release includes the checksum published by CI.
+            if (apkUrl != null && checksumUrl != null) {
+                val candidate = MugenRelease(tag, versionCode, apkUrl, checksumUrl, "MUGEN.apk")
+                if (best == null || candidate.versionCode > best.versionCode) best = candidate
             }
         }
         return best ?: throw IllegalStateException(
-            "No MUGEN Android update is published yet. A signed MUGEN.apk must be attached to a GitHub Release tagged android-vMAJOR.MINOR.PATCH."
+            "No MUGEN Android update is published yet. A signed MUGEN.apk and MUGEN.apk.sha256 must be attached to a GitHub Release tagged android-vMAJOR.MINOR.PATCH."
         )
     } finally {
         connection.disconnect()
@@ -198,8 +238,23 @@ internal fun AppUpdateCard() {
                 if (it.moveToFirst()) {
                     when (it.getInt(it.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
                         DownloadManager.STATUS_SUCCESSFUL -> {
-                            downloadedName = downloadingRelease?.apkName
-                            message = if (downloadingRelease != null) "Update downloaded. Tap Install update to continue." else "Download finished, but the update details were lost. Check for updates and download again."
+                            val target = downloadingRelease
+                            val apk = target?.let { File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), it.apkName) }
+                            val verified = if (target != null && apk != null && apk.isFile && apk.length() > 0L) {
+                                runCatching {
+                                    withContext(Dispatchers.IO) {
+                                        sha256(apk) == fetchExpectedSha256(target.checksumUrl)
+                                    }
+                                }.getOrDefault(false)
+                            } else false
+                            if (verified) {
+                                downloadedName = target?.apkName
+                                message = "Checksum verified. Tap Install update to continue."
+                            } else {
+                                apk?.delete()
+                                downloadedName = null
+                                message = "APK checksum verification failed. The file was deleted; check for updates and download again."
+                            }
                             finished = true
                         }
                         DownloadManager.STATUS_FAILED -> {
