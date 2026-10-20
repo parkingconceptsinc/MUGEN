@@ -12,8 +12,9 @@ android {
         applicationId = "com.parkingconcepts.mortimer"
         minSdk = 26
         targetSdk = 35
-        versionCode = providers.gradleProperty("androidVersionCode").orElse("900").get().toInt()
-        versionName = providers.gradleProperty("androidVersionName").orElse("0.9.0").get()
+        // Increment both values whenever an Android change is prepared for distribution.
+        versionCode = providers.gradleProperty("androidVersionCode").orElse("901").get().toInt()
+        versionName = providers.gradleProperty("androidVersionName").orElse("0.9.1").get()
     }
 
     compileOptions {
