@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
+import android.os.SystemClock
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import androidx.core.content.ContextCompat
@@ -42,6 +43,9 @@ class PlaybackService : MediaLibraryService() {
     private var librarySession: MediaLibrarySession? = null
     private lateinit var player: ExoPlayer
     private val searchResults = linkedMapOf<String, List<MediaItem>>()
+    // All library reads are serialized on libraryExecutor, so this cache needs no extra lock.
+    private var cachedAudioLibrary: List<MediaItem>? = null
+    private var cachedAudioLibraryAtMs = 0L
     // MediaStore queries and SAF-library reads must not run on Media3's service callback thread.
     private val libraryExecutor: ListeningExecutorService = MoreExecutors.listeningDecorator(
         Executors.newSingleThreadExecutor { runnable ->
@@ -139,7 +143,7 @@ class PlaybackService : MediaLibraryService() {
                     parentId == ALL_SONGS_ID -> allItems
                     parentId == ARTISTS_ID -> allItems
                         .mapNotNull { it.mediaMetadata.artist?.toString()?.trim()?.takeIf(String::isNotEmpty) }
-                        .distinct()
+                        .distinctBy { it.lowercase() }
                         .sortedBy(String::lowercase)
                         .map { artist -> browseFolder(ARTIST_PREFIX + Uri.encode(artist), artist, artist = artist) }
                     parentId == ALBUMS_ID -> allItems
@@ -148,7 +152,7 @@ class PlaybackService : MediaLibraryService() {
                             val artist = item.mediaMetadata.artist?.toString()?.trim().orEmpty()
                             if (album.isBlank()) null else artist to album
                         }
-                        .distinct()
+                        .distinctBy { (artist, album) -> artist.lowercase() to album.lowercase() }
                         .sortedWith(compareBy<Pair<String, String>> { it.second.lowercase() }.thenBy { it.first.lowercase() })
                         .map { (artist, album) ->
                             browseFolder(ALBUM_PREFIX + Uri.encode(artist) + "/" + Uri.encode(album), album, artist = artist, album = album)
@@ -425,6 +429,11 @@ class PlaybackService : MediaLibraryService() {
     }
 
     private fun loadAudioLibrary(): List<MediaItem> {
+        val now = SystemClock.elapsedRealtime()
+        cachedAudioLibrary?.let { cached ->
+            if (now - cachedAudioLibraryAtMs < AUDIO_LIBRARY_CACHE_TTL_MS) return cached
+        }
+
         val items = linkedMapOf<Uri, MediaItem>()
         if (hasAudioPermission()) {
             val collection = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
@@ -502,7 +511,10 @@ class PlaybackService : MediaLibraryService() {
                     }
                 }
             }
-        return items.values.toList()
+        return items.values.toList().also { loaded ->
+            cachedAudioLibrary = loaded
+            cachedAudioLibraryAtMs = SystemClock.elapsedRealtime()
+        }
     }
 
     private fun findAudioMatches(query: String): List<MediaItem> {
@@ -599,5 +611,7 @@ class PlaybackService : MediaLibraryService() {
         private const val ALBUM_PREFIX = "mugen:album:"
         private const val LAST_PLAYED_URI_KEY = "last_played_uri"
         private const val MAX_CACHED_SEARCHES = 12
+        // Short TTL reduces repeated MediaStore/SAF scans while keeping imports responsive.
+        private const val AUDIO_LIBRARY_CACHE_TTL_MS = 3_000L
     }
 }
