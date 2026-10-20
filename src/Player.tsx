@@ -146,6 +146,7 @@ export function Player() {
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [thumbTick, setThumbTick] = useState(0);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const [swipeDirection, setSwipeDirection] = useState<"left" | "right" | null>(null);
 
   tracksLiveRef.current = tracks;
   comicsLiveRef.current = comics;
@@ -1718,13 +1719,14 @@ export function Player() {
     if (index < 0) return;
     const nextIndex = dx < 0 ? index + 1 : index - 1;
     if (nextIndex < 0 || nextIndex >= swipeScreens.length) return;
+    setSwipeDirection(dx < 0 ? "left" : "right");
     actions.goTo(swipeScreens[nextIndex]);
   }
 
   return (
     <PlayerContext.Provider value={state}>
       <ProgressContext.Provider value={progress}>
-        <div className={`shell screen-${screen}${current ? " hasCurrent" : ""}${screen === "player" && current?.kind === "video" ? " immersive" : ""}`} style={{ "--accent": accentColor } as CSSProperties}>
+        <div data-swipe-direction={swipeDirection ?? undefined} className={`shell screen-${screen}${current ? " hasCurrent" : ""}${screen === "player" && current?.kind === "video" ? " immersive" : ""}`} style={{ "--accent": accentColor } as CSSProperties}>
           <aside className="sidebar">
             <div className="brand">
               <img className="logo" src={`${import.meta.env.BASE_URL}logo.png`} alt="Home" />
