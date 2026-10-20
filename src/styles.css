@@ -1578,3 +1578,54 @@ img, video, iframe, canvas, svg {
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
 }
+
+
+/* MUGEN responsive pass: narrow phones and landscape tablets. */
+@media (max-width: 360px) {
+  .screen { padding-right: 12px; padding-left: 12px; padding-bottom: 22px; }
+  .screenHeader { margin-right: -12px; margin-left: -12px; padding-right: 8px; padding-left: 12px; gap: 4px; }
+  .screenTitle h1 { font-size: 21px; }
+  .screenActions { gap: 0; }
+  .screenActions .iconBtn { width: 34px; height: 34px; }
+  .quickActions { gap: 6px; }
+  .quickActions .btn { gap: 5px; padding-right: 9px; padding-left: 9px; font-size: 12px; }
+  .tiles { grid-template-columns: repeat(auto-fill, minmax(126px, 1fr)); gap: 8px; }
+  .tile { padding: 12px; min-height: 84px; }
+  .albumGrid { grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 14px 10px; }
+  .heroArt { width: min(196px, 72vw); height: auto; aspect-ratio: 1; }
+  .nowPlaying { padding-right: 12px; padding-left: 12px; }
+  .nowPlaying:not(.videoMode) .npTools { margin-right: -12px; margin-left: -12px; padding-right: 12px; padding-left: 12px; }
+  .npControls { gap: 6px; }
+  .npControls .iconBtn { width: 42px; height: 42px; }
+  .nowPlaying:not(.videoMode) .npControls .playBtn { width: 58px; height: 58px; }
+}
+
+/* Landscape tablets get a compact icon rail; portrait tablets retain touch-friendly bottom navigation. */
+@media (min-width: 760px) and (max-width: 899px) and (orientation: landscape) {
+  .shell { grid-template-columns: 76px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; }
+  .sidebar {
+    grid-row: 1 / span 2; display: flex; flex-direction: column; gap: 18px;
+    min-width: 0; overflow-x: hidden; overflow-y: auto; padding: 16px 8px;
+    border-right: 1px solid var(--line); background: #0a0a0e;
+  }
+  .brand { justify-content: center; gap: 0; padding: 0; }
+  .brand .logo { width: 44px; height: 44px; border-radius: 13px; }
+  .brand b { display: none; }
+  .sidebar nav { display: flex; flex-direction: column; gap: 4px; }
+  .sidebar nav button { justify-content: center; gap: 0; padding: 12px 8px; font-size: 0; }
+  .sidebar nav button svg { width: 20px; height: 20px; flex: none; }
+  .sidebar nav em { display: none; }
+  .sidebarActions { display: flex; flex-direction: column; gap: 6px; margin-top: auto; }
+  .sidebarActions button { justify-content: center; gap: 0; padding: 10px 8px; font-size: 0; }
+  .sidebarActions button svg { width: 18px; height: 18px; flex: none; }
+  .tabbar { display: none; }
+  .main, .miniPlayer { grid-column: 2; min-width: 0; }
+  .miniPlayer { margin: 0 12px 10px; }
+  .screen { padding: 0 20px 28px; }
+  .screenHeader { margin-right: -20px; margin-left: -20px; padding: 14px 18px 10px 20px; }
+  .hero { margin-right: -20px; margin-left: -20px; padding: 22px 20px 18px; }
+  .albumRow { margin-right: -20px; margin-left: -20px; padding-right: 20px; padding-left: 20px; grid-auto-columns: 148px; }
+  .scrollChips { margin-right: -20px; margin-left: -20px; padding-right: 20px; padding-left: 20px; }
+  .nowPlaying { padding-right: 24px; padding-left: 24px; }
+  .toast { bottom: 92px; left: calc(50% + 38px); }
+}
