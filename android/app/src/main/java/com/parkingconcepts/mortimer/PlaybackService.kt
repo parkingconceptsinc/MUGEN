@@ -123,7 +123,9 @@ class PlaybackService : MediaLibraryService() {
             params: MediaLibraryService.LibraryParams?
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
             return libraryExecutor.submit<LibraryResult<ImmutableList<MediaItem>>> {
-                val allItems = loadAudioLibrary()
+                // The root is static: avoid scanning MediaStore and USB/SAF imports until a
+                // category is opened. This keeps Android Auto's first browse response fast.
+                val allItems = if (parentId == ROOT_ID) emptyList() else loadAudioLibrary()
                 val children = when {
                     parentId == ROOT_ID -> listOf(
                         browseFolder(ALL_SONGS_ID, "All Songs"),
@@ -167,8 +169,13 @@ class PlaybackService : MediaLibraryService() {
                 // Use Long arithmetic so malformed or very large page indexes cannot overflow Int.
                 val safePage = page.coerceAtLeast(0).toLong()
                 val safePageSize = pageSize.coerceAtLeast(0).toLong()
-                val from = (safePage * safePageSize).coerceIn(0L, children.size.toLong()).toInt()
-                val to = (from.toLong() + safePageSize).coerceAtMost(children.size.toLong()).toInt()
+                val total = children.size.toLong()
+                // Check before multiplying: even Long multiplication can overflow for a malformed
+                // controller page request. Out-of-range pages safely return an empty list.
+                val offset = if (safePageSize == 0L || safePage > total / safePageSize) total
+                    else (safePage * safePageSize).coerceAtMost(total)
+                val from = offset.toInt()
+                val to = (from.toLong() + safePageSize).coerceAtMost(total).toInt()
                 LibraryResult.ofItemList(ImmutableList.copyOf(children.subList(from, to)), params)
             }
         }
@@ -252,8 +259,12 @@ class PlaybackService : MediaLibraryService() {
                 val allMatches = searchResults[query] ?: findAudioMatches(query)
                 val safePage = page.coerceAtLeast(0).toLong()
                 val safePageSize = pageSize.coerceAtLeast(0).toLong()
-                val from = (safePage * safePageSize).coerceIn(0L, allMatches.size.toLong()).toInt()
-                val to = (from.toLong() + safePageSize).coerceAtMost(allMatches.size.toLong()).toInt()
+                val total = allMatches.size.toLong()
+                // Guard the multiplication against overflow from malformed page parameters.
+                val offset = if (safePageSize == 0L || safePage > total / safePageSize) total
+                    else (safePage * safePageSize).coerceAtMost(total)
+                val from = offset.toInt()
+                val to = (from.toLong() + safePageSize).coerceAtMost(total).toInt()
                 LibraryResult.ofItemList(
                     ImmutableList.copyOf(allMatches.subList(from, to)),
                     params
