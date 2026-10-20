@@ -122,17 +122,94 @@ class PlaybackService : MediaLibraryService() {
             pageSize: Int,
             params: MediaLibraryService.LibraryParams?
         ): ListenableFuture<LibraryResult<ImmutableList<MediaItem>>> {
-            if (parentId != ROOT_ID) {
-                return Futures.immediateFuture(LibraryResult.ofItemList(ImmutableList.of(), params))
-            }
             return libraryExecutor.submit<LibraryResult<ImmutableList<MediaItem>>> {
                 val allItems = loadAudioLibrary()
-                // Use Long arithmetic so a malformed/very large page index cannot overflow Int.
+                val children = when {
+                    parentId == ROOT_ID -> listOf(
+                        browseFolder(ALL_SONGS_ID, "All Songs"),
+                        browseFolder(ARTISTS_ID, "Artists"),
+                        browseFolder(ALBUMS_ID, "Albums")
+                    )
+                    parentId == ALL_SONGS_ID -> allItems
+                    parentId == ARTISTS_ID -> allItems
+                        .mapNotNull { it.mediaMetadata.artist?.toString()?.trim()?.takeIf(String::isNotEmpty) }
+                        .distinct()
+                        .sortedBy(String::lowercase)
+                        .map { artist -> browseFolder(ARTIST_PREFIX + Uri.encode(artist), artist, artist = artist) }
+                    parentId == ALBUMS_ID -> allItems
+                        .mapNotNull { item ->
+                            val album = item.mediaMetadata.albumTitle?.toString()?.trim().orEmpty()
+                            val artist = item.mediaMetadata.artist?.toString()?.trim().orEmpty()
+                            if (album.isBlank()) null else artist to album
+                        }
+                        .distinct()
+                        .sortedWith(compareBy<Pair<String, String>> { it.second.lowercase() }.thenBy { it.first.lowercase() })
+                        .map { (artist, album) ->
+                            browseFolder(ALBUM_PREFIX + Uri.encode(artist) + "/" + Uri.encode(album), album, artist = artist, album = album)
+                        }
+                    parentId.startsWith(ARTIST_PREFIX) -> {
+                        val artist = Uri.decode(parentId.removePrefix(ARTIST_PREFIX))
+                        allItems.filter { it.mediaMetadata.artist?.toString().equals(artist, ignoreCase = true) }
+                    }
+                    parentId.startsWith(ALBUM_PREFIX) -> {
+                        val parts = parentId.removePrefix(ALBUM_PREFIX).split("/", limit = 2)
+                        if (parts.size != 2) emptyList() else {
+                            val artist = Uri.decode(parts[0])
+                            val album = Uri.decode(parts[1])
+                            allItems.filter {
+                                it.mediaMetadata.albumTitle?.toString().equals(album, ignoreCase = true) &&
+                                    it.mediaMetadata.artist?.toString().orEmpty().equals(artist, ignoreCase = true)
+                            }
+                        }
+                    }
+                    else -> emptyList()
+                }
+                // Use Long arithmetic so malformed or very large page indexes cannot overflow Int.
                 val safePage = page.coerceAtLeast(0).toLong()
                 val safePageSize = pageSize.coerceAtLeast(0).toLong()
-                val from = (safePage * safePageSize).coerceIn(0L, allItems.size.toLong()).toInt()
-                val to = (from.toLong() + safePageSize).coerceAtMost(allItems.size.toLong()).toInt()
-                LibraryResult.ofItemList(ImmutableList.copyOf(allItems.subList(from, to)), params)
+                val from = (safePage * safePageSize).coerceIn(0L, children.size.toLong()).toInt()
+                val to = (from.toLong() + safePageSize).coerceAtMost(children.size.toLong()).toInt()
+                LibraryResult.ofItemList(ImmutableList.copyOf(children.subList(from, to)), params)
+            }
+        }
+
+        private fun browseFolder(
+            id: String,
+            title: String,
+            artist: String? = null,
+            album: String? = null
+        ): MediaItem = MediaItem.Builder()
+            .setMediaId(id)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(title)
+                    .setArtist(artist)
+                    .setAlbumTitle(album)
+                    .setIsBrowsable(true)
+                    .setIsPlayable(false)
+                    .build()
+            )
+            .build()
+
+        private fun browseFolderForId(id: String): MediaItem? = when (id) {
+            ROOT_ID -> browseFolder(ROOT_ID, "MUGEN")
+            ALL_SONGS_ID -> browseFolder(ALL_SONGS_ID, "All Songs")
+            ARTISTS_ID -> browseFolder(ARTISTS_ID, "Artists")
+            ALBUMS_ID -> browseFolder(ALBUMS_ID, "Albums")
+            else -> when {
+                id.startsWith(ARTIST_PREFIX) ->
+                    Uri.decode(id.removePrefix(ARTIST_PREFIX)).let { artist ->
+                        browseFolder(id, artist, artist = artist)
+                    }
+                id.startsWith(ALBUM_PREFIX) -> {
+                    val parts = id.removePrefix(ALBUM_PREFIX).split("/", limit = 2)
+                    if (parts.size != 2) null else {
+                        val artist = Uri.decode(parts[0])
+                        val album = Uri.decode(parts[1])
+                        browseFolder(id, album, artist = artist, album = album)
+                    }
+                }
+                else -> null
             }
         }
 
@@ -191,22 +268,27 @@ class PlaybackService : MediaLibraryService() {
             mediaId: String
         ): ListenableFuture<LibraryResult<MediaItem>> {
             return libraryExecutor.submit<LibraryResult<MediaItem>> {
-                val uri = runCatching { Uri.parse(mediaId) }.getOrNull()
-                if (uri == null || uri.scheme == null) {
-                    LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)
+                val folder = browseFolderForId(mediaId)
+                if (folder != null) {
+                    LibraryResult.ofItem(folder, null)
                 } else {
-                    val item = MediaItem.Builder()
-                        .setMediaId(uri.toString())
-                        .setUri(uri)
-                        .setMediaMetadata(
-                            MediaMetadata.Builder()
-                                .setTitle(displayName(uri))
-                                .setIsBrowsable(false)
-                                .setIsPlayable(true)
-                                .build()
-                        )
-                        .build()
-                    LibraryResult.ofItem(item, null)
+                    val uri = runCatching { Uri.parse(mediaId) }.getOrNull()
+                    if (uri == null || (uri.scheme != "content" && uri.scheme != "file")) {
+                        LibraryResult.ofError(SessionError.ERROR_BAD_VALUE)
+                    } else {
+                        val item = MediaItem.Builder()
+                            .setMediaId(uri.toString())
+                            .setUri(uri)
+                            .setMediaMetadata(
+                                MediaMetadata.Builder()
+                                    .setTitle(displayName(uri))
+                                    .setIsBrowsable(false)
+                                    .setIsPlayable(true)
+                                    .build()
+                            )
+                            .build()
+                        LibraryResult.ofItem(item, null)
+                    }
                 }
             }
         }
@@ -494,7 +576,12 @@ class PlaybackService : MediaLibraryService() {
     }
 
     companion object {
-        private const val ROOT_ID = "mortimer_root"
+        private const val ROOT_ID = "mugen_root"
+        private const val ALL_SONGS_ID = "mugen:all-songs"
+        private const val ARTISTS_ID = "mugen:artists"
+        private const val ALBUMS_ID = "mugen:albums"
+        private const val ARTIST_PREFIX = "mugen:artist:"
+        private const val ALBUM_PREFIX = "mugen:album:"
         private const val LAST_PLAYED_URI_KEY = "last_played_uri"
         private const val MAX_CACHED_SEARCHES = 12
     }
