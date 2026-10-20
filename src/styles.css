@@ -1633,3 +1633,34 @@ img, video, iframe, canvas, svg {
   .nowPlaying { padding-right: 24px; padding-left: 24px; }
   .toast { bottom: 92px; left: calc(50% + 38px); }
 }
+
+
+/* MUGEN screen transitions: tactile navigation should feel connected, not teleport. */
+@keyframes mugen-screen-enter {
+  from { opacity: 0; transform: translate3d(0, 14px, 0) scale(.992); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes mugen-screen-enter-from-right {
+  from { opacity: 0; transform: translate3d(26px, 0, 0) scale(.995); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+@keyframes mugen-screen-enter-from-left {
+  from { opacity: 0; transform: translate3d(-26px, 0, 0) scale(.995); }
+  to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+}
+.main > .screen:not([hidden]) {
+  animation: mugen-screen-enter 260ms cubic-bezier(.22, .75, .25, 1) both;
+  backface-visibility: hidden;
+}
+.shell[data-swipe-direction="left"] .main > .screen:not([hidden]) {
+  animation-name: mugen-screen-enter-from-right;
+}
+.shell[data-swipe-direction="right"] .main > .screen:not([hidden]) {
+  animation-name: mugen-screen-enter-from-left;
+}
+@media (prefers-reduced-motion: reduce) {
+  .main > .screen:not([hidden]),
+  .shell[data-swipe-direction] .main > .screen:not([hidden]) {
+    animation: none !important;
+  }
+}
