@@ -125,7 +125,11 @@ class PlaybackService : MediaLibraryService() {
             return libraryExecutor.submit<LibraryResult<ImmutableList<MediaItem>>> {
                 // The root is static: avoid scanning MediaStore and USB/SAF imports until a
                 // category is opened. This keeps Android Auto's first browse response fast.
-                val allItems = if (parentId == ROOT_ID) emptyList() else loadAudioLibrary()
+                val needsLibrary = parentId == ALL_SONGS_ID || parentId == ARTISTS_ID ||
+                    parentId == ALBUMS_ID || parentId.startsWith(ARTIST_PREFIX) ||
+                    parentId.startsWith(ALBUM_PREFIX)
+                // Unknown IDs must not trigger a full MediaStore/SAF scan.
+                val allItems = if (needsLibrary) loadAudioLibrary() else emptyList()
                 val children = when {
                     parentId == ROOT_ID -> listOf(
                         browseFolder(ALL_SONGS_ID, "All Songs"),
