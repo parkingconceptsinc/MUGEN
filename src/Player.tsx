@@ -485,7 +485,120 @@ export function Player() {
     const freshComics = entries.filter((e) => isComicFile(e.file.name) && isNew(e));
     const totalToAdd = fresh.length + freshComics.length;
     if (!totalToAdd) {
-      if (!quiet || !operationOk) toast(`${what}${failureNote}${storageNote}${photoNote ? ` · ${photoNote}` : ""`);
+      if (!quiet) toast(photoNote || (entries.some((e) => supported(e.file.name) || isComicFile(e.file.name)) ? "Those files are already in your library" : "No supported music, video, comic or photo files found"));
+      return operationOk;
+    }
+    void navigator.storage?.persist?.().catch(() => false);
+    const addedAt = Date.now();
+    let libraryStorageOk = true;
+    let comicStorageOk = true;
+
+    let processed = 0;
+    setImporting({ done: 0, total: totalToAdd, label: "Adding" });
+
+    if (freshComics.length) {
+      const comicBatchSize = 10;
+      for (let start = 0; start < freshComics.length; start += comicBatchSize) {
+        if (!isImportCurrent()) return false;
+        const end = Math.min(start + comicBatchSize, freshComics.length);
+        const items: StoredComic[] = freshComics.slice(start, end).map(({ file, path }, offset) => ({
+          id: crypto.randomUUID(), name: file.name, path, size: file.size, lastModified: file.lastModified,
+          addedAt: addedAt + start + offset, format: comicFormatOf(file.name), shelf: defaultShelf(comicFormatOf(file.name)), file,
+        }));
+        let savedItems = items;
+        if (comicStorageOk) {
+          try { savedItems = await saveComicsFast(items); } catch { comicStorageOk = false; operationOk = false; }
+        }
+        if (!isImportCurrent()) {
+          if (savedItems.length) await deleteComics(savedItems.map((item) => item.id)).catch(() => {});
+          return;
+        }
+        if (savedItems.length) setComics((old) => [...old, ...savedItems.map(toComic)]);
+        processed += items.length;
+        setImporting({ done: processed, total: totalToAdd, label: "Adding" });
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
+    }
+    let batch: StoredLibraryItem[] = [];
+    const flush = async () => {
+      const items = batch;
+      batch = [];
+      if (!items.length) return;
+      if (!isImportCurrent()) return false;
+      let savedItems = items;
+      if (libraryStorageOk) {
+        try { savedItems = await saveLibraryFast(items); } catch { libraryStorageOk = false; operationOk = false; }
+      }
+      if (!isImportCurrent()) {
+        if (savedItems.length) await deleteTracks(savedItems.map((item) => item.id)).catch(() => {});
+        return;
+      }
+      if (savedItems.length) setTracks((old) => [...old, ...savedItems.map(toTrack)]);
+
+      // Enrich audio metadata in the background. This must not delay adding
+      // the actual file to the library.
+      for (const item of savedItems) {
+        if (item.kind !== "audio") continue;
+        enqueueMetadata(async () => {
+          // Skip queued work if the track was removed before its metadata job began.
+          if (!tracksLiveRef.current.some((track) => track.id === item.id)) return;
+          const tags = await readTags(item.file, item.name);
+          // The user may remove the track while tags are being decoded.
+          if (!tracksLiveRef.current.some((track) => track.id === item.id)) return;
+          if (libraryStorageOk) await patchTrack(item.id, { ...tags, metaVersion: META_VERSION }).catch(() => {});
+          setTracks((old) => {
+            const live = old.find((track) => track.id === item.id);
+            if (!live) return old;
+            const cover = tags.cover ? URL.createObjectURL(tags.cover) : live.cover;
+            if (tags.cover && live.cover) URL.revokeObjectURL(live.cover);
+            return old.map((track) => (track.id === item.id ? { ...track, ...tags, cover, metaVersion: META_VERSION } : track));
+          });
+        });
+      }
+    };
+    // Process files in parallel batches. Awaiting each file one by one makes
+    // large libraries feel unnecessarily slow, especially when importing folders.
+    let importedMedia = 0;
+    let importFailures = 0;
+    const importBatchSize = 10;
+    for (let start = 0; start < fresh.length; start += importBatchSize) {
+      if (!isImportCurrent()) return false;
+      const end = Math.min(start + importBatchSize, fresh.length);
+      const results = await Promise.allSettled(
+        fresh.slice(start, end).map((entry, offset) => readItem(entry, addedAt + start + offset)),
+      );
+      const items: StoredLibraryItem[] = [];
+      for (const result of results) {
+        if (result.status === "fulfilled") items.push(result.value);
+        else importFailures++;
+      }
+      batch.push(...items);
+      importedMedia += items.length;
+      processed += results.length;
+      setImporting({ done: processed, total: totalToAdd, label: "Adding" });
+      await flush();
+      if (!isImportCurrent()) return false;
+    }
+    await flush();
+    if (!isImportCurrent()) return false;
+    setImporting(null);
+    const parts = [
+      importedMedia ? `${importedMedia} song${importedMedia === 1 ? "" : "s"}/video${importedMedia === 1 ? "" : "s"}` : "",
+      ...(["books", "comics"] as const).map((shelf) => {
+        const n = freshComics.filter((e) => defaultShelf(comicFormatOf(e.file.name)) === shelf).length;
+        return n ? `${n} ${shelf === "books" ? "book" : "comic"}${n === 1 ? "" : "s"}` : "";
+      }),
+    ].filter(Boolean);
+    const what = parts.length
+      ? `${parts.join(" and ")} added${label ? ` from “${label}”` : ""}`
+      : "Nothing was added";
+    if (importFailures) operationOk = false;
+    if (!libraryStorageOk || !comicStorageOk) operationOk = false;
+    const failureNote = importFailures
+      ? ` · ${importFailures} media file${importFailures === 1 ? "" : "s"} couldn't be imported`
+      : "";
+    const storageNote = libraryStorageOk && comicStorageOk ? "" : ", but some items couldn't be saved for next time";
+    if (!quiet || !operationOk) toast(`${what}${failureNote}${storageNote}${photoNote ? ` · ${photoNote}` : ""`);
     return operationOk;
   }
   function importEntries(entries: Incoming[], label?: string, quiet = false): Promise<boolean> {
