@@ -1890,3 +1890,106 @@ button:active:not(:disabled), .btn:active:not(:disabled), .iconBtn:active:not(:d
   :focus-visible { outline: 2px solid Highlight; }
   .miniProgress, .videoProgress { background: Highlight; }
 }
+
+
+/* MUGEN home refresh — cinematic depth, confident hierarchy, responsive art direction. */
+.musicHome .screenHeader { margin-bottom: 10px; }
+.homeHero {
+  position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(230px, .9fr);
+  min-height: 310px; overflow: hidden; align-items: center; gap: 8px; margin: 2px 0 18px; padding: 30px 30px 24px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line)); border-radius: 28px;
+  background:
+    radial-gradient(ellipse at 82% 42%, color-mix(in srgb, var(--accent) 21%, transparent), transparent 42%),
+    radial-gradient(ellipse at 18% 0%, #5b42a42b, transparent 52%),
+    linear-gradient(125deg, color-mix(in srgb, var(--panel) 95%, #242035), color-mix(in srgb, var(--bg) 93%, #17131e));
+  box-shadow: 0 20px 60px #0003, inset 0 1px #ffffff0b;
+}
+.homeHero::before { content: ""; position: absolute; inset: 0; z-index: -1; opacity: .17; pointer-events: none; background-image: radial-gradient(#ffffff 0.7px, transparent .7px); background-size: 18px 18px; mask-image: linear-gradient(90deg, transparent, #000); }
+.homeHeroCopy { position: relative; z-index: 2; min-width: 0; }
+.homeEyebrow { display: flex; align-items: center; gap: 9px; color: color-mix(in srgb, var(--accent) 82%, var(--text)); font-size: 10px; font-weight: 850; letter-spacing: .19em; }
+.homeLiveDot { width: 7px; height: 7px; flex: none; border-radius: 50%; background: var(--accent); box-shadow: 0 0 13px color-mix(in srgb, var(--accent) 80%, transparent); }
+.homeHero h2 { margin: 17px 0 10px; font-size: clamp(30px, 4vw, 48px); line-height: 1.02; letter-spacing: -.055em; font-weight: 850; }
+.homeHero h2 span { color: var(--accent); }
+.homeHeroCopy > p { max-width: 380px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
+.homeHeroActions { display: flex; align-items: center; flex-wrap: wrap; gap: 14px; margin-top: 21px; }
+.homeHeroActions .btn { min-height: 43px; padding-inline: 17px; box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 16%, transparent); }
+.homeTextAction { display: inline-flex; align-items: center; gap: 3px; border: 0; background: none; color: var(--text); font-size: 12px; font-weight: 700; padding: 8px 0; }
+.homeTextAction svg { color: var(--accent); transition: transform .2s ease; }
+.homeTextAction:hover svg { transform: translateX(3px); }
+.homeHeroStats { display: flex; align-items: center; gap: 18px; margin-top: 28px; }
+.homeHeroStats div { display: grid; gap: 3px; }
+.homeHeroStats b { font-size: 18px; line-height: 1; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -.03em; }
+.homeHeroStats span { color: var(--muted); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+.homeHeroStats > i { height: 25px; width: 1px; background: var(--line); }
+.homeHeroVisual { position: relative; min-width: 0; height: 260px; display: grid; place-items: center; perspective: 800px; }
+.homeAura { position: absolute; width: 190px; height: 190px; border-radius: 50%; filter: blur(34px); opacity: .3; }
+.homeAuraOne { background: var(--accent); transform: translate(28px, -8px); }
+.homeAuraTwo { width: 140px; height: 140px; background: #6557ff; transform: translate(-45px, 22px); opacity: .25; }
+.homeOrbit { position: absolute; width: 228px; height: 110px; border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent); border-radius: 50%; transform: rotate(-32deg); }
+.homeOrbitTwo { width: 205px; height: 135px; border-color: #ffffff15; transform: rotate(48deg); }
+.homeHeroRecord { position: relative; width: 188px; aspect-ratio: 1; border-radius: 50%; padding: 13px; background: repeating-radial-gradient(circle, #292932 0 1px, #111116 2px 4px, #202027 5px 6px); box-shadow: 0 22px 48px #0009, 0 0 0 1px #ffffff25; transform: rotate(-16deg); animation: mugen-record-float 7s ease-in-out infinite; }
+.homeRecordGrooves { display: grid; width: 100%; height: 100%; place-items: center; border-radius: 50%; border: 1px solid #ffffff15; background: repeating-radial-gradient(circle, transparent 0 8px, #ffffff0b 9px 10px); }
+.homeRecordLabel { display: grid; place-items: center; width: 58px; height: 58px; border-radius: 50%; color: var(--on-accent); background: radial-gradient(circle at 35% 25%, #ffd2a4, var(--accent) 60%, #9c382b); box-shadow: 0 0 0 5px #0d0d12, 0 0 0 6px #ffffff25; }
+.homeFeaturedCover { position: absolute; z-index: 1; width: 100px; height: 100px; right: 4%; bottom: 12px; transform: rotate(7deg); border-radius: 14px; overflow: hidden; border: 1px solid #ffffff45; box-shadow: 0 14px 32px #0009; }
+.homeFeaturedCover .art { width: 100%; height: 100%; object-fit: cover; }
+.homeVisualTag { position: absolute; z-index: 2; left: 0; bottom: 14px; display: flex; align-items: center; gap: 10px; max-width: 78%; padding: 9px 13px 9px 9px; border: 1px solid #ffffff1c; border-radius: 15px; background: #111116c9; color: #fff; box-shadow: 0 10px 30px #0005; backdrop-filter: blur(18px); }
+.homeTagIcon { display: grid; place-items: center; width: 28px; height: 28px; flex: none; border-radius: 50%; color: #171116; background: var(--accent); }
+.homeVisualTag > span:last-child { min-width: 0; }
+.homeVisualTag b, .homeVisualTag small { display: block; max-width: 190px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.homeVisualTag b { font-size: 11px; }
+.homeVisualTag small { margin-top: 2px; color: #c3c0ca; font-size: 10px; }
+.musicHome .quickActions { gap: 9px; margin-bottom: 18px; }
+.musicHome .quickActions .btn { min-height: 43px; }
+.musicHome .tiles { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 11px; }
+.musicHome .tile { min-height: 100px; gap: 13px; padding: 16px; overflow: hidden; border-radius: 18px; border-color: color-mix(in srgb, var(--line) 80%, transparent); background: linear-gradient(145deg, color-mix(in srgb, var(--panel2) 95%, transparent), color-mix(in srgb, var(--panel) 96%, transparent)); box-shadow: inset 0 1px #ffffff07; }
+.musicHome .tile::after { content: ""; position: absolute; width: 70px; height: 70px; right: -29px; bottom: -34px; border-radius: 50%; background: color-mix(in srgb, var(--accent) 10%, transparent); transition: transform .25s ease; }
+.musicHome .tile:hover { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); transform: translateY(-3px); box-shadow: 0 10px 26px #0002; }
+.musicHome .tile:hover::after { transform: scale(1.7); }
+.musicHome .tile svg { width: 21px; height: 21px; filter: drop-shadow(0 2px 8px color-mix(in srgb, var(--accent) 30%, transparent)); }
+.musicHome .tile span { font-size: 13px; }
+.musicHome .tile em { top: 15px; right: 15px; padding: 3px 6px; border-radius: 7px; background: color-mix(in srgb, var(--bg) 55%, transparent); }
+.musicHome .sectionTitle { margin-top: 30px; }
+.musicHome .sectionTitle h2 { font-size: 19px; letter-spacing: -.025em; }
+@keyframes mugen-record-float { 0%, 100% { transform: rotate(-16deg) translateY(0); } 50% { transform: rotate(-12deg) translateY(-7px); } }
+:root[data-theme="light"] .homeHero { background: radial-gradient(ellipse at 82% 42%, color-mix(in srgb, var(--accent) 17%, transparent), transparent 42%), linear-gradient(125deg, #fff, #f0edf7); box-shadow: 0 20px 60px #1d123012, inset 0 1px #ffffff; }
+:root[data-theme="light"] .homeVisualTag { background: #191820e8; }
+@media (min-width: 900px) {
+  .musicHome .homeHero { min-height: 330px; padding: 36px 38px 30px; border-radius: 32px; }
+  .musicHome .tiles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 680px) {
+  .homeHero { grid-template-columns: minmax(0, 1fr) 118px; min-height: 290px; padding: 22px 18px 20px; border-radius: 23px; gap: 0; }
+  .homeHero h2 { font-size: clamp(27px, 7.3vw, 37px); }
+  .homeHeroCopy > p { max-width: 270px; font-size: 12px; }
+  .homeHeroVisual { height: 190px; width: 150px; margin-left: -28px; }
+  .homeHeroRecord { width: 142px; padding: 10px; }
+  .homeRecordLabel { width: 45px; height: 45px; }
+  .homeRecordLabel svg { width: 24px; }
+  .homeOrbit { width: 155px; height: 80px; }
+  .homeOrbitTwo { width: 150px; height: 90px; }
+  .homeFeaturedCover { width: 64px; height: 64px; right: -2px; bottom: 30px; border-radius: 10px; }
+  .homeVisualTag { left: -16px; bottom: 0; max-width: 165px; gap: 7px; padding: 7px; }
+  .homeVisualTag b { max-width: 110px; font-size: 10px; }
+  .homeVisualTag small { max-width: 110px; font-size: 9px; }
+  .homeTagIcon { width: 24px; height: 24px; }
+  .homeHeroStats { gap: 11px; margin-top: 22px; }
+  .homeHeroStats b { font-size: 16px; }
+  .homeHeroStats span { font-size: 9px; letter-spacing: .03em; }
+  .homeHeroActions { gap: 8px; margin-top: 17px; }
+  .homeHeroActions .btn { padding-inline: 12px; font-size: 12px; }
+  .homeTextAction { font-size: 11px; }
+  .musicHome .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 390px) {
+  .homeHero { grid-template-columns: minmax(0, 1fr); padding: 22px 18px 16px; }
+  .homeHeroVisual { position: absolute; right: -23px; top: 28px; width: 140px; height: 150px; opacity: .42; }
+  .homeHeroCopy { z-index: 3; }
+  .homeHeroCopy > p { max-width: 240px; }
+  .homeHeroActions { max-width: 250px; }
+  .homeHeroStats { margin-top: 20px; }
+  .homeHeroVisual .homeVisualTag, .homeHeroVisual .homeFeaturedCover { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .homeHeroRecord { animation: none; }
+  .homeTextAction svg, .musicHome .tile, .musicHome .tile::after { transition: none; }
+}
