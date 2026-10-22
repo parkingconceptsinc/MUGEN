@@ -455,7 +455,8 @@ export function Player() {
     setOriginalQueue(null);
   }
 
-  async function performImportEntries(entries: Incoming[], label?: string, quiet = false) {
+  async function performImportEntries(entries: Incoming[], label?: string, quiet = false): Promise<boolean> {
+    let operationOk = true;
     const importGeneration = importGenerationRef.current;
     const isImportCurrent = () => importGenerationRef.current === importGeneration;
     // Read current library refs when a queued import starts, not the render that queued it.
@@ -471,141 +472,31 @@ export function Player() {
     if (photoEntries.length) {
       setImporting({ done: 0, total: photoEntries.length, label: "Adding photos" });
       const photoResult = await importPhotos(photoEntries, (done, total) => setImporting({ done, total, label: "Adding photos" }));
-      if (!isImportCurrent()) return;
+      if (!isImportCurrent()) return false;
       setImporting(null);
       photoNote = describeImport(photoResult);
       entries = entries.filter((e) => !isPhotoFile(e.file.name));
       if (!entries.length) {
-        toast(photoNote);
-        return;
+        if (!quiet && photoNote) toast(photoNote);
+        return operationOk;
       }
     }
     const fresh = entries.filter((e) => supported(e.file.name) && isNew(e));
     const freshComics = entries.filter((e) => isComicFile(e.file.name) && isNew(e));
     const totalToAdd = fresh.length + freshComics.length;
     if (!totalToAdd) {
-      if (!quiet) toast(photoNote || (entries.some((e) => supported(e.file.name) || isComicFile(e.file.name)) ? "Those files are already in your library" : "No supported music, video, comic or photo files found"));
-      return;
-    }
-    void navigator.storage?.persist?.().catch(() => false);
-    const addedAt = Date.now();
-    let libraryStorageOk = true;
-    let comicStorageOk = true;
-
-    let processed = 0;
-    setImporting({ done: 0, total: totalToAdd, label: "Adding" });
-
-    if (freshComics.length) {
-      const comicBatchSize = 10;
-      for (let start = 0; start < freshComics.length; start += comicBatchSize) {
-        if (!isImportCurrent()) return;
-        const end = Math.min(start + comicBatchSize, freshComics.length);
-        const items: StoredComic[] = freshComics.slice(start, end).map(({ file, path }, offset) => ({
-          id: crypto.randomUUID(), name: file.name, path, size: file.size, lastModified: file.lastModified,
-          addedAt: addedAt + start + offset, format: comicFormatOf(file.name), shelf: defaultShelf(comicFormatOf(file.name)), file,
-        }));
-        let savedItems = items;
-        if (comicStorageOk) {
-          try { savedItems = await saveComicsFast(items); } catch { comicStorageOk = false; }
-        }
-        if (!isImportCurrent()) {
-          if (savedItems.length) await deleteComics(savedItems.map((item) => item.id)).catch(() => {});
-          return;
-        }
-        if (savedItems.length) setComics((old) => [...old, ...savedItems.map(toComic)]);
-        processed += items.length;
-        setImporting({ done: processed, total: totalToAdd, label: "Adding" });
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      }
-    }
-    let batch: StoredLibraryItem[] = [];
-    const flush = async () => {
-      const items = batch;
-      batch = [];
-      if (!items.length) return;
-      if (!isImportCurrent()) return;
-      let savedItems = items;
-      if (libraryStorageOk) {
-        try { savedItems = await saveLibraryFast(items); } catch { libraryStorageOk = false; }
-      }
-      if (!isImportCurrent()) {
-        if (savedItems.length) await deleteTracks(savedItems.map((item) => item.id)).catch(() => {});
-        return;
-      }
-      if (savedItems.length) setTracks((old) => [...old, ...savedItems.map(toTrack)]);
-
-      // Enrich audio metadata in the background. This must not delay adding
-      // the actual file to the library.
-      for (const item of savedItems) {
-        if (item.kind !== "audio") continue;
-        enqueueMetadata(async () => {
-          // Skip queued work if the track was removed before its metadata job began.
-          if (!tracksLiveRef.current.some((track) => track.id === item.id)) return;
-          const tags = await readTags(item.file, item.name);
-          // The user may remove the track while tags are being decoded.
-          if (!tracksLiveRef.current.some((track) => track.id === item.id)) return;
-          if (libraryStorageOk) await patchTrack(item.id, { ...tags, metaVersion: META_VERSION }).catch(() => {});
-          setTracks((old) => {
-            const live = old.find((track) => track.id === item.id);
-            if (!live) return old;
-            const cover = tags.cover ? URL.createObjectURL(tags.cover) : live.cover;
-            if (tags.cover && live.cover) URL.revokeObjectURL(live.cover);
-            return old.map((track) => (track.id === item.id ? { ...track, ...tags, cover, metaVersion: META_VERSION } : track));
-          });
-        });
-      }
-    };
-    // Process files in parallel batches. Awaiting each file one by one makes
-    // large libraries feel unnecessarily slow, especially when importing folders.
-    let importedMedia = 0;
-    let importFailures = 0;
-    const importBatchSize = 10;
-    for (let start = 0; start < fresh.length; start += importBatchSize) {
-      if (!isImportCurrent()) return;
-      const end = Math.min(start + importBatchSize, fresh.length);
-      const results = await Promise.allSettled(
-        fresh.slice(start, end).map((entry, offset) => readItem(entry, addedAt + start + offset)),
-      );
-      const items: StoredLibraryItem[] = [];
-      for (const result of results) {
-        if (result.status === "fulfilled") items.push(result.value);
-        else importFailures++;
-      }
-      batch.push(...items);
-      importedMedia += items.length;
-      processed += results.length;
-      setImporting({ done: processed, total: totalToAdd, label: "Adding" });
-      await flush();
-      if (!isImportCurrent()) return;
-    }
-    await flush();
-    if (!isImportCurrent()) return;
-    setImporting(null);
-    const parts = [
-      importedMedia ? `${importedMedia} song${importedMedia === 1 ? "" : "s"}/video${importedMedia === 1 ? "" : "s"}` : "",
-      ...(["books", "comics"] as const).map((shelf) => {
-        const n = freshComics.filter((e) => defaultShelf(comicFormatOf(e.file.name)) === shelf).length;
-        return n ? `${n} ${shelf === "books" ? "book" : "comic"}${n === 1 ? "" : "s"}` : "";
-      }),
-    ].filter(Boolean);
-    const what = parts.length
-      ? `${parts.join(" and ")} added${label ? ` from “${label}”` : ""}`
-      : "Nothing was added";
-    const failureNote = importFailures
-      ? ` · ${importFailures} media file${importFailures === 1 ? "" : "s"} couldn't be imported`
-      : "";
-    const storageNote = libraryStorageOk && comicStorageOk ? "" : ", but some items couldn't be saved for next time";
-    if (!quiet) toast(`${what}${failureNote}${storageNote}${photoNote ? ` · ${photoNote}` : ""}`);
+      if (!quiet || !operationOk) toast(`${what}${failureNote}${storageNote}${photoNote ? ` · ${photoNote}` : ""`);
+    return operationOk;
   }
-  function importEntries(entries: Incoming[], label?: string, quiet = false): Promise<void> {
-    mediaImportQueue = mediaImportQueue
+  function importEntries(entries: Incoming[], label?: string, quiet = false): Promise<boolean> {
+    const result = mediaImportQueue
       .catch(() => {})
       .then(async () => {
         // Pause expensive tag/cover parsing while the user is importing a library.
         // Parsing concurrently with IndexedDB writes can saturate mobile CPUs and memory.
         mediaImportActive = true;
         try {
-          await performImportEntries(entries, label, quiet);
+          return await performImportEntries(entries, label, quiet);
         } finally {
           mediaImportActive = false;
           startMetadataPump();
@@ -619,13 +510,18 @@ export function Player() {
         toast((error as Error)?.name === "QuotaExceededError"
           ? "Not enough browser storage to finish importing"
           : "Import failed; check the files and available browser storage");
+        return false;
       });
-    return mediaImportQueue;
+    mediaImportQueue = result.then(() => undefined);
+    return result;
   }
 
   async function importFolder() {
     const pickerHost = window as Window & { showDirectoryPicker?: (options?: { mode?: "read" }) => Promise<DirectoryHandleLike> };
     if (!pickerHost.showDirectoryPicker) {
+      // Android performs webkitdirectory scanning before returning a FileList.
+      // MUGEN cannot yield during that native phase, so show an honest status.
+      setImporting({ done: 0, total: 0, label: "Android is preparing the folder…" });
       folderInput.current?.click();
       return;
     }
@@ -693,23 +589,29 @@ export function Player() {
     // Android browsers often fall back to input[webkitdirectory]. Process that
     // FileList incrementally: passing the whole library to importEntries causes
     // large filter/map operations before the first file is saved.
+    // Snapshot the browser-owned FileList before the input is reset, then keep
+    // each preprocessing/storage operation bounded to ten entries.
     const files = Array.from(list);
     const batchSize = 10;
     const total = files.length;
-    let failed = 0;
+    const supportedCount = files.filter((file) => supported(file.name) || isComicFile(file.name) || isPhotoFile(file.name)).length;
+    let failedBatches = 0;
     let processed = 0;
     const run = async () => {
-      setImporting({ done: 0, total, label: "Preparing files" });
+      setImporting({ done: 0, total, label: "Preparing selected files" });
       for (let start = 0; start < total; start += batchSize) {
         const batch = files.slice(start, start + batchSize);
         const entries: Incoming[] = batch.map((file) => ({ file, path: file.webkitRelativePath || file.name }));
-        try { await importEntries(entries, undefined, true); } catch { failed += entries.length; }
+        const ok = await importEntries(entries, undefined, true);
+        if (!ok) failedBatches++;
         processed = Math.min(start + batch.length, total);
-        setImporting({ done: processed, total, label: `Adding files · ${processed} of ${total}` });
+        setImporting({ done: processed, total, label: `Processing files · ${processed} of ${total}` });
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       }
       setImporting(null);
-      toast(failed ? `Finished with ${failed} files that could not be added` : `Finished processing ${total} selected files`);
+      if (failedBatches) toast(`Import finished with errors in ${failedBatches} batch${failedBatches === 1 ? "" : "es"}. Check storage and retry those files.`);
+      else if (!supportedCount) toast("No supported music, video, comic or photo files were found");
+      else toast(`Finished processing ${total} selected files`);
     };
     void run().catch(() => {
       setImporting(null);
@@ -1851,7 +1753,7 @@ export function Player() {
           <input ref={fileInput} hidden type="file" multiple
             accept="audio/*,video/*,text/*,image/*,.heic,.heif,.flac,.aac,.ogg,.oga,.opus,.weba,.aiff,.aif,.alac,.wma,.mka,.mp2,.mpa,.ac3,.eac3,.dts,.amr,.ape,.tak,.tta,.mpc,.wv,.shn,.caf,.au,.snd,.ra,.rm,.rma,.mp4,.webm,.ogv,.mov,.m4v,.mkv,.avi,.3gp,.3g2,.ts,.m2ts,.mts,.m2v,.mpg,.mpeg,.mpeg2,.vob,.wmv,.asf,.flv,.f4v,.rmvb,.rm,.dv,.tod,.mod,.vro,.nut,.ogm,.mxf,.divx,.cbz,.cbr,.pdf,.epub,.txt,.md,.markdown,.log,.nfo,.csv,.tsv,.json,.xml,.yaml,.yml,.toml,.ini,.cfg,.conf,.srt,.vtt,.ass,.ssa,.sub,.html,.htm,.rtf,.docx,.odt,application/pdf,application/epub+zip,application/rtf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.oasis.opendocument.text"
             onChange={(e) => { onPickFiles(e.target.files); e.currentTarget.value = ""; }} />
-          <input ref={folderInput} hidden type="file" multiple onChange={(e) => { onPickFiles(e.target.files); e.currentTarget.value = ""; }} {...({ webkitdirectory: "" } as InputHTMLAttributes<HTMLInputElement>)} />
+          <input ref={folderInput} hidden type="file" multiple onChange={(e) => { onPickFiles(e.target.files); e.currentTarget.value = ""; }} onCancel={() => setImporting(null)} {...({ webkitdirectory: "" } as InputHTMLAttributes<HTMLInputElement>)} />
         </div>
       </ProgressContext.Provider>
     </PlayerContext.Provider>
