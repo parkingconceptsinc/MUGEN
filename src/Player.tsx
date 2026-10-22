@@ -690,7 +690,31 @@ export function Player() {
 
   function onPickFiles(list: FileList | null) {
     if (!list?.length) return;
-    void importEntries(Array.from(list, (file) => ({ file, path: file.webkitRelativePath || file.name })));
+    // Android browsers often fall back to input[webkitdirectory]. Process that
+    // FileList incrementally: passing the whole library to importEntries causes
+    // large filter/map operations before the first file is saved.
+    const files = Array.from(list);
+    const batchSize = 10;
+    const total = files.length;
+    let failed = 0;
+    let processed = 0;
+    const run = async () => {
+      setImporting({ done: 0, total, label: "Preparing files" });
+      for (let start = 0; start < total; start += batchSize) {
+        const batch = files.slice(start, start + batchSize);
+        const entries: Incoming[] = batch.map((file) => ({ file, path: file.webkitRelativePath || file.name }));
+        try { await importEntries(entries, undefined, true); } catch { failed += entries.length; }
+        processed = Math.min(start + batch.length, total);
+        setImporting({ done: processed, total, label: `Adding files · ${processed} of ${total}` });
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      }
+      setImporting(null);
+      toast(failed ? `Finished with ${failed} files that could not be added` : `Finished processing ${total} selected files`);
+    };
+    void run().catch(() => {
+      setImporting(null);
+      toast("Import stopped unexpectedly. Try a smaller folder.");
+    });
   }
 
   function removeFromLibrary(ids: string[]) {
