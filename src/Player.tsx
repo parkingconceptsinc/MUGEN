@@ -633,68 +633,61 @@ export function Player() {
   async function importFolder() {
     const pickerHost = window as Window & { showDirectoryPicker?: (options?: { mode?: "read" }) => Promise<DirectoryHandleLike> };
     if (!pickerHost.showDirectoryPicker) {
-      // Android performs webkitdirectory scanning before returning a FileList.
-      // MUGEN cannot yield during that native phase, so show an honest status.
       setImporting({ done: 0, total: 0, label: "Android is preparing the folder…" });
       folderInput.current?.click();
       return;
     }
     try {
-      // Keep the native method bound to window. Calling the detached method can
-      // fail with "Illegal invocation" in browsers that require its receiver.
       const directory = await pickerHost.showDirectoryPicker({ mode: "read" });
-      // Keep only lightweight file-handle closures during traversal. Do not load
-      // every File object into memory before importing; large folders can exhaust
-      // mobile memory and freeze the tab.
-      const pending: Array<{ file: () => Promise<File>; path: string }> = [];
-
+      // Stream files to storage as the tree is walked instead of waiting for a
+      // complete scan. This makes the first batch save quickly on large libraries.
+      const batch: Array<{ file: () => Promise<File>; path: string }> = [];
+      const batchSize = 10;
       let visitedEntries = 0;
+      let failedFiles = 0;
+      let supportedFound = 0;
+      const flush = async () => {
+        if (!batch.length) return;
+        const current = batch.splice(0, batch.length);
+        const results = await Promise.allSettled(current.map(async ({ file, path }) => ({ file: await file(), path })));
+        const incoming: Incoming[] = [];
+        for (const result of results) {
+          if (result.status === "fulfilled") incoming.push(result.value);
+          else failedFiles++;
+        }
+        if (incoming.length && !(await importEntries(incoming, directory.name, true))) failedFiles += incoming.length;
+        setImporting({ done: visitedEntries, total: 0, label: `Scanning and saving · ${supportedFound} supported files found` });
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+      };
       const walk = async (dir: DirectoryHandleLike, prefix: string): Promise<void> => {
         for await (const entry of dir.values()) {
           const path = `${prefix}/${entry.name}`;
           if (entry.kind === "file") {
             if ((supported(entry.name) || isComicFile(entry.name) || isPhotoFile(entry.name)) && entry.getFile) {
-              pending.push({ file: () => entry.getFile!(), path });
+              batch.push({ file: () => entry.getFile!(), path });
+              supportedFound++;
+              if (batch.length >= batchSize) await flush();
             }
           } else if (!entry.name.startsWith(".")) {
             await walk(entry as DirectoryHandleLike, path);
           }
           visitedEntries++;
           if (visitedEntries % 20 === 0) {
-            setImporting({ done: visitedEntries, total: 0, label: `Scanning · ${pending.length} supported files found` });
+            setImporting({ done: visitedEntries, total: 0, label: `Scanning and saving · ${supportedFound} supported files found` });
             await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
           }
         }
       };
-
-      setImporting({ done: 0, total: 0, label: "Scanning folder" });
+      setImporting({ done: 0, total: 0, label: "Scanning folder and saving files…" });
       await walk(directory, directory.name);
-
-      // Materialize and import a small batch at a time. This avoids retaining
-      // thousands of large File objects in RAM and starts useful work promptly.
-      const batchSize = 10;
-      let completed = 0;
-      let fileFailures = 0;
-      for (let start = 0; start < pending.length; start += batchSize) {
-        const batch = pending.slice(start, start + batchSize);
-        const results = await Promise.allSettled(batch.map(async ({ file, path }) => ({ file: await file(), path })));
-        const incoming: Incoming[] = [];
-        for (const result of results) {
-          if (result.status === "fulfilled") incoming.push(result.value);
-          else fileFailures++;
-        }
-        if (incoming.length) await importEntries(incoming, directory.name, true);
-        completed = Math.min(start + batch.length, pending.length);
-        setImporting({ done: completed, total: pending.length, label: `Adding files · ${completed} of ${pending.length}` });
-        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
-      }
+      await flush();
       setImporting(null);
-      if (pending.length && completed === 0) toast("No files could be read from that folder");
-      else if (fileFailures) toast(`${fileFailures} files could not be read`);
-      else toast(`Finished scanning ${pending.length} supported files`);
+      if (failedFiles) toast(`Folder import finished with ${failedFiles} file/batch errors. Check storage and retry affected files.`);
+      else if (!supportedFound) toast("No supported music, video, comic or photo files were found");
+      else toast(`Finished scanning and saving ${supportedFound} supported files`);
     } catch (error) {
       setImporting(null);
-      if ((error as DOMException)?.name !== "AbortError") toast("Could not open that folder");
+      if ((error as DOMException)?.name !== "AbortError") toast((error as Error)?.message || "Could not open that folder");
     }
   }
 
