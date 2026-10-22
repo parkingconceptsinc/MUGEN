@@ -511,7 +511,7 @@ export function Player() {
         }
         if (!isImportCurrent()) {
           if (savedItems.length) await deleteComics(savedItems.map((item) => item.id)).catch(() => {});
-          return;
+          return false;
         }
         if (savedItems.length) setComics((old) => [...old, ...savedItems.map(toComic)]);
         processed += items.length;
@@ -598,7 +598,7 @@ export function Player() {
       ? ` · ${importFailures} media file${importFailures === 1 ? "" : "s"} couldn't be imported`
       : "";
     const storageNote = libraryStorageOk && comicStorageOk ? "" : ", but some items couldn't be saved for next time";
-    if (!quiet || !operationOk) toast(`${what}${failureNote}${storageNote}${photoNote ? ` · ${photoNote}` : ""`);
+    if (!quiet || !operationOk) toast(`${what}${failureNote}${storageNote}${photoNote ? ` · ${photoNote}` : ""}`);
     return operationOk;
   }
   function importEntries(entries: Incoming[], label?: string, quiet = false): Promise<boolean> {
