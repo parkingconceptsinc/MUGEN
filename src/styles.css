@@ -1664,3 +1664,129 @@ img, video, iframe, canvas, svg {
     animation: none !important;
   }
 }
+
+
+/* MUGEN visual refinement v0.5.3 — layered surfaces, clearer hierarchy, resilient motion. */
+:root {
+  --surface-glass: color-mix(in srgb, var(--panel) 78%, transparent);
+  --surface-raised: color-mix(in srgb, var(--panel2) 88%, transparent);
+  --shadow-soft: 0 12px 34px #00000018;
+  --shadow-lift: 0 18px 44px #00000028;
+  --ease-premium: cubic-bezier(.2,.8,.2,1);
+}
+body {
+  background:
+    radial-gradient(ellipse at 8% -10%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 38rem),
+    radial-gradient(ellipse at 100% 0%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 32rem),
+    var(--bg);
+  background-attachment: fixed;
+}
+button, .card, .trackRow, .groupRow, .albumCard, .settingLink, .chip, .tabbar button, .sidebar nav button {
+  transition: background-color 180ms var(--ease-premium), border-color 180ms var(--ease-premium),
+    color 180ms var(--ease-premium), box-shadow 220ms var(--ease-premium), transform 220ms var(--ease-premium);
+}
+button:active { transform: scale(.975); }
+:where(button, a, input, select, summary):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 10px;
+}
+.card {
+  border-color: color-mix(in srgb, var(--line) 78%, var(--accent) 5%);
+  box-shadow: var(--shadow-soft);
+}
+.sectionLabel { letter-spacing: .09em; text-transform: uppercase; }
+.screenHeader {
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+}
+.hero {
+  isolation: isolate;
+}
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 12% 0%, color-mix(in srgb, var(--accent) 18%, transparent), transparent 62%);
+}
+.art, .albumArt, .miniArt {
+  box-shadow: 0 8px 22px #00000024;
+}
+.trackRow, .groupRow, .settingLink {
+  border-radius: 14px;
+}
+.trackRow:hover, .groupRow:hover, .settingLink:hover {
+  background: color-mix(in srgb, var(--panel2) 82%, var(--accent) 5%);
+}
+.trackRow.active {
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+  box-shadow: inset 3px 0 var(--accent);
+}
+.chip, .btn, .iconBtn, .toolBtn {
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+.btn, .chip {
+  min-height: 38px;
+}
+.btn.primary, .btn.accent {
+  box-shadow: 0 5px 18px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+.miniPlayer {
+  background: color-mix(in srgb, var(--panel) 84%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line) 76%, var(--accent) 10%);
+  box-shadow: 0 16px 42px #00000030;
+  backdrop-filter: blur(24px) saturate(1.35);
+  -webkit-backdrop-filter: blur(24px) saturate(1.35);
+}
+.miniProgress { transition: width 180ms linear; }
+.toast {
+  box-shadow: 0 12px 34px #00000030;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+.swatch { transition: transform 180ms var(--ease-premium), box-shadow 180ms var(--ease-premium); }
+.swatch:hover { transform: scale(1.12); }
+:root[data-glass="off"] .card,
+:root[data-glass="off"] .miniPlayer,
+:root[data-glass="off"] .screenHeader,
+:root[data-glass="off"] .toast {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none;
+}
+:root[data-motion="subtle"] .main > .screen:not([hidden]) {
+  animation-duration: 140ms !important;
+  animation-timing-function: ease-out !important;
+}
+:root[data-motion="off"] *,
+:root[data-motion="off"] *::before,
+:root[data-motion="off"] *::after {
+  animation-duration: .01ms !important;
+  animation-iteration-count: 1 !important;
+  scroll-behavior: auto !important;
+  transition-duration: .01ms !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  .albumCard:hover, .bookCard:hover, .videoCard:hover { transform: translateY(-3px); }
+  .btn:hover, .iconBtn:hover { box-shadow: 0 8px 22px #0000001a; }
+}
+@media (max-width: 640px) {
+  .card { border-radius: 18px; }
+  .screen { padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+  .miniPlayer {
+    padding-bottom: max(8px, env(safe-area-inset-bottom, 0px));
+    border-radius: 18px;
+  }
+  button { touch-action: manipulation; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}

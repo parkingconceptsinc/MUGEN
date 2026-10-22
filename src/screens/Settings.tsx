@@ -4,6 +4,7 @@ import { usePlayer } from "../context";
 import { ScreenHeader, Toggle } from "../components";
 import type { VideoFit } from "../types";
 import { ACCENTS, formatSize } from "../util";
+import { usePref } from "../prefs";
 
 const SHORTCUTS: Array<[string, string]> = [
   ["Space / K", "Play / pause"], ["← / J", "Skip back"], ["→ / L", "Skip forward"], ["↑ / ↓", "Volume"],
@@ -14,6 +15,8 @@ export function Settings({ theme, onThemeChange }: { theme: "dark" | "light"; on
   const p = usePlayer();
   const { actions } = p;
   const [storage, setStorage] = useState<{ usage?: number; quota?: number; persisted?: boolean }>({});
+  const [motionStyle, setMotionStyle] = usePref<"cinematic" | "subtle" | "off">("motionStyle", "cinematic");
+  const [glassMode, setGlassMode] = usePref<boolean>("glassMode", true);
   const musicVideoSize = p.tracks.reduce((sum, t) => sum + t.size, 0);
   const booksComicsSize = p.comics.reduce((sum, c) => sum + c.size, 0);
   const librarySize = musicVideoSize + booksComicsSize;
@@ -24,6 +27,10 @@ export function Settings({ theme, onThemeChange }: { theme: "dark" | "light"; on
       .catch(() => {});
   };
   useEffect(refreshStorage, [p.tracks.length, p.comics.length]);
+  useEffect(() => {
+    document.documentElement.dataset.motion = motionStyle === "cinematic" ? "on" : motionStyle;
+    document.documentElement.dataset.glass = glassMode ? "on" : "off";
+  }, [motionStyle, glassMode]);
 
   return (
     <section className="screen settingsScreen">
@@ -69,6 +76,15 @@ export function Settings({ theme, onThemeChange }: { theme: "dark" | "light"; on
               <button key={name} className={"swatch" + (p.accent === name ? " on" : "")} style={{ background: color }} aria-label={name} title={name} onClick={() => actions.setAccent(name)} />
             ))}
           </div>
+        </Row>
+      </Card>
+
+      <Card title="Motion & feel">
+        <Row label="Screen transitions" hint="Choose the motion style that feels right on this device">
+          <Chips values={["cinematic", "subtle", "off"] as const} current={motionStyle} format={(v) => ({ cinematic: "Cinematic", subtle: "Subtle", off: "Off" })[v]} onPick={setMotionStyle} />
+        </Row>
+        <Row label="Glass surfaces" hint="Blurred translucent controls and layered panels; turn off to reduce visual effects">
+          <Toggle checked={glassMode} onChange={setGlassMode} label="Glass surfaces" />
         </Row>
       </Card>
 
