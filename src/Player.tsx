@@ -1533,11 +1533,9 @@ export function Player() {
     rescanStarted.current = true;
     const stale = tracks.filter((t) => t.kind === "audio" && t.metaVersion < META_VERSION);
     if (!stale.length) return;
-    let cancelled = false;
     void (async () => {
       let improved = 0;
       for (let start = 0; start < stale.length; start += 2) {
-        if (cancelled) return;
         const batch = stale.slice(start, start + 2);
         const results = await Promise.allSettled(batch.map(async (track) => {
           const response = await fetch(track.url);
@@ -1580,9 +1578,8 @@ export function Player() {
         // Keep the main thread responsive while older metadata is refreshed.
         await new Promise((resolve) => window.setTimeout(resolve, 0));
       }
-      if (!cancelled && improved) toast(`Updated tags and covers for ${improved} song${improved === 1 ? "" : "s"}`);
+      if (improved) toast(`Updated tags and covers for ${improved} song${improved === 1 ? "" : "s"}`);
     })();
-    return () => { cancelled = true; };
   }, [loaded, tracks]);
 
   useEffect(() => {
