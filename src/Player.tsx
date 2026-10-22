@@ -3,7 +3,7 @@ import { BookOpen, Clapperboard, Disc3, Download, FilePlus, FolderOpen, Library 
 import { applyAudio, attachElement, EQ_PRESETS, initEngine, resumeEngine } from "./audioEngine";
 import { decodeAudioTrack, type DecodedAudio } from "./codecAudioDecoder";
 import { PlayerContext, ProgressContext, type Actions, type MenuTarget, type PlayerState, type SleepState } from "./context";
-import { clearLibrary as clearStoredLibrary, deleteComics, deleteTracks, loadComics, loadLibrary, patchComic, patchTrack, saveComics, saveLibrary, type StoredComic, type StoredLibraryItem } from "./library";
+import { clearLibrary as clearStoredLibrary, deleteComics, deleteTracks, loadComics, loadLibrary, patchComic, patchTrack, saveComics, saveComicsFast, saveLibrary, saveLibraryFast, type StoredComic, type StoredLibraryItem } from "./library";
 import { comicFormatOf, defaultShelf, isComicFile, isTextFormat, makeThumbnail, openComic, toComic } from "./comics";
 import { META_VERSION, readItem, readTags, type Incoming } from "./metadata";
 import { readPref, usePref, writePref } from "./prefs";
@@ -50,14 +50,17 @@ type CodecAudioState = DecodedAudio & { id: string; source: AudioBufferSourceNod
 
 const metadataQueue: Array<() => Promise<void>> = [];
 let mediaImportQueue: Promise<void> = Promise.resolve();
+let mediaImportActive = false;
 let metadataPump: Promise<void> | null = null;
 
 function startMetadataPump() {
-  if (metadataPump) return;
+  if (metadataPump || mediaImportActive) return;
   metadataPump = (async () => {
     while (metadataQueue.length) {
-      const batch = metadataQueue.splice(0, 4);
+      const batch = metadataQueue.splice(0, 2);
       await Promise.allSettled(batch.map((job) => job()));
+      // Give rendering and touch/input events a chance between metadata batches.
+      await new Promise((resolve) => window.setTimeout(resolve, 0));
     }
   })().finally(() => {
     metadataPump = null;
@@ -503,7 +506,7 @@ export function Player() {
         }));
         let savedItems = items;
         if (comicStorageOk) {
-          try { savedItems = await saveComics(items); } catch { comicStorageOk = false; }
+          try { savedItems = await saveComicsFast(items); } catch { comicStorageOk = false; }
         }
         if (!isImportCurrent()) {
           if (savedItems.length) await deleteComics(savedItems.map((item) => item.id)).catch(() => {});
@@ -523,7 +526,7 @@ export function Player() {
       if (!isImportCurrent()) return;
       let savedItems = items;
       if (libraryStorageOk) {
-        try { savedItems = await saveLibrary(items); } catch { libraryStorageOk = false; }
+        try { savedItems = await saveLibraryFast(items); } catch { libraryStorageOk = false; }
       }
       if (!isImportCurrent()) {
         if (savedItems.length) await deleteTracks(savedItems.map((item) => item.id)).catch(() => {});
@@ -597,9 +600,21 @@ export function Player() {
   function importEntries(entries: Incoming[], label?: string): Promise<void> {
     mediaImportQueue = mediaImportQueue
       .catch(() => {})
-      .then(() => performImportEntries(entries, label))
+      .then(async () => {
+        // Pause expensive tag/cover parsing while the user is importing a library.
+        // Parsing concurrently with IndexedDB writes can saturate mobile CPUs and memory.
+        mediaImportActive = true;
+        try {
+          await performImportEntries(entries, label);
+        } finally {
+          mediaImportActive = false;
+          startMetadataPump();
+        }
+      })
       .catch((error) => {
         // A failed import must never leave the progress UI stuck indefinitely.
+        mediaImportActive = false;
+        startMetadataPump();
         setImporting(null);
         toast((error as Error)?.name === "QuotaExceededError"
           ? "Not enough browser storage to finish importing"
