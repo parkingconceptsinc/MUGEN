@@ -252,7 +252,7 @@ async function processPhoto(file: File, path: string, addedAt: number): Promise<
   }
 }
 
-export type PhotoImportResult = { added: number; failed: number; duplicates: number; unsupported: number };
+export type PhotoImportResult = { added: number; failed: number; duplicates: number; unsupported: number; storageFailed: boolean };
 
 export async function importPhotos(entries: Array<{ file: File; path: string }>, onProgress?: (done: number, total: number) => void): Promise<PhotoImportResult> {
   await new Promise<void>((resolve) => {
@@ -267,7 +267,7 @@ export async function importPhotos(entries: Array<{ file: File; path: string }>,
     seen.add(key);
     return true;
   });
-  const result: PhotoImportResult = { added: 0, failed: 0, duplicates: entries.length - fresh.length, unsupported: 0 };
+  const result: PhotoImportResult = { added: 0, failed: 0, duplicates: entries.length - fresh.length, unsupported: 0, storageFailed: false };
   const addedAt = Date.now();
   const batchSize = 12;
   for (let start = 0; start < fresh.length; start += batchSize) {
@@ -282,7 +282,7 @@ export async function importPhotos(entries: Array<{ file: File; path: string }>,
         else result.failed++;
       });
     }
-    const saved = await savePhotos(items).catch(() => items);
+    const saved = await savePhotos(items).catch(() => { result.storageFailed = true; return []; });
     result.added += saved.length;
     if (saved.length) emit({ photos: [...state.photos, ...saved.map(toPhoto)] });
     onProgress?.(Math.min(start + slice.length, fresh.length), fresh.length);
@@ -294,6 +294,7 @@ export function describeImport(r: PhotoImportResult) {
   const parts = [r.added ? `${r.added} photo${r.added === 1 ? "" : "s"} added` : "No new photos added"];
   if (r.unsupported) parts.push(`${r.unsupported} HEIC/HEIF file${r.unsupported === 1 ? "" : "s"} skipped (convert to JPEG)`);
   if (r.failed) parts.push(`${r.failed} couldn't be read`);
+  if (r.storageFailed) parts.push("Some photos could not be saved to device storage");
   return parts.join(" · ");
 }
 
