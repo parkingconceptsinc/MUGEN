@@ -506,9 +506,9 @@ export function Player() {
           id: crypto.randomUUID(), name: file.name, path, size: file.size, lastModified: file.lastModified,
           addedAt: addedAt + start + offset, format: comicFormatOf(file.name), shelf: defaultShelf(comicFormatOf(file.name)), file,
         }));
-        let savedItems = items;
+        let savedItems: StoredComic[] = [];
         if (comicStorageOk) {
-          try { savedItems = await saveComicsFast(items); } catch { savedItems = []; comicStorageOk = false; operationOk = false; }
+          try { savedItems = await saveComicsFast(items); } catch { comicStorageOk = false; operationOk = false; }
         }
         if (!isImportCurrent()) {
           if (savedItems.length) await deleteComics(savedItems.map((item) => item.id)).catch(() => {});
@@ -526,9 +526,9 @@ export function Player() {
       batch = [];
       if (!items.length) return;
       if (!isImportCurrent()) return false;
-      let savedItems = items;
+      let savedItems: StoredLibraryItem[] = [];
       if (libraryStorageOk) {
-        try { savedItems = await saveLibraryFast(items); } catch { savedItems = []; libraryStorageOk = false; operationOk = false; }
+        try { savedItems = await saveLibraryFast(items); } catch { libraryStorageOk = false; operationOk = false; }
       }
       if (!isImportCurrent()) {
         if (savedItems.length) await deleteTracks(savedItems.map((item) => item.id)).catch(() => {});
