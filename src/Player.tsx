@@ -496,7 +496,7 @@ export function Player() {
     setImporting({ done: 0, total: totalToAdd, label: "Adding" });
 
     if (freshComics.length) {
-      const comicBatchSize = 50;
+      const comicBatchSize = 10;
       for (let start = 0; start < freshComics.length; start += comicBatchSize) {
         if (!isImportCurrent()) return;
         const end = Math.min(start + comicBatchSize, freshComics.length);
@@ -559,7 +559,7 @@ export function Player() {
     // large libraries feel unnecessarily slow, especially when importing folders.
     let importedMedia = 0;
     let importFailures = 0;
-    const importBatchSize = 50;
+    const importBatchSize = 10;
     for (let start = 0; start < fresh.length; start += importBatchSize) {
       if (!isImportCurrent()) return;
       const end = Math.min(start + importBatchSize, fresh.length);
@@ -636,6 +636,7 @@ export function Player() {
       const found: Incoming[] = [];
       const pending: Array<{ file: () => Promise<File>; path: string }> = [];
 
+      let visitedEntries = 0;
       const walk = async (dir: DirectoryHandleLike, prefix: string): Promise<void> => {
         for await (const entry of dir.values()) {
           const path = `${prefix}/${entry.name}`;
@@ -646,15 +647,22 @@ export function Player() {
           } else if (!entry.name.startsWith(".")) {
             await walk(entry as DirectoryHandleLike, path);
           }
+          // Directory enumeration can contain thousands of entries. Yield often so
+          // mobile browsers can paint progress and keep touch/input responsive.
+          visitedEntries++;
+          if (visitedEntries % 20 === 0) {
+            setImporting({ done: visitedEntries, total: 0, label: `Scanning · ${pending.length} supported files found` });
+            await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+          }
         }
       };
 
-      setImporting({ done: 0, total: 0, label: "Scanning" });
+      setImporting({ done: 0, total: 0, label: "Scanning folder" });
       await walk(directory, directory.name);
 
       // Read file handles concurrently in small batches instead of awaiting
       // getFile() one by one. This makes large folder scans much faster.
-      const scanBatchSize = 50;
+      const scanBatchSize = 10;
       for (let start = 0; start < pending.length; start += scanBatchSize) {
         const batch = pending.slice(start, start + scanBatchSize);
         const results = await Promise.allSettled(batch.map(async ({ file, path }) => ({ file: await file(), path })));
