@@ -162,7 +162,18 @@ export function MiniPlayer() {
   return (
     <aside className="miniPlayer" aria-label="Now playing">
       <i className="miniProgress" style={{ width: duration ? `${(currentTime / duration) * 100}%` : "0%" }} />
-      <button className="rowMain miniMain" onClick={() => actions.goTo("player")} aria-label={`Open player: ${current.title}`}>
+      <button
+        type="button"
+        className="rowMain miniMain"
+        aria-label={`Open player: ${current.title}`}
+        onClick={(event) => {
+          // iOS Safari can dispatch a click after touch handling; keep this
+          // control strictly inside the app and prevent any ancestor navigation.
+          event.preventDefault();
+          event.stopPropagation();
+          actions.goTo("player");
+        }}
+      >
         <Art src={current.cover} seed={current.album || current.title} icon={current.kind === "video" ? Film : Music2} className="miniArt" />
         <div className="miniText">
           <b>{current.title}</b>
