@@ -1527,48 +1527,62 @@ export function Player() {
 
   useEffect(() => {
     if (!loaded || rescanStarted.current) return;
+    // This is a one-time migration for items restored from an older build.
+    // Mark it complete even when there are no stale tracks, so new imports are
+    // not accidentally rescanned a second time by this startup-only effect.
+    rescanStarted.current = true;
     const stale = tracks.filter((t) => t.kind === "audio" && t.metaVersion < META_VERSION);
     if (!stale.length) return;
-    rescanStarted.current = true;
+    let cancelled = false;
     void (async () => {
       let improved = 0;
-      for (let i = 0; i < stale.length; i++) {
-        const track = stale[i];
-        setImporting({ done: i, total: stale.length, label: "Reading tags and covers" });
-        try {
-          const tags = await readTags(await (await fetch(track.url)).blob(), track.name);
+      for (let start = 0; start < stale.length; start += 2) {
+        if (cancelled) return;
+        const batch = stale.slice(start, start + 2);
+        const results = await Promise.allSettled(batch.map(async (track) => {
+          const response = await fetch(track.url);
+          if (!response.ok) throw new Error("Unable to read saved audio");
+          const tags = await readTags(await response.blob(), track.name);
           const patch = Object.fromEntries(Object.entries({ ...tags, metaVersion: META_VERSION }).filter(([, v]) => v !== undefined));
           await patchTrack(track.id, patch).catch(() => {});
+          return { track, tags };
+        }));
+        for (const result of results) {
+          if (result.status !== "fulfilled") continue;
+          const { track, tags } = result.value;
+          if (!tracksLiveRef.current.some((live) => live.id === track.id)) continue;
           const cover = tags.cover ? URL.createObjectURL(tags.cover) : undefined;
           setTracks((old) => {
-            if (!old.some((t) => t.id === track.id)) {
+            if (!old.some((live) => live.id === track.id)) {
               if (cover) URL.revokeObjectURL(cover);
               return old;
             }
-            return old.map((t) => {
-            if (t.id !== track.id) return t;
-            if (cover && t.cover) URL.revokeObjectURL(t.cover);
-            return {
-              ...t,
-              title: tags.title || t.title,
-              artist: tags.artist ?? t.artist,
-              album: tags.album ?? t.album,
-              albumArtist: tags.albumArtist ?? t.albumArtist,
-              genre: tags.genre ?? t.genre,
-              year: tags.year ?? t.year,
-              trackNo: tags.trackNo ?? t.trackNo,
-              duration: tags.duration ?? t.duration,
-              cover: cover ?? t.cover,
-              metaVersion: META_VERSION,
-            };
+            return old.map((live) => {
+              if (live.id !== track.id) return live;
+              if (cover && live.cover) URL.revokeObjectURL(live.cover);
+              return {
+                ...live,
+                title: tags.title || live.title,
+                artist: tags.artist ?? live.artist,
+                album: tags.album ?? live.album,
+                albumArtist: tags.albumArtist ?? live.albumArtist,
+                genre: tags.genre ?? live.genre,
+                year: tags.year ?? live.year,
+                trackNo: tags.trackNo ?? live.trackNo,
+                duration: tags.duration ?? live.duration,
+                cover: cover ?? live.cover,
+                metaVersion: META_VERSION,
+              };
             });
           });
           if (tags.artist || tags.album || tags.cover) improved++;
-        } catch {}
+        }
+        // Keep the main thread responsive while older metadata is refreshed.
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
       }
-      setImporting(null);
-      if (improved) toast(`Updated tags and covers for ${improved} song${improved === 1 ? "" : "s"}`);
+      if (!cancelled && improved) toast(`Updated tags and covers for ${improved} song${improved === 1 ? "" : "s"}`);
     })();
+    return () => { cancelled = true; };
   }, [loaded, tracks]);
 
   useEffect(() => {
