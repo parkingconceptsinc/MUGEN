@@ -1819,3 +1819,74 @@ button:active { transform: scale(.975); }
   .tabbar { padding-top: 2px; padding-bottom: max(2px, env(safe-area-inset-bottom)); }
   .tabbar button { gap: 1px; padding-top: 4px; padding-bottom: 3px; }
 }
+
+
+/* MUGEN 0.5.5 — professional interaction and resilience pass */
+:root {
+  --ease-premium: cubic-bezier(.2, .75, .25, 1);
+  --shadow-soft: 0 8px 28px #00000018;
+}
+html { scroll-padding-top: 16px; }
+body { text-rendering: optimizeLegibility; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+button:disabled, .btn:disabled, .iconBtn:disabled {
+  cursor: not-allowed;
+  opacity: .48;
+  transform: none;
+  box-shadow: none;
+}
+button:active:not(:disabled), .btn:active:not(:disabled), .iconBtn:active:not(:disabled) {
+  transition-duration: 90ms;
+}
+:where(.card, .albumCard, .bookCard, .videoCard, .trackRow, .groupRow) {
+  min-width: 0;
+}
+:where(.albumCard, .bookCard, .videoCard) img {
+  backface-visibility: hidden;
+}
+:where(.screen, .main, .libraryGrid, .trackList, .videoGrid, .comicGrid) {
+  overscroll-behavior: contain;
+}
+.miniPlayer {
+  contain: layout paint;
+  transform: translateZ(0);
+}
+.miniPlayer .miniMain {
+  appearance: none;
+  -webkit-appearance: none;
+  text-decoration: none;
+}
+.miniPlayer .miniMain:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+.miniPlayer .iconBtn:focus-visible {
+  outline-offset: -2px;
+}
+:where(.btn, .iconBtn, .chip, .toolBtn, .tabbar button, .sidebar nav button) {
+  user-select: none;
+  -webkit-user-select: none;
+}
+:where(input, select, textarea) { accent-color: var(--accent); }
+@media (hover: hover) and (pointer: fine) {
+  .miniPlayer .iconBtn:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--accent) 12%, var(--panel2));
+  }
+  .settingLink:hover { padding-left: 4px; }
+}
+@media (max-width: 640px) {
+  .shell { min-height: 100svh; }
+  .miniPlayer { margin-left: max(6px, env(safe-area-inset-left)); margin-right: max(6px, env(safe-area-inset-right)); }
+  .screenHeader { padding-top: max(8px, env(safe-area-inset-top)); }
+  :where(.btn, .iconBtn, .chip, .toolBtn, .tabbar button) { touch-action: manipulation; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto !important; }
+  .miniPlayer, .card, .albumCard, .bookCard, .videoCard, .settingLink, button {
+    transform: none !important;
+  }
+}
+@media (forced-colors: active) {
+  :focus-visible { outline: 2px solid Highlight; }
+  .miniProgress, .videoProgress { background: Highlight; }
+}
