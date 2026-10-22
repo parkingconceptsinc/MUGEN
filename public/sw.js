@@ -1,4 +1,4 @@
-const CACHE = "mugen-shell-v1";
+const CACHE = "mugen-shell-v2";
 const BASE = "/MUGEN/";
 const BUILD_ASSETS = [];
 const SHELL = [
@@ -51,12 +51,17 @@ self.addEventListener("fetch", (event) => {
 
   event.respondWith(
     staticAsset || wasmAsset
-      ? caches.match(request).then((cached) => {
+      ? caches.open(CACHE).then(async (cache) => {
+          // Never read from another app version's cache. A stale cross-cache
+          // hit can resurrect old bundles on iOS home-screen PWAs.
+          const cached = await cache.match(request);
           if (cached) return cached;
           return fetch(request).then(cacheResponse);
         })
       : fetch(request).then(cacheResponse).catch(() =>
-          caches.match(request).then((cached) => cached || caches.match(BASE))
+          caches.open(CACHE).then(async (cache) =>
+            (await cache.match(request)) || (await cache.match(BASE))
+          )
         )
   );
 });
