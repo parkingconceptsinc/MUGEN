@@ -1,4 +1,4 @@
-const CACHE = "mugen-shell-v2";
+const CACHE = "mugen-shell-v3";
 const BASE = "/MUGEN/";
 const BUILD_ASSETS = [];
 const SHELL = [
@@ -40,6 +40,7 @@ self.addEventListener("fetch", (event) => {
   const sameOrigin = url.origin === self.location.origin;
   const staticAsset = ["script", "style", "font", "image", "manifest", "worker"].includes(request.destination);
   const wasmAsset = sameOrigin && url.pathname.endsWith(".wasm");
+  const isNavigation = request.mode === "navigate";
 
   const cacheResponse = (response) => {
     if (sameOrigin && response.ok && response.type === "basic") {
@@ -50,18 +51,24 @@ self.addEventListener("fetch", (event) => {
   };
 
   event.respondWith(
-    staticAsset || wasmAsset
-      ? caches.open(CACHE).then(async (cache) => {
-          // Never read from another app version's cache. A stale cross-cache
-          // hit can resurrect old bundles on iOS home-screen PWAs.
-          const cached = await cache.match(request);
-          if (cached) return cached;
-          return fetch(request).then(cacheResponse);
-        })
-      : fetch(request).then(cacheResponse).catch(() =>
+    isNavigation
+      ? fetch(request, { cache: "no-store" }).then(cacheResponse).catch(() =>
           caches.open(CACHE).then(async (cache) =>
             (await cache.match(request)) || (await cache.match(BASE))
           )
         )
+      : staticAsset || wasmAsset
+        ? caches.open(CACHE).then(async (cache) => {
+            // Only use the active version's cache; never let old app bundles
+            // from a different cache satisfy this request.
+            const cached = await cache.match(request);
+            if (cached) return cached;
+            return fetch(request).then(cacheResponse);
+          })
+        : fetch(request).then(cacheResponse).catch(() =>
+            caches.open(CACHE).then(async (cache) =>
+              (await cache.match(request)) || (await cache.match(BASE))
+            )
+          )
   );
 });
