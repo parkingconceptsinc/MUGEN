@@ -472,6 +472,7 @@ export function Player() {
     if (photoEntries.length) {
       setImporting({ done: 0, total: photoEntries.length, label: "Adding photos" });
       const photoResult = await importPhotos(photoEntries, (done, total) => setImporting({ done, total, label: "Adding photos" }));
+      if (photoResult.failed || photoResult.unsupported || photoResult.storageFailed) operationOk = false;
       if (!isImportCurrent()) return false;
       setImporting(null);
       photoNote = describeImport(photoResult);
@@ -507,7 +508,7 @@ export function Player() {
         }));
         let savedItems = items;
         if (comicStorageOk) {
-          try { savedItems = await saveComicsFast(items); } catch { comicStorageOk = false; operationOk = false; }
+          try { savedItems = await saveComicsFast(items); } catch { savedItems = []; comicStorageOk = false; operationOk = false; }
         }
         if (!isImportCurrent()) {
           if (savedItems.length) await deleteComics(savedItems.map((item) => item.id)).catch(() => {});
@@ -527,7 +528,7 @@ export function Player() {
       if (!isImportCurrent()) return false;
       let savedItems = items;
       if (libraryStorageOk) {
-        try { savedItems = await saveLibraryFast(items); } catch { libraryStorageOk = false; operationOk = false; }
+        try { savedItems = await saveLibraryFast(items); } catch { savedItems = []; libraryStorageOk = false; operationOk = false; }
       }
       if (!isImportCurrent()) {
         if (savedItems.length) await deleteTracks(savedItems.map((item) => item.id)).catch(() => {});
