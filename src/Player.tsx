@@ -455,7 +455,7 @@ export function Player() {
     setOriginalQueue(null);
   }
 
-  async function performImportEntries(entries: Incoming[], label?: string) {
+  async function performImportEntries(entries: Incoming[], label?: string, quiet = false) {
     const importGeneration = importGenerationRef.current;
     const isImportCurrent = () => importGenerationRef.current === importGeneration;
     // Read current library refs when a queued import starts, not the render that queued it.
@@ -484,7 +484,7 @@ export function Player() {
     const freshComics = entries.filter((e) => isComicFile(e.file.name) && isNew(e));
     const totalToAdd = fresh.length + freshComics.length;
     if (!totalToAdd) {
-      toast(photoNote || (entries.some((e) => supported(e.file.name) || isComicFile(e.file.name)) ? "Those files are already in your library" : "No supported music, video, comic or photo files found"));
+      if (!quiet) toast(photoNote || (entries.some((e) => supported(e.file.name) || isComicFile(e.file.name)) ? "Those files are already in your library" : "No supported music, video, comic or photo files found"));
       return;
     }
     void navigator.storage?.persist?.().catch(() => false);
@@ -595,9 +595,9 @@ export function Player() {
       ? ` · ${importFailures} media file${importFailures === 1 ? "" : "s"} couldn't be imported`
       : "";
     const storageNote = libraryStorageOk && comicStorageOk ? "" : ", but some items couldn't be saved for next time";
-    toast(`${what}${failureNote}${storageNote}${photoNote ? ` · ${photoNote}` : ""}`);
+    if (!quiet) toast(`${what}${failureNote}${storageNote}${photoNote ? ` · ${photoNote}` : ""}`);
   }
-  function importEntries(entries: Incoming[], label?: string): Promise<void> {
+  function importEntries(entries: Incoming[], label?: string, quiet = false): Promise<void> {
     mediaImportQueue = mediaImportQueue
       .catch(() => {})
       .then(async () => {
@@ -605,7 +605,7 @@ export function Player() {
         // Parsing concurrently with IndexedDB writes can saturate mobile CPUs and memory.
         mediaImportActive = true;
         try {
-          await performImportEntries(entries, label);
+          await performImportEntries(entries, label, quiet);
         } finally {
           mediaImportActive = false;
           startMetadataPump();
@@ -633,7 +633,9 @@ export function Player() {
       // Keep the native method bound to window. Calling the detached method can
       // fail with "Illegal invocation" in browsers that require its receiver.
       const directory = await pickerHost.showDirectoryPicker({ mode: "read" });
-      const found: Incoming[] = [];
+      // Keep only lightweight file-handle closures during traversal. Do not load
+      // every File object into memory before importing; large folders can exhaust
+      // mobile memory and freeze the tab.
       const pending: Array<{ file: () => Promise<File>; path: string }> = [];
 
       let visitedEntries = 0;
@@ -647,8 +649,6 @@ export function Player() {
           } else if (!entry.name.startsWith(".")) {
             await walk(entry as DirectoryHandleLike, path);
           }
-          // Directory enumeration can contain thousands of entries. Yield often so
-          // mobile browsers can paint progress and keep touch/input responsive.
           visitedEntries++;
           if (visitedEntries % 20 === 0) {
             setImporting({ done: visitedEntries, total: 0, label: `Scanning · ${pending.length} supported files found` });
@@ -660,18 +660,28 @@ export function Player() {
       setImporting({ done: 0, total: 0, label: "Scanning folder" });
       await walk(directory, directory.name);
 
-      // Read file handles concurrently in small batches instead of awaiting
-      // getFile() one by one. This makes large folder scans much faster.
-      const scanBatchSize = 10;
-      for (let start = 0; start < pending.length; start += scanBatchSize) {
-        const batch = pending.slice(start, start + scanBatchSize);
+      // Materialize and import a small batch at a time. This avoids retaining
+      // thousands of large File objects in RAM and starts useful work promptly.
+      const batchSize = 10;
+      let completed = 0;
+      let fileFailures = 0;
+      for (let start = 0; start < pending.length; start += batchSize) {
+        const batch = pending.slice(start, start + batchSize);
         const results = await Promise.allSettled(batch.map(async ({ file, path }) => ({ file: await file(), path })));
-        for (const result of results) if (result.status === "fulfilled") found.push(result.value);
-        setImporting({ done: Math.min(start + batch.length, pending.length), total: pending.length, label: "Scanning" });
+        const incoming: Incoming[] = [];
+        for (const result of results) {
+          if (result.status === "fulfilled") incoming.push(result.value);
+          else fileFailures++;
+        }
+        if (incoming.length) await importEntries(incoming, directory.name, true);
+        completed = Math.min(start + batch.length, pending.length);
+        setImporting({ done: completed, total: pending.length, label: `Adding files · ${completed} of ${pending.length}` });
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       }
-
-      setImporting({ done: 0, total: found.length, label: "Adding" });
-      await importEntries(found, directory.name);
+      setImporting(null);
+      if (pending.length && completed === 0) toast("No files could be read from that folder");
+      else if (fileFailures) toast(`${fileFailures} files could not be read`);
+      else toast(`Finished scanning ${pending.length} supported files`);
     } catch (error) {
       setImporting(null);
       if ((error as DOMException)?.name !== "AbortError") toast("Could not open that folder");
