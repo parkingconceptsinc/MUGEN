@@ -6,6 +6,8 @@ import type { VideoFit } from "../types";
 import { ACCENTS, formatSize } from "../util";
 import { usePref } from "../prefs";
 
+const APP_VERSION = "0.5.14";
+
 const SHORTCUTS: Array<[string, string]> = [
   ["Space / K", "Play / pause"], ["← / J", "Skip back"], ["→ / L", "Skip forward"], ["↑ / ↓", "Volume"],
   ["N / P", "Next / previous"], ["M", "Mute"], ["S", "Shuffle"], ["R", "Repeat mode"], ["[ / ] / =", "Slower / faster / normal speed"], ["F", "Video fullscreen"],
@@ -112,6 +114,9 @@ export function Settings({ theme, onThemeChange }: { theme: "dark" | "light"; on
       </Card>
 
       <Card title="App">
+        <Row label="Version" hint="Installed MUGEN PWA build">
+          <span className="badge">v{APP_VERSION}</span>
+        </Row>
         {p.canInstall && <button className="btn primary wide" onClick={actions.install}><Download size={17} /> Install app</button>}
         <details className="shortcuts">
           <summary><Keyboard size={17} /> Keyboard shortcuts</summary>
