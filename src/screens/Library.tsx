@@ -259,6 +259,33 @@ function Home({ lib }: { lib: Lib }) {
 
   return (
     <>
+      <section className="homeHero" aria-label="MUGEN home">
+        <div className="homeHeroCopy">
+          <div className="homeEyebrow"><span className="homeLiveDot" /> YOUR PERSONAL MEDIA SPACE</div>
+          <h2>Make room for<br /><span>your next favorite.</span></h2>
+          <p>Music, films, books and comics. One beautiful library, ready when you are.</p>
+          <div className="homeHeroActions">
+            <button className="btn primary" onClick={() => lib.songs.length ? actions.playTracks(lib.songs.map((t) => t.id), undefined, { shuffle: true, source: "All songs" }) : actions.importFolder()}>{lib.songs.length ? <Shuffle size={17} /> : <FolderOpen size={17} />}{lib.songs.length ? " Shuffle your music" : " Build your library"}</button>
+            <button className="homeTextAction" onClick={() => actions.navigate({ view: "albums" })}>Explore collection <ChevronRight size={16} /></button>
+          </div>
+          <div className="homeHeroStats">
+            <div><b>{lib.songs.length.toLocaleString()}</b><span>Tracks</span></div>
+            <i />
+            <div><b>{lib.albums.length.toLocaleString()}</b><span>Albums</span></div>
+            <i />
+            <div><b>{lib.videos.length.toLocaleString()}</b><span>Videos</span></div>
+          </div>
+        </div>
+        <div className="homeHeroVisual" aria-hidden="true">
+          <div className="homeAura homeAuraOne" />
+          <div className="homeAura homeAuraTwo" />
+          <div className="homeOrbit homeOrbitOne" />
+          <div className="homeOrbit homeOrbitTwo" />
+          <div className="homeHeroRecord"><div className="homeRecordGrooves"><div className="homeRecordLabel"><Disc3 size={31} /></div></div></div>
+          {featuredAlbum && <div className="homeFeaturedCover"><Art src={featuredAlbum.cover} seed={featuredAlbum.title} /></div>}
+          <div className="homeVisualTag"><span className="homeTagIcon"><Play size={12} fill="currentColor" /></span><span><b>{featuredAlbum ? featuredAlbum.title : "Your sound"}</b><small>{featuredAlbum ? featuredAlbum.artist : "Your world, your way"}</small></span></div>
+        </div>
+      </section>
       <div className="quickActions">
         <button className="btn primary" onClick={() => actions.playTracks(lib.songs.map((t) => t.id), undefined, { shuffle: true, source: "All songs" })}><Shuffle size={18} /> Shuffle all</button>
         <button className="btn" onClick={() => actions.playTracks(sortTracks(lib.songs, "title", {}).map((t) => t.id), undefined, { shuffle: false, source: "All songs" })}><Play size={18} /> Play all</button>
