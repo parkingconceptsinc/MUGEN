@@ -692,37 +692,39 @@ export function Player() {
   }
 
   function onPickFiles(list: FileList | null) {
-    if (!list?.length) return;
-    // Android browsers often fall back to input[webkitdirectory]. Process that
-    // FileList incrementally: passing the whole library to importEntries causes
-    // large filter/map operations before the first file is saved.
-    // Snapshot the browser-owned FileList before the input is reset, then keep
-    // each preprocessing/storage operation bounded to ten entries.
-    const files = Array.from(list);
+    if (!list?.length) {
+      setImporting(null);
+      return;
+    }
+    // Avoid materializing and filtering the entire FileList synchronously.
+    // On mobile, large folder selections can otherwise freeze before the first save.
+    const files = list;
     const batchSize = 10;
     const total = files.length;
-    const supportedCount = files.filter((file) => supported(file.name) || isComicFile(file.name) || isPhotoFile(file.name)).length;
+    let supportedCount = 0;
     let failedBatches = 0;
-    let processed = 0;
     const run = async () => {
       setImporting({ done: 0, total, label: "Preparing selected files" });
       for (let start = 0; start < total; start += batchSize) {
-        const batch = files.slice(start, start + batchSize);
-        const entries: Incoming[] = batch.map((file) => ({ file, path: file.webkitRelativePath || file.name }));
-        const ok = await importEntries(entries, undefined, true);
-        if (!ok) failedBatches++;
-        processed = Math.min(start + batch.length, total);
-        setImporting({ done: processed, total, label: `Processing files · ${processed} of ${total}` });
+        const end = Math.min(start + batchSize, total);
+        const entries: Incoming[] = [];
+        for (let i = start; i < end; i++) {
+          const file = files[i];
+          if (supported(file.name) || isComicFile(file.name) || isPhotoFile(file.name)) supportedCount++;
+          entries.push({ file, path: file.webkitRelativePath || file.name });
+        }
+        if (!(await importEntries(entries, undefined, true))) failedBatches++;
+        setImporting({ done: end, total, label: `Saving files · ${end} of ${total}` });
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       }
       setImporting(null);
       if (failedBatches) toast(`Import finished with errors in ${failedBatches} batch${failedBatches === 1 ? "" : "es"}. Check storage and retry those files.`);
       else if (!supportedCount) toast("No supported music, video, comic or photo files were found");
-      else toast(`Finished processing ${total} selected files`);
+      else toast(`Finished processing and saving ${supportedCount} supported files`);
     };
-    void run().catch(() => {
+    void run().catch((error) => {
       setImporting(null);
-      toast("Import stopped unexpectedly. Try a smaller folder.");
+      toast((error as Error)?.message || "Import stopped unexpectedly. Check storage and retry.");
     });
   }
 
