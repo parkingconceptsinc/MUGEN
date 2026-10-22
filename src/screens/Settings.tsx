@@ -16,7 +16,7 @@ export function Settings({ theme, onThemeChange }: { theme: "dark" | "light"; on
   const { actions } = p;
   const [storage, setStorage] = useState<{ usage?: number; quota?: number; persisted?: boolean }>({});
   const [motionStyle, setMotionStyle] = usePref<"cinematic" | "subtle" | "off">("motionStyle", "cinematic");
-  const [glassMode, setGlassMode] = usePref(true, true);
+  const [glassMode, setGlassMode] = usePref<boolean>("glassMode", true);
   const musicVideoSize = p.tracks.reduce((sum, t) => sum + t.size, 0);
   const booksComicsSize = p.comics.reduce((sum, c) => sum + c.size, 0);
   const librarySize = musicVideoSize + booksComicsSize;
