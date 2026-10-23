@@ -1,4 +1,4 @@
-const CACHE = "mugen-shell-v18";
+const CACHE = "mugen-shell-v19";
 const BASE = "/MUGEN/";
 const BUILD_ASSETS = [];
 const SHELL = [
