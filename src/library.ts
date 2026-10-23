@@ -198,17 +198,17 @@ async function putItemsFast<T extends { id: string }>(storeName: string, items: 
 // IndexedDB transaction so repeated batches/selections cannot create duplicate rows.
 export async function saveLibraryFast(items: StoredLibraryItem[]): Promise<StoredLibraryItem[]> {
   if (!items.length) return [];
-  return saveUniqueItems(STORE, items, (item) => `${item.path}|${item.size}|${item.lastModified}`);
+  return saveUniqueItems(STORE, items, (item) => JSON.stringify([item.path, item.size, item.lastModified]));
 }
 
 export async function saveComicsFast(items: StoredComic[]): Promise<StoredComic[]> {
   if (!items.length) return [];
-  return saveUniqueItems(COMICS, items, (item) => `${item.path}|${item.size}|${item.lastModified}`);
+  return saveUniqueItems(COMICS, items, (item) => JSON.stringify([item.path, item.size, item.lastModified]));
 }
 
 export async function saveLibrary(items: StoredLibraryItem[]): Promise<StoredLibraryItem[]> {
   if (!items.length) return [];
-  return await saveUniqueItems(STORE, items, (item) => `${item.path}|${item.size}|${item.lastModified}`);
+  return await saveUniqueItems(STORE, items, (item) => JSON.stringify([item.path, item.size, item.lastModified]));
 }
 
 export async function loadLibrary(): Promise<StoredLibraryItem[]> {
@@ -255,7 +255,7 @@ export async function clearLibrary() {
 
 export async function saveComics(items: StoredComic[]): Promise<StoredComic[]> {
   if (!items.length) return [];
-  return await saveUniqueItems(COMICS, items, (item) => `${item.path}|${item.size}|${item.lastModified}`);
+  return await saveUniqueItems(COMICS, items, (item) => JSON.stringify([item.path, item.size, item.lastModified]));
 }
 
 export async function loadComics(): Promise<StoredComic[]> {
@@ -290,7 +290,7 @@ export async function loadComicLocations(id: string): Promise<string | undefined
 
 export async function savePhotos(items: StoredPhoto[]): Promise<StoredPhoto[]> {
   if (!items.length) return [];
-  return await saveUniqueItems(PHOTOS, items, (item) => `${item.path}|${item.size}|${item.lastModified}`);
+  return await saveUniqueItems(PHOTOS, items, (item) => JSON.stringify([item.path, item.size, item.lastModified]));
 }
 
 export async function loadPhotos(): Promise<StoredPhoto[]> {
