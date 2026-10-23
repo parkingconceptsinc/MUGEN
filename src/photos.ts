@@ -254,7 +254,11 @@ async function processPhoto(file: File, path: string, addedAt: number): Promise<
 
 export type PhotoImportResult = { added: number; failed: number; duplicates: number; unsupported: number; storageFailed: boolean };
 
-export async function importPhotos(entries: Array<{ file: File; path: string }>, onProgress?: (done: number, total: number) => void): Promise<PhotoImportResult> {
+export async function importPhotos(
+  entries: Array<{ file: File; path: string }>,
+  onProgress?: (done: number, total: number) => void,
+  shouldContinue: () => boolean = () => true,
+): Promise<PhotoImportResult> {
   await new Promise<void>((resolve) => {
     if (state.loaded) return resolve();
     ensurePhotosLoaded();
@@ -271,6 +275,7 @@ export async function importPhotos(entries: Array<{ file: File; path: string }>,
   const addedAt = Date.now();
   const batchSize = 12;
   for (let start = 0; start < fresh.length; start += batchSize) {
+    if (!shouldContinue()) return result;
     const slice = fresh.slice(start, start + batchSize);
     const items: StoredPhoto[] = [];
     // Decode a few at a time: full-size photos are large in memory once decoded.
@@ -282,7 +287,8 @@ export async function importPhotos(entries: Array<{ file: File; path: string }>,
         else result.failed++;
       });
     }
-    const saved = await savePhotos(items).catch(() => { result.storageFailed = true; return []; });
+    if (!shouldContinue()) return result;
+    const saved = await savePhotos(items, shouldContinue).catch(() => { result.storageFailed = true; return []; });
     result.added += saved.length;
     if (saved.length) emit({ photos: [...state.photos, ...saved.map(toPhoto)] });
     onProgress?.(Math.min(start + slice.length, fresh.length), fresh.length);
