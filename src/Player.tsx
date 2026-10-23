@@ -1844,7 +1844,7 @@ export function Player() {
           <input ref={fileInput} hidden type="file" multiple
             accept="audio/*,video/*,text/*,image/*,.heic,.heif,.flac,.aac,.ogg,.oga,.opus,.weba,.aiff,.aif,.alac,.wma,.mka,.mp2,.mpa,.ac3,.eac3,.dts,.amr,.ape,.tak,.tta,.mpc,.wv,.shn,.caf,.au,.snd,.ra,.rm,.rma,.mp4,.webm,.ogv,.mov,.m4v,.mkv,.avi,.3gp,.3g2,.ts,.m2ts,.mts,.m2v,.mpg,.mpeg,.mpeg2,.vob,.wmv,.asf,.flv,.f4v,.rmvb,.rm,.dv,.tod,.mod,.vro,.nut,.ogm,.mxf,.divx,.cbz,.cbr,.pdf,.epub,.txt,.md,.markdown,.log,.nfo,.csv,.tsv,.json,.xml,.yaml,.yml,.toml,.ini,.cfg,.conf,.srt,.vtt,.ass,.ssa,.sub,.html,.htm,.rtf,.docx,.odt,application/pdf,application/epub+zip,application/rtf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.oasis.opendocument.text"
             onChange={(e) => { onPickFiles(e.target.files); e.currentTarget.value = ""; }} />
-          <input ref={folderInput} hidden type="file" multiple onChange={(e) => { onPickFiles(e.target.files); e.currentTarget.value = ""; }} onCancel={() => setImporting(null)} {...({ webkitdirectory: "" } as InputHTMLAttributes<HTMLInputElement>)} />
+          <input ref={folderInput} hidden type="file" multiple onChange={(e) => { onPickFiles(e.target.files); e.currentTarget.value = ""; }} {...({ webkitdirectory: "" } as InputHTMLAttributes<HTMLInputElement>)} />
         </div>
       </ProgressContext.Provider>
     </PlayerContext.Provider>
