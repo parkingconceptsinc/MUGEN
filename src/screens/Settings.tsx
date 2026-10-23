@@ -117,9 +117,6 @@ export function Settings({ theme, onThemeChange }: { theme: "dark" | "light"; on
         <Row label="Version" hint="Installed MUGEN PWA build">
           <span className="badge">v{APP_VERSION}</span>
         </Row>
-        <Row label="Version" hint="Installed MUGEN PWA build">
-          <span className="badge">v{APP_VERSION}</span>
-        </Row>
         {p.canInstall && <button className="btn primary wide" onClick={actions.install}><Download size={17} /> Install app</button>}
         <details className="shortcuts">
           <summary><Keyboard size={17} /> Keyboard shortcuts</summary>
