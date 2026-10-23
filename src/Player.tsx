@@ -455,13 +455,21 @@ export function Player() {
     setOriginalQueue(null);
   }
 
-  async function performImportEntries(entries: Incoming[], label?: string, quiet = false, expectedGeneration = importGenerationRef.current): Promise<boolean> {
+  async function performImportEntries(
+    entries: Incoming[],
+    label?: string,
+    quiet = false,
+    expectedGeneration = importGenerationRef.current,
+    sharedSeen?: Set<string>,
+  ): Promise<boolean> {
     let operationOk = true;
     const importGeneration = expectedGeneration;
     const isImportCurrent = () => importGenerationRef.current === importGeneration;
     if (!isImportCurrent()) { setImporting(null); return false; }
-    // Read current library refs when a queued import starts, not the render that queued it.
-    const seen = new Set([...tracksLiveRef.current, ...comicsLiveRef.current].map((t) => trackKey(t.path, t.size, t.lastModified)));
+    // Folder imports share one identity set across all streamed batches. Rebuilding
+    // this from the full live library for every 100 files made large imports
+    // increasingly expensive on phones/tablets.
+    const seen = sharedSeen ?? new Set([...tracksLiveRef.current, ...comicsLiveRef.current].map((t) => trackKey(t.path, t.size, t.lastModified)));
     const isNew = ({ file, path }: Incoming) => {
       const key = trackKey(path, file.size, file.lastModified);
       if (seen.has(key)) return false;
@@ -607,7 +615,7 @@ export function Player() {
     if (!quiet || !operationOk) toast(`${what}${failureNote}${storageNote}${photoNote ? ` · ${photoNote}` : ""}`);
     return operationOk;
   }
-  function importEntries(entries: Incoming[], label?: string, quiet = false): Promise<boolean> {
+  function importEntries(entries: Incoming[], label?: string, quiet = false, sharedSeen?: Set<string>): Promise<boolean> {
     // Capture at enqueue time so a queued job cannot resurrect a removed item.
     const requestedGeneration = importGenerationRef.current;
     const result = mediaImportQueue
@@ -617,7 +625,7 @@ export function Player() {
         // Parsing concurrently with IndexedDB writes can saturate mobile CPUs and memory.
         mediaImportActive = true;
         try {
-          return await performImportEntries(entries, label, quiet, requestedGeneration);
+          return await performImportEntries(entries, label, quiet, requestedGeneration, sharedSeen);
         } finally {
           mediaImportActive = false;
           startMetadataPump();
@@ -648,6 +656,9 @@ export function Player() {
       const directory = await pickerHost.showDirectoryPicker({ mode: "read" });
       const scanGeneration = importGenerationRef.current;
       const scanIsCurrent = () => importGenerationRef.current === scanGeneration;
+      // Seed once per folder scan, then share the set with every batch so import
+      // cost scales with new files rather than (existing library × batch count).
+      const folderSeen = new Set([...tracksLiveRef.current, ...comicsLiveRef.current].map((item) => trackKey(item.path, item.size, item.lastModified)));
       // Stream files to storage as the tree is walked instead of waiting for a
       // complete scan. This makes the first batch save quickly on large libraries.
       const batch: Array<{ file: () => Promise<File>; path: string }> = [];
@@ -669,7 +680,7 @@ export function Player() {
           else failedFiles++;
         }
         if (!scanIsCurrent()) return;
-        if (incoming.length && !(await importEntries(incoming, directory.name, true))) failedFiles += incoming.length;
+        if (incoming.length && !(await importEntries(incoming, directory.name, true, folderSeen))) failedFiles += incoming.length;
         if (!scanIsCurrent()) return;
         setImporting({ done: visitedEntries, total: 0, label: `Scanning and saving · ${supportedFound} supported files found` });
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
