@@ -142,6 +142,7 @@ async function saveUniqueItems<T extends { id: string; path: string; size: numbe
   storeName: string,
   items: T[],
   keyOf: (item: T) => string,
+  shouldSave: () => boolean = () => true,
 ): Promise<T[]> {
   if (!items.length) return [];
   const db = await openDB();
@@ -158,7 +159,9 @@ async function saveUniqueItems<T extends { id: string; path: string; size: numbe
         seen.add(identity);
         const lookup = identityIndex.getKey([item.path, item.size, item.lastModified]);
         lookup.onsuccess = () => {
-          if (lookup.result !== undefined) return;
+          // Check inside the IndexedDB request callback, immediately before the
+          // write, so a cancelled import cannot repopulate a just-cleared store.
+          if (!shouldSave() || lookup.result !== undefined) return;
           store.put(item);
           unique.push(item);
         };
@@ -266,9 +269,9 @@ export async function loadComicLocations(id: string): Promise<string | undefined
   return item?.locations;
 }
 
-export async function savePhotos(items: StoredPhoto[]): Promise<StoredPhoto[]> {
-  if (!items.length) return [];
-  return await saveUniqueItems(PHOTOS, items, (item) => JSON.stringify([item.path, item.size, item.lastModified]));
+export async function savePhotos(items: StoredPhoto[], shouldSave: () => boolean = () => true): Promise<StoredPhoto[]> {
+  if (!items.length || !shouldSave()) return [];
+  return await saveUniqueItems(PHOTOS, items, (item) => JSON.stringify([item.path, item.size, item.lastModified]), shouldSave);
 }
 
 export async function loadPhotos(): Promise<StoredPhoto[]> {
