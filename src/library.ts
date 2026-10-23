@@ -75,7 +75,7 @@ const DB_NAME = "mortimer-player";
 const STORE = "library";
 const COMICS = "comics";
 const PHOTOS = "photos";
-const VERSION = 4;
+const VERSION = 5;
 const IDENTITY_INDEX = "identity";
 
 function openDB(): Promise<IDBDatabase> {
@@ -92,9 +92,9 @@ function openDB(): Promise<IDBDatabase> {
       // without rewriting existing records/large video Blobs during migration.
       for (const name of [STORE, COMICS, PHOTOS]) {
         const store = tx.objectStore(name);
-        if (!store.indexNames.contains(IDENTITY_INDEX)) {
-          store.createIndex(IDENTITY_INDEX, ["path", "size", "lastModified"], { unique: false });
-        }
+        // Replace any earlier experimental identity index with the compound key.
+        if (store.indexNames.contains(IDENTITY_INDEX)) store.deleteIndex(IDENTITY_INDEX);
+        store.createIndex(IDENTITY_INDEX, ["path", "size", "lastModified"], { unique: false });
       }
     };
     request.onsuccess = () => {
@@ -174,28 +174,6 @@ async function saveUniqueItems<T extends { id: string; path: string; size: numbe
 }
 
 
-// Fast path for imports that have already been de-duplicated in the active library state.
-// Avoid getAll() on every batch: for a large collection that turns repeated imports
-// into an O(existing library × batch count) scan and creates avoidable UI stalls.
-async function putItemsFast<T extends { id: string }>(storeName: string, items: T[]): Promise<T[]> {
-  if (!items.length) return [];
-  const db = await openDB();
-  try {
-    return await new Promise<T[]>((resolve, reject) => {
-      const tx = db.transaction(storeName, "readwrite");
-      const store = tx.objectStore(storeName);
-      for (const item of items) store.put(item);
-      tx.oncomplete = () => resolve(items);
-      tx.onerror = () => reject(tx.error ?? new Error("Library write failed"));
-      tx.onabort = () => reject(tx.error ?? new Error("Library write aborted"));
-    });
-  } finally {
-    db.close();
-  }
-}
-
-// Import batches can overlap React state updates. Enforce uniqueness inside the
-// IndexedDB transaction so repeated batches/selections cannot create duplicate rows.
 export async function saveLibraryFast(items: StoredLibraryItem[]): Promise<StoredLibraryItem[]> {
   if (!items.length) return [];
   return saveUniqueItems(STORE, items, (item) => JSON.stringify([item.path, item.size, item.lastModified]));
