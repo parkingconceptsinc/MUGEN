@@ -455,10 +455,11 @@ export function Player() {
     setOriginalQueue(null);
   }
 
-  async function performImportEntries(entries: Incoming[], label?: string, quiet = false): Promise<boolean> {
+  async function performImportEntries(entries: Incoming[], label?: string, quiet = false, expectedGeneration = importGenerationRef.current): Promise<boolean> {
     let operationOk = true;
-    const importGeneration = importGenerationRef.current;
+    const importGeneration = expectedGeneration;
     const isImportCurrent = () => importGenerationRef.current === importGeneration;
+    if (!isImportCurrent()) return false;
     // Read current library refs when a queued import starts, not the render that queued it.
     const seen = new Set([...tracksLiveRef.current, ...comicsLiveRef.current].map((t) => trackKey(t.path, t.size, t.lastModified)));
     const isNew = ({ file, path }: Incoming) => {
@@ -471,7 +472,11 @@ export function Player() {
     let photoNote = "";
     if (photoEntries.length) {
       setImporting({ done: 0, total: photoEntries.length, label: "Adding photos" });
-      const photoResult = await importPhotos(photoEntries, (done, total) => setImporting({ done, total, label: "Adding photos" }));
+      const photoResult = await importPhotos(
+        photoEntries,
+        (done, total) => setImporting({ done, total, label: "Adding photos" }),
+        isImportCurrent,
+      );
       if (photoResult.failed || photoResult.unsupported || photoResult.storageFailed) operationOk = false;
       if (!isImportCurrent()) return false;
       setImporting(null);
@@ -603,6 +608,8 @@ export function Player() {
     return operationOk;
   }
   function importEntries(entries: Incoming[], label?: string, quiet = false): Promise<boolean> {
+    // Capture at enqueue time so a queued job cannot resurrect a removed item.
+    const requestedGeneration = importGenerationRef.current;
     const result = mediaImportQueue
       .catch(() => {})
       .then(async () => {
@@ -610,7 +617,7 @@ export function Player() {
         // Parsing concurrently with IndexedDB writes can saturate mobile CPUs and memory.
         mediaImportActive = true;
         try {
-          return await performImportEntries(entries, label, quiet);
+          return await performImportEntries(entries, label, quiet, requestedGeneration);
         } finally {
           mediaImportActive = false;
           startMetadataPump();
@@ -639,6 +646,8 @@ export function Player() {
     }
     try {
       const directory = await pickerHost.showDirectoryPicker({ mode: "read" });
+      const scanGeneration = importGenerationRef.current;
+      const scanIsCurrent = () => importGenerationRef.current === scanGeneration;
       // Stream files to storage as the tree is walked instead of waiting for a
       // complete scan. This makes the first batch save quickly on large libraries.
       const batch: Array<{ file: () => Promise<File>; path: string }> = [];
@@ -647,6 +656,10 @@ export function Player() {
       let failedFiles = 0;
       let supportedFound = 0;
       const flush = async () => {
+        if (!scanIsCurrent()) {
+          batch.splice(0, batch.length);
+          return;
+        }
         if (!batch.length) return;
         const current = batch.splice(0, batch.length);
         const results = await Promise.allSettled(current.map(async ({ file, path }) => ({ file: await file(), path })));
@@ -655,12 +668,15 @@ export function Player() {
           if (result.status === "fulfilled") incoming.push(result.value);
           else failedFiles++;
         }
+        if (!scanIsCurrent()) return;
         if (incoming.length && !(await importEntries(incoming, directory.name, true))) failedFiles += incoming.length;
+        if (!scanIsCurrent()) return;
         setImporting({ done: visitedEntries, total: 0, label: `Scanning and saving · ${supportedFound} supported files found` });
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       };
       const walk = async (dir: DirectoryHandleLike, prefix: string): Promise<void> => {
         for await (const entry of dir.values()) {
+          if (!scanIsCurrent()) return;
           const path = `${prefix}/${entry.name}`;
           if (entry.kind === "file") {
             if ((supported(entry.name) || isComicFile(entry.name) || isPhotoFile(entry.name)) && entry.getFile) {
@@ -680,7 +696,17 @@ export function Player() {
       };
       setImporting({ done: 0, total: 0, label: "Scanning folder and saving files…" });
       await walk(directory, directory.name);
+      if (!scanIsCurrent()) {
+        setImporting(null);
+        toast("Folder scan stopped because the library changed. Start the scan again to continue.");
+        return;
+      }
       await flush();
+      if (!scanIsCurrent()) {
+        setImporting(null);
+        toast("Folder scan stopped because the library changed. Start the scan again to continue.");
+        return;
+      }
       setImporting(null);
       if (failedFiles) toast(`Folder import finished with ${failedFiles} file/batch errors. Check storage and retry affected files.`);
       else if (!supportedFound) toast("No supported music, video, comic or photo files were found");
@@ -711,6 +737,9 @@ export function Player() {
   }
 
   function removeFromLibrary(ids: string[]) {
+    if (!ids.length) return;
+    // Stop active and queued imports before deletion so late batches cannot restore the item.
+    importGenerationRef.current++;
     const gone = new Set(ids);
     const currentId = queue[qIndex];
     const nextQueue = queue.filter((id) => !gone.has(id));
@@ -1091,6 +1120,9 @@ export function Player() {
       toast(shelf === "books" ? "Moved to Books" : "Moved to Comics");
     },
     removeComics(ids) {
+      if (!ids.length) return;
+      // Stop active and queued imports before deletion so late batches cannot restore the item.
+      importGenerationRef.current++;
       const gone = new Set(ids);
       setComics((old) => {
         for (const c of old) if (gone.has(c.id) && c.cover) URL.revokeObjectURL(c.cover);
@@ -1329,11 +1361,17 @@ export function Player() {
             merged.artist !== keep.artist || merged.album !== keep.album || merged.albumArtist !== keep.albumArtist ||
             merged.genre !== keep.genre || merged.year !== keep.year || merged.trackNo !== keep.trackNo || merged.duration !== keep.duration) repaired.push(merged);
       }
-      if (duplicateIds.length) void deleteTracks(duplicateIds).catch(() => {});
-      if (repaired.length) void Promise.all(repaired.map((item) => {
-        const { id, file: _file, ...patch } = item;
-        return patchTrack(id, patch).catch(() => {});
-      }));
+      try {
+        await Promise.all([
+          ...(duplicateIds.length ? [deleteTracks(duplicateIds)] : []),
+          ...repaired.map((item) => {
+            const { id, file: _file, ...patch } = item;
+            return patchTrack(id, patch);
+          }),
+        ]);
+      } catch {
+        toast("Some duplicate music records could not be cleaned up. Close other MUGEN tabs and reopen the app to retry.");
+      }
       const restored = [...uniqueStored.values()].flatMap((item) => {
         try {
           return [toTrack(item)];
@@ -1386,11 +1424,17 @@ export function Player() {
         if (merged.cover !== keep.cover || merged.title !== keep.title || merged.author !== keep.author ||
             merged.pages !== keep.pages || merged.shelf !== keep.shelf || merged.locations !== keep.locations) repaired.push(merged);
       }
-      if (duplicateIds.length) void deleteComics(duplicateIds).catch(() => {});
-      if (repaired.length) void Promise.all(repaired.map((item) => {
-        const { id, file: _file, ...patch } = item;
-        return patchComic(id, patch).catch(() => {});
-      }));
+      try {
+        await Promise.all([
+          ...(duplicateIds.length ? [deleteComics(duplicateIds)] : []),
+          ...repaired.map((item) => {
+            const { id, file: _file, ...patch } = item;
+            return patchComic(id, patch);
+          }),
+        ]);
+      } catch {
+        toast("Some duplicate book/comic records could not be cleaned up. Close other MUGEN tabs and reopen the app to retry.");
+      }
       if (!cancelled) {
         const restoredBooks = [...uniqueStored.values()].flatMap((item) => {
           try {
