@@ -498,7 +498,7 @@ export function Player() {
     setImporting({ done: 0, total: totalToAdd, label: "Adding" });
 
     if (freshComics.length) {
-      const comicBatchSize = 10;
+      const comicBatchSize = 100;
       for (let start = 0; start < freshComics.length; start += comicBatchSize) {
         if (!isImportCurrent()) return false;
         const end = Math.min(start + comicBatchSize, freshComics.length);
@@ -561,7 +561,7 @@ export function Player() {
     // large libraries feel unnecessarily slow, especially when importing folders.
     let importedMedia = 0;
     let importFailures = 0;
-    const importBatchSize = 10;
+    const importBatchSize = 100;
     for (let start = 0; start < fresh.length; start += importBatchSize) {
       if (!isImportCurrent()) return false;
       const end = Math.min(start + importBatchSize, fresh.length);
@@ -642,7 +642,7 @@ export function Player() {
       // Stream files to storage as the tree is walked instead of waiting for a
       // complete scan. This makes the first batch save quickly on large libraries.
       const batch: Array<{ file: () => Promise<File>; path: string }> = [];
-      const batchSize = 10;
+      const batchSize = 100;
       let visitedEntries = 0;
       let failedFiles = 0;
       let supportedFound = 0;
@@ -696,35 +696,17 @@ export function Player() {
       setImporting(null);
       return;
     }
-    // Snapshot File references synchronously before the input is cleared by onChange.
-    // Keep expensive filtering and saving incremental so large Android selections stay responsive.
+    // Snapshot File references before clearing the input, then submit the selection
+    // as ONE import operation. Re-queuing every 10 files rescanned the full live
+    // library each time, causing quadratic work and the appearance of a 10-file cap.
     const files = Array.from(list);
-    const batchSize = 10;
-    const total = files.length;
-    let supportedCount = 0;
-    let failedBatches = 0;
-    const run = async () => {
-      setImporting({ done: 0, total, label: "Preparing selected files" });
-      for (let start = 0; start < total; start += batchSize) {
-        const end = Math.min(start + batchSize, total);
-        const entries: Incoming[] = [];
-        for (let i = start; i < end; i++) {
-          const file = files[i];
-          if (supported(file.name) || isComicFile(file.name) || isPhotoFile(file.name)) supportedCount++;
-          entries.push({ file, path: file.webkitRelativePath || file.name });
-        }
-        if (!(await importEntries(entries, undefined, true))) failedBatches++;
-        setImporting({ done: end, total, label: `Saving files · ${end} of ${total}` });
-        await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
-      }
+    const entries: Incoming[] = files.map((file) => ({
+      file,
+      path: file.webkitRelativePath || file.name,
+    }));
+    void importEntries(entries).catch((error) => {
       setImporting(null);
-      if (failedBatches) toast(`Import finished with errors in ${failedBatches} batch${failedBatches === 1 ? "" : "es"}. Check storage and retry those files.`);
-      else if (!supportedCount) toast("No supported music, video, comic or photo files were found");
-      else toast(`Finished processing and saving ${supportedCount} supported files`);
-    };
-    void run().catch((error) => {
-      setImporting(null);
-      toast((error as Error)?.message || "Import stopped unexpectedly. Check storage and retry.");
+      toast((error as Error)?.message || "Import stopped unexpectedly. Check the files and available storage.");
     });
   }
 
