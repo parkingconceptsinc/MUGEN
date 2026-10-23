@@ -459,7 +459,7 @@ export function Player() {
     let operationOk = true;
     const importGeneration = expectedGeneration;
     const isImportCurrent = () => importGenerationRef.current === importGeneration;
-    if (!isImportCurrent()) return false;
+    if (!isImportCurrent()) { setImporting(null); return false; }
     // Read current library refs when a queued import starts, not the render that queued it.
     const seen = new Set([...tracksLiveRef.current, ...comicsLiveRef.current].map((t) => trackKey(t.path, t.size, t.lastModified)));
     const isNew = ({ file, path }: Incoming) => {
@@ -478,7 +478,7 @@ export function Player() {
         isImportCurrent,
       );
       if (photoResult.failed || photoResult.unsupported || photoResult.storageFailed) operationOk = false;
-      if (!isImportCurrent()) return false;
+      if (!isImportCurrent()) { setImporting(null); return false; }
       setImporting(null);
       photoNote = describeImport(photoResult);
       entries = entries.filter((e) => !isPhotoFile(e.file.name));
@@ -505,7 +505,7 @@ export function Player() {
     if (freshComics.length) {
       const comicBatchSize = 100;
       for (let start = 0; start < freshComics.length; start += comicBatchSize) {
-        if (!isImportCurrent()) return false;
+        if (!isImportCurrent()) { setImporting(null); return false; }
         const end = Math.min(start + comicBatchSize, freshComics.length);
         const items: StoredComic[] = freshComics.slice(start, end).map(({ file, path }, offset) => ({
           id: crypto.randomUUID(), name: file.name, path, size: file.size, lastModified: file.lastModified,
@@ -530,7 +530,7 @@ export function Player() {
       const items = batch;
       batch = [];
       if (!items.length) return;
-      if (!isImportCurrent()) return false;
+      if (!isImportCurrent()) { setImporting(null); return false; }
       let savedItems: StoredLibraryItem[] = [];
       if (libraryStorageOk) {
         try { savedItems = await saveLibraryFast(items); } catch { libraryStorageOk = false; operationOk = false; }
@@ -568,7 +568,7 @@ export function Player() {
     let importFailures = 0;
     const importBatchSize = 100;
     for (let start = 0; start < fresh.length; start += importBatchSize) {
-      if (!isImportCurrent()) return false;
+      if (!isImportCurrent()) { setImporting(null); return false; }
       const end = Math.min(start + importBatchSize, fresh.length);
       const results = await Promise.allSettled(
         fresh.slice(start, end).map((entry, offset) => readItem(entry, addedAt + start + offset)),
@@ -583,10 +583,10 @@ export function Player() {
       processed += results.length;
       setImporting({ done: processed, total: totalToAdd, label: "Adding" });
       await flush();
-      if (!isImportCurrent()) return false;
+      if (!isImportCurrent()) { setImporting(null); return false; }
     }
     await flush();
-    if (!isImportCurrent()) return false;
+    if (!isImportCurrent()) { setImporting(null); return false; }
     setImporting(null);
     const parts = [
       importedMedia ? `${importedMedia} song${importedMedia === 1 ? "" : "s"}/video${importedMedia === 1 ? "" : "s"}` : "",
