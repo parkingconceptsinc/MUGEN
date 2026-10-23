@@ -696,9 +696,9 @@ export function Player() {
       setImporting(null);
       return;
     }
-    // Avoid materializing and filtering the entire FileList synchronously.
-    // On mobile, large folder selections can otherwise freeze before the first save.
-    const files = list;
+    // Snapshot File references synchronously before the input is cleared by onChange.
+    // Keep expensive filtering and saving incremental so large Android selections stay responsive.
+    const files = Array.from(list);
     const batchSize = 10;
     const total = files.length;
     let supportedCount = 0;
