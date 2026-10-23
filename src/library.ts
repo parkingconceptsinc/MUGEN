@@ -75,7 +75,12 @@ const DB_NAME = "mortimer-player";
 const STORE = "library";
 const COMICS = "comics";
 const PHOTOS = "photos";
-const VERSION = 3;
+const VERSION = 4;
+const IDENTITY_INDEX = "identity";
+
+function identityOf(item: { path: string; size: number; lastModified: number }): string {
+  return `${item.path}|${item.size}|${item.lastModified}`;
+}
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -83,9 +88,29 @@ function openDB(): Promise<IDBDatabase> {
     let settled = false;
     request.onupgradeneeded = () => {
       const db = request.result;
+      const tx = request.transaction!;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "id" });
       if (!db.objectStoreNames.contains(COMICS)) db.createObjectStore(COMICS, { keyPath: "id" });
       if (!db.objectStoreNames.contains(PHOTOS)) db.createObjectStore(PHOTOS, { keyPath: "id" });
+      // IndexedDB previously scanned and cloned every stored Blob on each batch.
+      // Build a lightweight identity index once, migrating existing records in place.
+      for (const name of [STORE, COMICS, PHOTOS]) {
+        const store = tx.objectStore(name);
+        if (!store.indexNames.contains(IDENTITY_INDEX)) {
+          store.createIndex(IDENTITY_INDEX, IDENTITY_INDEX, { unique: false });
+        }
+        const cursorRequest = store.openCursor();
+        cursorRequest.onsuccess = () => {
+          const cursor = cursorRequest.result;
+          if (!cursor) return;
+          const value = cursor.value as { path?: string; size?: number; lastModified?: number; identity?: string };
+          if (value.path != null && value.size != null && value.lastModified != null && !value.identity) {
+            value.identity = identityOf({ path: value.path, size: value.size, lastModified: value.lastModified });
+            cursor.update(value);
+          }
+          cursor.continue();
+        };
+      }
     };
     request.onsuccess = () => {
       const db = request.result;
@@ -133,27 +158,31 @@ async function saveUniqueItems<T extends { id: string; path: string; size: numbe
   items: T[],
   keyOf: (item: T) => string,
 ): Promise<T[]> {
+  if (!items.length) return [];
   const db = await openDB();
   try {
     return await new Promise<T[]>((resolve, reject) => {
       const tx = db.transaction(storeName, "readwrite");
       const store = tx.objectStore(storeName);
-      const get = store.getAll();
-      get.onerror = () => reject(get.error);
-      get.onsuccess = () => {
-        const existing = new Set((get.result as T[]).map(keyOf));
-        const unique: T[] = [];
-        const seen = new Set(existing);
-        for (const item of items) {
-          const key = keyOf(item);
-          if (seen.has(key)) continue;
-          seen.add(key);
+      const identityIndex = store.index(IDENTITY_INDEX);
+      const unique: T[] = [];
+      const seen = new Set<string>();
+      for (const item of items) {
+        const identity = keyOf(item);
+        if (seen.has(identity)) continue;
+        seen.add(identity);
+        const lookup = identityIndex.getKey(identity);
+        lookup.onsuccess = () => {
+          if (lookup.result !== undefined) return;
+          // Persist the indexed identity alongside the item. Future batch imports
+          // query this index instead of cloning every media Blob with getAll().
+          store.put({ ...item, identity });
           unique.push(item);
-          store.put(item);
-        }
-        tx.oncomplete = () => resolve(unique);
-      };
-      tx.onerror = () => reject(tx.error);
+        };
+        lookup.onerror = () => { try { tx.abort(); } catch {} };
+      }
+      tx.oncomplete = () => resolve(unique);
+      tx.onerror = () => reject(tx.error ?? new Error("Library transaction failed"));
       tx.onabort = () => reject(tx.error ?? new Error("Library transaction aborted"));
     });
   } finally {
