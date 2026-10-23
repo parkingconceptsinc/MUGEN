@@ -182,12 +182,16 @@ async function putItemsFast<T extends { id: string }>(storeName: string, items: 
   }
 }
 
+// Import batches can overlap React state updates. Enforce uniqueness inside the
+// IndexedDB transaction so repeated batches/selections cannot create duplicate rows.
 export async function saveLibraryFast(items: StoredLibraryItem[]): Promise<StoredLibraryItem[]> {
-  return putItemsFast(STORE, items);
+  if (!items.length) return [];
+  return saveUniqueItems(STORE, items, (item) => `${item.path}|${item.size}|${item.lastModified}`);
 }
 
 export async function saveComicsFast(items: StoredComic[]): Promise<StoredComic[]> {
-  return putItemsFast(COMICS, items);
+  if (!items.length) return [];
+  return saveUniqueItems(COMICS, items, (item) => `${item.path}|${item.size}|${item.lastModified}`);
 }
 
 export async function saveLibrary(items: StoredLibraryItem[]): Promise<StoredLibraryItem[]> {
