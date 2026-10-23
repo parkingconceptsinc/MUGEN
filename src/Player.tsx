@@ -1328,7 +1328,7 @@ export function Player() {
 
   useEffect(() => {
     let cancelled = false;
-    const restoreMusic = loadLibrary().then((stored) => {
+    const restoreMusic = loadLibrary().then(async (stored) => {
       if (cancelled) return;
       const uniqueStored = new Map<string, StoredLibraryItem>();
       const duplicateIds: string[] = [];
@@ -1397,7 +1397,7 @@ export function Player() {
     }).catch(() => {
       if (!cancelled) toast("Local music storage is unavailable in this browser");
     });
-    const restoreBooks = loadComics().then((stored) => {
+    const restoreBooks = loadComics().then(async (stored) => {
       const uniqueStored = new Map<string, StoredComic>();
       const duplicateIds: string[] = [];
       const repaired: StoredComic[] = [];
