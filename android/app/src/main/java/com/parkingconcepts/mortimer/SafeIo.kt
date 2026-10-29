@@ -68,8 +68,8 @@ internal fun imageSampleSize(width: Int, height: Int, maxW: Int, maxH: Int): Int
     if (width <= 0 || height <= 0) return 1
     var sample = 1
     while (sample < (1 shl 30)) {
-        val w = width.toLong() / sample
-        val h = height.toLong() / sample
+        val w = (width.toLong() + sample - 1) / sample
+        val h = (height.toLong() + sample - 1) / sample
         val tooLarge = w * h > MAX_BITMAP_PIXELS || maxOf(w, h) > 8192
         val canSample = w / 2 >= maxW.coerceAtLeast(1) && h / 2 >= maxH.coerceAtLeast(1)
         if (!tooLarge && !canSample) break

@@ -49,6 +49,14 @@ class LibraryStoreTest {
         assertEquals(expected, LibraryStore.load(context))
     }
 
+    @Test fun interruptedLegacyAtomicWriteRecoversPreviousFile() {
+        val expected = LibraryStore.add(context, listOf(item("one")))
+        file("library.json.bak").writeText(file("library.json").readText())
+        file("library.json").writeText("interrupted-write")
+        file("library.backup.json").delete()
+        assertEquals(expected, LibraryStore.load(context))
+    }
+
     @Test fun malformedRecordDoesNotSilentlyDiscardPartOfLibrary() {
         val expected = LibraryStore.add(context, listOf(item("one"), item("two")))
         file("library.json").writeText("[${item("one").toJson()},{}]")

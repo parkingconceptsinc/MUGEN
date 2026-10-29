@@ -57,10 +57,12 @@ class SafeIoTest {
     }
 
     @Test fun extremeImageDimensionsRemainInsidePixelAndTextureLimits() {
-        listOf(100_000 to 100_000, 100_000 to 10, Int.MAX_VALUE to Int.MAX_VALUE).forEach { (w, h) ->
+        listOf(4097 to 4097, 100_000 to 100_000, 100_000 to 10, Int.MAX_VALUE to Int.MAX_VALUE).forEach { (w, h) ->
             val sample = imageSampleSize(w, h, 1080, 1920)
-            assertTrue(w.toLong() / sample * (h.toLong() / sample) <= MAX_BITMAP_PIXELS)
-            assertTrue(maxOf(w.toLong() / sample, h.toLong() / sample) <= 8192)
+            val decodedW = (w.toLong() + sample - 1) / sample
+            val decodedH = (h.toLong() + sample - 1) / sample
+            assertTrue(decodedW * decodedH <= MAX_BITMAP_PIXELS)
+            assertTrue(maxOf(decodedW, decodedH) <= 8192)
         }
     }
 

@@ -228,7 +228,7 @@ private inline fun forEachArchiveEntry(context: Context, uri: Uri, visit: (archi
 private fun isPageName(name: String) =
     extensionOf(name) in IMAGE_EXTENSIONS && !name.substringAfterLast('/').startsWith(".") && !name.startsWith("__MACOSX")
 
-private fun writeEntry(archive: Long, target: File, checkCancelled: () -> Unit = {}): Long {
+private fun writeEntry(archive: Long, target: File, checkCancelled: () -> Unit = {}, limit: Long = MAX_IMAGE_BYTES.toLong()): Long {
     var written = 0L
     val buffer = ByteBuffer.allocateDirect(64 * 1024)
     val bytes = ByteArray(buffer.capacity())
@@ -240,7 +240,7 @@ private fun writeEntry(archive: Long, target: File, checkCancelled: () -> Unit =
             buffer.flip()
             val size = buffer.remaining()
             if (size == 0) break
-            check(written + size <= MAX_IMAGE_BYTES) { "Una página del archivo es demasiado grande." }
+            check(written + size <= limit) { "La página o el archivo necesita demasiado espacio de caché." }
             buffer.get(bytes, 0, size)
             out.write(bytes, 0, size)
             written += size
@@ -258,8 +258,7 @@ private fun extractArchiveImages(context: Context, uri: Uri, dir: File, checkCan
         if (isFile && isPageName(name)) {
             check(out.size < 10_000) { "El archivo contiene demasiadas páginas." }
             val target = File(dir, "%05d.%s".format(out.size, extensionOf(name)))
-            totalBytes += writeEntry(archive, target, checkCancelled)
-            check(totalBytes <= MAX_CACHE_BYTES) { "El archivo necesita demasiado espacio de caché." }
+            totalBytes += writeEntry(archive, target, checkCancelled, minOf(MAX_IMAGE_BYTES.toLong(), MAX_CACHE_BYTES - totalBytes))
             out.add(name to target)
             onProgress(out.size)
         }
