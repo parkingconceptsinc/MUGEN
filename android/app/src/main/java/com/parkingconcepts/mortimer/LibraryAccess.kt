@@ -32,7 +32,7 @@ internal fun hasLibraryUriAccess(context: Context, uri: Uri): Boolean =
     context.checkUriPermission(uri, Process.myPid(), Process.myUid(), Intent.FLAG_GRANT_READ_URI_PERMISSION) == PackageManager.PERMISSION_GRANTED
 
 internal fun missingLibraryFolders(context: Context, uris: List<Uri>): List<LibraryFolderAccess> = uris
-    .mapNotNull(::libraryFolderFor).distinctBy { it.tree.toString() }.filterNot { hasLibraryUriAccess(context, it.sample) }
+    .mapNotNull(::libraryFolderFor).filterNot { hasLibraryUriAccess(context, it.sample) }.distinctBy { it.tree.toString() }
 
 internal fun reconnectLibraryFolder(context: Context, expected: LibraryFolderAccess, selected: Uri) {
     require(selected.authority == expected.tree.authority &&

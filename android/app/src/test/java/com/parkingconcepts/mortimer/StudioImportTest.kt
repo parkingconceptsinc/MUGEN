@@ -79,6 +79,12 @@ class StudioImportTest {
         assertEquals(videos, missing.first().sample)
         assertNull(libraryFolderFor(Uri.parse("file:///video.mp4")))
         assertNull(libraryFolderFor(uri))
+        val partial = object : ContextWrapper(base) {
+            override fun checkUriPermission(uri: Uri, pid: Int, uid: Int, modeFlags: Int) =
+                if (uri == videos) PackageManager.PERMISSION_GRANTED else PackageManager.PERMISSION_DENIED
+        }
+        // A separately granted first file must not hide inaccessible siblings in its folder.
+        assertEquals(source("videos", "b.mp4"), missingLibraryFolders(partial, listOf(videos, source("videos", "b.mp4"))).single().sample)
         assertThrows(IllegalArgumentException::class.java) {
             reconnectLibraryFolder(denied, missing.first(), Uri.parse("content://studio.import.test/tree/other"))
         }
