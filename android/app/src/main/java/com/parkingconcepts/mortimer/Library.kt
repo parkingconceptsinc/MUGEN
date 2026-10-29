@@ -5,9 +5,13 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
+import android.util.AtomicFile
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.io.IOException
 
 /**
  * One file in the library. The file itself stays where it is (phone, SD or USB);
@@ -92,35 +96,79 @@ object LibraryStore {
     private const val FILE = "library.json"
 
     private fun file(context: Context) = File(context.filesDir, FILE)
+    private fun backup(context: Context) = File(context.filesDir, "library.backup.json")
+
+    private fun exists(file: File) = file.exists() || File(file.path + ".bak").exists()
+
+    private fun decode(bytes: ByteArray): List<LibraryItem> {
+        val arr = JSONArray(bytes.toString(Charsets.UTF_8))
+        return (0 until arr.length()).map { i ->
+            LibraryItem.fromJson(arr.getJSONObject(i)).also {
+                require(it.uri.isNotBlank()) { "Library entry has no file URI." }
+                require(it.progress.isFinite()) { "Library progress is invalid." }
+            }
+        }.distinctBy { it.uri }
+    }
+
+    private fun writeAtomic(file: File, bytes: ByteArray) {
+        val atomic = AtomicFile(file)
+        val output = atomic.startWrite()
+        try {
+            output.write(bytes)
+            atomic.finishWrite(output)
+        } catch (failure: Throwable) {
+            atomic.failWrite(output)
+            throw failure
+        }
+    }
 
     @Synchronized
     fun load(context: Context): List<LibraryItem> {
         val f = file(context)
-        if (!f.exists()) return migrate(context)
-        return runCatching {
-            val arr = JSONArray(f.readText())
-            (0 until arr.length()).mapNotNull { i -> runCatching { LibraryItem.fromJson(arr.getJSONObject(i)) }.getOrNull() }
-        }.getOrDefault(emptyList())
+        val recovery = backup(context)
+        if (!exists(f) && !exists(recovery)) return migrate(context)
+        try {
+            return decode(AtomicFile(f).readFully())
+        } catch (failure: Exception) {
+            val bytes = try {
+                AtomicFile(recovery).readFully().also { decode(it) }
+            } catch (backupFailure: Exception) {
+                throw IOException("Could not read the library or its backup. Your files were kept; no changes were saved.", failure)
+            }
+            // Keep the damaged original for recovery before restoring the last good copy.
+            runCatching {
+                if (f.isFile) f.copyTo(File(context.filesDir, "library.damaged.json"), overwrite = true)
+                writeAtomic(f, bytes)
+            }
+            return decode(bytes)
+        }
     }
 
-    @Synchronized
-    fun save(context: Context, items: List<LibraryItem>) {
+    private fun save(context: Context, items: List<LibraryItem>) {
         val arr = JSONArray()
-        items.forEach { arr.put(it.toJson()) }
-        val f = file(context)
-        val tmp = File(f.parentFile, "$FILE.tmp")
-        tmp.writeText(arr.toString())
-        if (!tmp.renameTo(f)) { f.writeText(arr.toString()); tmp.delete() }
+        items.distinctBy { it.uri }.forEach { arr.put(it.toJson()) }
+        val bytes = arr.toString().toByteArray(Charsets.UTF_8)
+        decode(bytes) // Validate the complete snapshot before touching either file.
+        writeAtomic(file(context), bytes)
+        // The primary has already committed. A full disk must not turn a successful
+        // save into an error just because refreshing the additional backup failed.
+        runCatching { writeAtomic(backup(context), bytes) }
     }
 
     @Synchronized
     fun update(context: Context, transform: (List<LibraryItem>) -> List<LibraryItem>): List<LibraryItem> {
-        val next = transform(load(context))
+        val next = transform(load(context)).distinctBy { it.uri }
         save(context, next)
         return next
     }
 
-    fun find(context: Context, uri: String): LibraryItem? = load(context).firstOrNull { it.uri == uri }
+    fun find(context: Context, uri: String): LibraryItem? =
+        runCatching { load(context).firstOrNull { it.uri == uri } }.getOrNull()
+
+    fun add(context: Context, items: List<LibraryItem>): List<LibraryItem> = update(context) { current ->
+        val known = current.mapTo(HashSet()) { it.uri }
+        current + items.filter { known.add(it.uri) }
+    }
 
     fun saveProgress(context: Context, uri: String, position: String, progress: Float, pages: Int) {
         update(context) { list ->
@@ -136,11 +184,15 @@ object LibraryStore {
         val now = System.currentTimeMillis()
         val items = listOf("audio", "videos", "books", "comics").flatMap { kind ->
             prefs.getStringSet(kind, emptySet()).orEmpty().mapNotNull { row ->
-                val parts = row.split("\t", limit = 2)
-                if (parts.size != 2) null else LibraryItem(uri = parts[0], title = parts[1], kind = kind, format = formatOf(parts[1], kind), addedAt = now)
+                val parts = row.split('\t')
+                if (parts.size < 2 || parts[0].isBlank()) null else LibraryItem(
+                    uri = parts[0], title = parts[1], kind = kind,
+                    format = formatOf(parts[1], kind), addedAt = now,
+                    artist = parts.getOrNull(2).orEmpty(), album = parts.getOrNull(3).orEmpty(),
+                )
             }
         }
-        runCatching { save(context, items) }
+        save(context, items)
         return items
     }
 }
@@ -162,7 +214,8 @@ fun persistReadPermission(context: Context, uri: Uri) {
 }
 
 /** Builds library items for files picked one by one. */
-fun itemsFromUris(context: Context, uris: List<Uri>, kind: String): List<LibraryItem> = uris.map { uri ->
+suspend fun itemsFromUris(context: Context, uris: List<Uri>, kind: String): List<LibraryItem> = uris.distinct().map { uri ->
+    currentCoroutineContext().ensureActive()
     persistReadPermission(context, uri)
     val name = displayName(context, uri, "Archivo")
     LibraryItem(uri = uri.toString(), title = name, kind = kind, format = formatOf(name, kind), size = fileSize(context, uri))
@@ -172,7 +225,7 @@ fun itemsFromUris(context: Context, uris: List<Uri>, kind: String): List<Library
  * Walks a folder picked with OpenDocumentTree (up to a few levels deep) and returns
  * the files that belong on [kind]'s shelf. Sub-folder names become the series/album.
  */
-fun itemsFromTree(context: Context, tree: Uri, kind: String): List<LibraryItem> {
+suspend fun itemsFromTree(context: Context, tree: Uri, kind: String): List<LibraryItem> {
     runCatching { context.contentResolver.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
     val accepted = when (kind) {
         "audio" -> AUDIO_EXTENSIONS
@@ -181,8 +234,12 @@ fun itemsFromTree(context: Context, tree: Uri, kind: String): List<LibraryItem> 
         else -> READABLE_EXTENSIONS
     }
     val out = ArrayList<LibraryItem>()
+    val visited = HashSet<String>()
+    val jobContext = currentCoroutineContext()
     val rootId = DocumentsContract.getTreeDocumentId(tree)
     fun walk(docId: String, folderName: String, depth: Int) {
+        jobContext.ensureActive()
+        if (!visited.add(docId)) return
         val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, docId)
         val cols = arrayOf(
             DocumentsContract.Document.COLUMN_DOCUMENT_ID,
@@ -191,9 +248,11 @@ fun itemsFromTree(context: Context, tree: Uri, kind: String): List<LibraryItem> 
             DocumentsContract.Document.COLUMN_SIZE,
         )
         val dirs = ArrayList<Pair<String, String>>()
-        runCatching {
-            context.contentResolver.query(children, cols, null, null, null)?.use { c ->
+        val cursor = context.contentResolver.query(children, cols, null, null, null)
+            ?: throw IOException("Could not read folder $folderName. Check its access permission.")
+        cursor.use { c ->
                 while (c.moveToNext()) {
+                    jobContext.ensureActive()
                     val id = c.getString(0) ?: continue
                     val name = c.getString(1) ?: continue
                     val mime = c.getString(2) ?: ""
@@ -204,9 +263,9 @@ fun itemsFromTree(context: Context, tree: Uri, kind: String): List<LibraryItem> 
                         out.add(LibraryItem(uri = uri.toString(), title = name, kind = kind, format = formatOf(name, kind), folder = folderName, size = if (c.isNull(3)) 0 else c.getLong(3)))
                     }
                 }
-            }
         }
-        if (depth < 5) dirs.forEach { (id, name) -> walk(id, name, depth + 1) }
+        check(depth < 64 || dirs.isEmpty()) { "The folder nesting is too deep. Import a smaller subfolder." }
+        dirs.forEach { (id, name) -> walk(id, "$folderName/$name", depth + 1) }
     }
     val rootName = rootId.substringAfterLast(':').substringAfterLast('/').ifBlank { "Carpeta" }
     walk(rootId, rootName, 0)

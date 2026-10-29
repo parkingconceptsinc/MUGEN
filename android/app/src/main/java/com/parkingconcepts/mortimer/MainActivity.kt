@@ -73,9 +73,16 @@ import androidx.media3.ui.PlayerView
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 @androidx.media3.common.util.UnstableApi
 class MainActivity : ComponentActivity() {
@@ -279,25 +286,68 @@ private fun MortimerApp(
         if (ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED) audioPermissionLauncher.launch(permission)
     }
 
-    var library by remember { mutableStateOf(LibraryStore.load(context)) }
-    LaunchedEffect(resumeTick) { library = withContext(Dispatchers.IO) { LibraryStore.load(context) } }
+    var library by remember { mutableStateOf(emptyList<LibraryItem>()) }
+    var libraryError by remember { mutableStateOf<String?>(null) }
+    val libraryMutex = remember { Mutex() }
+    LaunchedEffect(resumeTick) {
+        libraryMutex.withLock {
+            try {
+                library = withContext(Dispatchers.IO) { LibraryStore.load(context) }
+                libraryError = null
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) { libraryError = error.message ?: "Could not read the library." }
+        }
+    }
     var importing by remember { mutableStateOf<String?>(null) }
+    var importJob by remember { mutableStateOf<Job?>(null) }
 
-    fun commit(next: List<LibraryItem>) {
-        library = next
-        scope.launch(Dispatchers.IO) { runCatching { LibraryStore.save(context, next) } }
+    fun commit(transform: (List<LibraryItem>) -> List<LibraryItem>) {
+        scope.launch {
+            libraryMutex.withLock {
+                try {
+                    library = withContext(Dispatchers.IO) { LibraryStore.update(context, transform) }
+                    libraryError = null
+                } catch (cancelled: CancellationException) { throw cancelled }
+                catch (error: Exception) { libraryError = error.message ?: "Could not save the library. Try again." }
+            }
+        }
     }
 
-    fun addItems(found: List<LibraryItem>, kind: String) {
-        scope.launch {
-            importing = "Adding ${found.size} files…"
-            val known = library.map { it.uri }.toSet()
-            val fresh = found.filter { it.uri !in known }
-            val tagged = withContext(Dispatchers.IO) { if (kind == "audio") fresh.map { withAudioTags(context, it) } else fresh }
-            val next = withContext(Dispatchers.IO) { LibraryStore.update(context) { list -> list + tagged.filter { t -> list.none { it.uri == t.uri } } } }
-            library = next
-            importing = if (fresh.isEmpty() && found.isNotEmpty()) "Those files are already in your library." else if (found.isEmpty()) "No compatible files found." else null
-            if (importing != null) { delay(2500); importing = null }
+    fun startImport(kind: String, read: suspend () -> List<LibraryItem>) {
+        if (importJob?.isActive == true) return
+        importing = "Scanning files…"
+        importJob = scope.launch {
+            try {
+                val tagged = withContext(Dispatchers.IO) {
+                    val found = read().distinctBy { it.uri }
+                    val known = LibraryStore.load(context).mapTo(HashSet()) { it.uri }
+                    val fresh = found.filter { it.uri !in known }
+                    fresh.mapIndexed { index, item ->
+                        currentCoroutineContext().ensureActive()
+                        if (index % 20 == 0) withContext(Dispatchers.Main) {
+                            importing = "Preparing ${index + 1} of ${fresh.size} files…"
+                        }
+                        if (kind == "audio") withAudioTags(context, item) else item
+                    }
+                }
+                currentCoroutineContext().ensureActive()
+                if (tagged.isNotEmpty()) libraryMutex.withLock {
+                    // Once the atomic commit begins, finish it and publish its result even
+                    // if the user leaves the screen. Cancellation never saves a partial scan.
+                    withContext(NonCancellable) {
+                        library = withContext(Dispatchers.IO) { LibraryStore.add(context, tagged) }
+                        libraryError = null
+                    }
+                }
+                importing = if (tagged.isEmpty()) "No new compatible files found." else "Added ${tagged.size} files."
+            } catch (cancelled: CancellationException) {
+                importing = "Import cancelled."
+                throw cancelled
+            } catch (error: Exception) {
+                importing = "Import failed: ${error.message ?: "check file access and try again"}"
+            } finally {
+                importJob = null
+            }
         }
     }
 
@@ -305,24 +355,17 @@ private fun MortimerApp(
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) {
             val kind = pickKind
-            scope.launch {
-                importing = "Reading files…"
-                val found = withContext(Dispatchers.IO) { itemsFromUris(context, uris, kind) }
-                addItems(found, kind)
-            }
+            startImport(kind) { itemsFromUris(context, uris, kind) }
         }
     }
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
         if (tree != null) {
             val kind = pickKind
-            scope.launch {
-                importing = "Scanning folder…"
-                val found = withContext(Dispatchers.IO) { runCatching { itemsFromTree(context, tree, kind) }.getOrDefault(emptyList()) }
-                addItems(found, kind)
-            }
+            startImport(kind) { itemsFromTree(context, tree, kind) }
         }
     }
     fun addFiles(kind: String) {
+        if (importJob?.isActive == true) return
         pickKind = kind
         filePicker.launch(
             when (kind) {
@@ -333,7 +376,10 @@ private fun MortimerApp(
             }
         )
     }
-    fun addFolder(kind: String) { pickKind = kind; folderPicker.launch(null) }
+    fun addFolder(kind: String) {
+        if (importJob?.isActive == true) return
+        pickKind = kind; folderPicker.launch(null)
+    }
 
     var section by rememberSaveable { mutableStateOf("home") }
     var currentUri by remember { mutableStateOf(player.currentMediaItem?.mediaId) }
@@ -413,8 +459,14 @@ private fun MortimerApp(
                     }
                 }
                 importing?.let {
-                    Text(it, color = c.accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.padding(top = 6.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(it, color = c.accent, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f).padding(top = 6.dp))
+                        TextButton(onClick = { if (importJob?.isActive == true) importJob?.cancel() else importing = null }) {
+                            Text(if (importJob?.isActive == true) "Cancel" else "Dismiss")
+                        }
+                    }
                 }
+                libraryError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp)) }
                 Spacer(Modifier.height(12.dp))
                 AnimatedContent(
                     targetState = section,
@@ -453,11 +505,11 @@ private fun MortimerApp(
                             else if (next) player.addMediaItem((player.currentMediaItemIndex + 1).coerceAtMost(player.mediaItemCount), mediaItemFor(item))
                             else player.addMediaItem(mediaItemFor(item))
                         },
-                        onRemove = { item -> Covers.forget(context, item.uri); commit(library.filter { it.uri != item.uri }) })
+                        onRemove = { item -> Covers.forget(context, item.uri); commit { list -> list.filter { it.uri != item.uri } } })
                     "playing" -> NowPlayingSection(player, current, currentTitle, isPlaying, queueVersion, playbackError, content, onEqualizer = { section = "eq" })
                     "videos" -> VideosSection(library, content, onAddFiles = { addFiles("videos") }, onAddFolder = { addFolder("videos") },
                         onPlay = { item -> videoOpen = item; player.setMediaItem(mediaItemFor(item)); player.prepare(); player.play() },
-                        onRemove = { item -> Covers.forget(context, item.uri); commit(library.filter { it.uri != item.uri }) })
+                        onRemove = { item -> Covers.forget(context, item.uri); commit { list -> list.filter { it.uri != item.uri } } })
                     "books", "comics" -> ShelfSection(
                         kind = targetSection, library = library, modifier = content,
                         onAddFiles = { addFiles(targetSection) }, onAddFolder = { addFolder(targetSection) },
@@ -470,7 +522,7 @@ private fun MortimerApp(
                         Text("Spotify plays in its official app. MUGEN uses its native player for local files.", color = c.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
                     }
                     "settings" -> SettingsSection(library, themePref, onTheme, palettePref, onPalette, player, content, onEqualizer = { section = "eq" },
-                        onResetProgress = { commit(library.map { it.copy(progress = 0f, position = "", openedAt = 0) }) })
+                        onResetProgress = { commit { list -> list.map { it.copy(progress = 0f, position = "", openedAt = 0) } } })
                     }
                 }
                 if (current != null && section != "playing" && section != "photos") {

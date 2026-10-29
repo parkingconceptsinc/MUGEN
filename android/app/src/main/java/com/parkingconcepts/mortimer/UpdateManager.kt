@@ -25,12 +25,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -38,7 +40,7 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
-private data class MugenRelease(val tag: String, val versionCode: Int, val apkUrl: String, val checksumUrl: String, val apkName: String)
+private data class MugenRelease(val tag: String, val versionCode: Int, val apkUrl: String, val checksumUrl: String, val apkName: String) : java.io.Serializable
 
 private fun fetchExpectedSha256(url: String): String {
     require(isTrustedGitHubReleaseAsset(url)) { "Untrusted checksum URL." }
@@ -51,7 +53,7 @@ private fun fetchExpectedSha256(url: String): String {
     }
     try {
         if (connection.responseCode !in 200..299) throw IllegalStateException("Could not download the APK checksum.")
-        val line = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readLine().orEmpty() }
+        val line = connection.inputStream.use { it.readBytesLimited(4096).toString(Charsets.UTF_8).lineSequence().firstOrNull().orEmpty() }
         val hash = line.trim().split(Regex("\\s+"), limit = 2).firstOrNull().orEmpty().lowercase()
         if (!hash.matches(Regex("[a-f0-9]{64}"))) throw IllegalStateException("The published APK checksum is invalid.")
         return hash
@@ -85,7 +87,7 @@ private fun fetchLatestMugenRelease(): MugenRelease {
         if (connection.responseCode !in 200..299) {
             throw IllegalStateException("GitHub update check failed (HTTP ${connection.responseCode}). Check your connection and try again.")
         }
-        val releases = connection.inputStream.bufferedReader(Charsets.UTF_8).use { org.json.JSONArray(it.readText()) }
+        val releases = connection.inputStream.use { org.json.JSONArray(it.readBytesLimited(MAX_METADATA_BYTES).toString(Charsets.UTF_8)) }
         var best: MugenRelease? = null
         for (releaseIndex in 0 until releases.length()) {
             val releaseJson = releases.optJSONObject(releaseIndex) ?: continue
@@ -109,7 +111,7 @@ private fun fetchLatestMugenRelease(): MugenRelease {
             }
             // Only offer an update when the release includes the checksum published by CI.
             if (apkUrl != null && checksumUrl != null) {
-                val candidate = MugenRelease(tag, versionCode, apkUrl, checksumUrl, "MUGEN.apk")
+                val candidate = MugenRelease(tag, versionCode, apkUrl, checksumUrl, "MUGEN-$versionCode.apk")
                 if (best == null || candidate.versionCode > best.versionCode) best = candidate
             }
         }
@@ -128,13 +130,13 @@ internal fun AppUpdateCard() {
     val scope = rememberCoroutineScope()
     var checking by remember { mutableStateOf(false) }
     var release by remember { mutableStateOf<MugenRelease?>(null) }
-    var downloadedName by remember { mutableStateOf<String?>(null) }
-    var downloadingRelease by remember { mutableStateOf<MugenRelease?>(null) }
-    var downloadId by remember { mutableStateOf<Long?>(null) }
+    var downloadedName by rememberSaveable { mutableStateOf<String?>(null) }
+    var downloadingRelease by rememberSaveable { mutableStateOf<MugenRelease?>(null) }
+    var downloadId by rememberSaveable { mutableStateOf<Long?>(null) }
     var message by remember { mutableStateOf("Updates are checked only when you tap Check for updates.") }
 
     fun checkForUpdates() {
-        if (checking) return
+        if (checking || downloadId != null) return
         checking = true
         message = "Checking for updates…"
         scope.launch {
@@ -142,7 +144,8 @@ internal fun AppUpdateCard() {
                 val latest = withContext(Dispatchers.IO) { fetchLatestMugenRelease() }
                 release = if (latest.versionCode > BuildConfig.VERSION_CODE) latest else null
                 message = if (release != null) "Version ${latest.tag} is available." else "You're using the latest published version."
-            } catch (error: Exception) {
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (error: Exception) {
                 message = error.message ?: "Could not check for updates. Try again later."
             } finally {
                 checking = false
@@ -165,6 +168,8 @@ internal fun AppUpdateCard() {
                     onClick = {
                         val latest = release ?: return@Button
                         try {
+                            val existing = File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), latest.apkName)
+                            check(!existing.exists() || existing.delete()) { "Could not replace the previous download. Try again." }
                             val request = DownloadManager.Request(Uri.parse(latest.apkUrl))
                                 .setTitle("MUGEN update ${latest.tag}")
                                 .setDescription("Downloading the official MUGEN APK")
@@ -209,7 +214,7 @@ internal fun AppUpdateCard() {
                 }, modifier = Modifier.fillMaxWidth()) { Text("Install update") }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = { checkForUpdates() }, enabled = !checking, modifier = Modifier.weight(1f)) {
+                OutlinedButton(onClick = { checkForUpdates() }, enabled = !checking && downloadId == null, modifier = Modifier.weight(1f)) {
                     Text(if (checking) "Checking…" else "Check for updates")
                 }
                 if (release == null) {
@@ -239,11 +244,16 @@ internal fun AppUpdateCard() {
                             val target = downloadingRelease
                             val apk = target?.let { File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), it.apkName) }
                             val verified = if (target != null && apk != null && apk.isFile && apk.length() > 0L) {
-                                runCatching {
+                                try {
                                     withContext(Dispatchers.IO) {
-                                        sha256(apk) == fetchExpectedSha256(target.checksumUrl)
+                                        val info = context.packageManager.getPackageArchiveInfo(apk.path, 0)
+                                        @Suppress("DEPRECATION")
+                                        val version = if (Build.VERSION.SDK_INT >= 28) info?.longVersionCode else info?.versionCode?.toLong()
+                                        info?.packageName == context.packageName && version == target.versionCode.toLong() &&
+                                            sha256(apk) == fetchExpectedSha256(target.checksumUrl)
                                     }
-                                }.getOrDefault(false)
+                                } catch (cancelled: CancellationException) { throw cancelled }
+                                catch (_: Exception) { false }
                             } else false
                             if (verified) {
                                 downloadedName = target?.apkName
@@ -251,7 +261,7 @@ internal fun AppUpdateCard() {
                             } else {
                                 apk?.delete()
                                 downloadedName = null
-                                message = "APK checksum verification failed. The file was deleted; check for updates and download again."
+                                message = "APK version, package, or checksum verification failed. The file was deleted; download again."
                             }
                             finished = true
                         }

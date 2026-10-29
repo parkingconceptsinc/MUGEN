@@ -41,6 +41,9 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -186,14 +189,20 @@ private class OpenedBook(
     private val file: File?,
     private val inline: Map<String, ByteArray>,
 ) : Closeable {
+    private var closed = false
+    @Synchronized
     fun read(path: String): ByteArray? {
+        if (closed) return null
         inline[path]?.let { return it }
         val z = zip ?: return null
         val entry = z.getEntry(path) ?: return null
-        return z.getInputStream(entry).use { it.readBytes() }
+        return z.getInputStream(entry).use { it.readBytesLimited(MAX_BOOK_RESOURCE_BYTES) }
     }
 
+    @Synchronized
     override fun close() {
+        if (closed) return
+        closed = true
         runCatching { zip?.close() }
         file?.delete()
     }
@@ -207,17 +216,11 @@ private fun decodeText(bytes: ByteArray): String {
     return String(bytes, Charset.forName("windows-1252"))
 }
 
-private fun openBook(context: Context, uri: Uri, title: String, format: String): OpenedBook {
+private suspend fun openBook(context: Context, uri: Uri, title: String, format: String): OpenedBook {
+    val jobContext = currentCoroutineContext()
     if (format == "txt") {
         val bytes = context.contentResolver.openInputStream(uri)?.use { input ->
-            val out = java.io.ByteArrayOutputStream()
-            val buf = ByteArray(64 * 1024)
-            while (out.size() < 12 * 1024 * 1024) {
-                val n = input.read(buf)
-                if (n < 0) break
-                out.write(buf, 0, n)
-            }
-            out.toByteArray()
+            input.readBytesLimited(12 * 1024 * 1024) { jobContext.ensureActive() }
         } ?: error("Could not read the file.")
         val text = decodeText(bytes).replace("\r\n", "\n")
         val body = text.split(Regex("\n\\s*\n")).joinToString("\n") { para ->
@@ -226,9 +229,12 @@ private fun openBook(context: Context, uri: Uri, title: String, format: String):
         val html = "<!DOCTYPE html><html><head><meta charset=\"utf-8\"><title>${escapeHtml(title)}</title></head><body>$body</body></html>"
         return OpenedBook(title, listOf("texto.html"), emptyList(), null, null, mapOf("texto.html" to html.toByteArray()))
     }
-    val file = File(context.cacheDir, "book_${System.currentTimeMillis()}.epub")
-    context.contentResolver.openInputStream(uri)?.use { input -> file.outputStream().use { input.copyTo(it) } }
-        ?: error("Could not read the EPUB file.")
+    val file = File.createTempFile("book_", ".epub", context.cacheDir)
+    try {
+        context.contentResolver.openInputStream(uri)?.use { input ->
+            file.outputStream().use { output -> input.copyLimitedTo(output, MAX_CACHE_BYTES, { jobContext.ensureActive() }) }
+        } ?: error("Could not read the EPUB file.")
+    } catch (failure: Throwable) { file.delete(); throw failure }
     val zip = try { ZipFile(file) } catch (e: Exception) { file.delete(); error("This is not a valid EPUB file.") }
     try {
         val pkg = EpubPackage.read(zip)
@@ -329,7 +335,7 @@ private fun BookReader(
     val pending = remember { arrayOf<Any?>(0f, null) }
 
     LaunchedEffect(key) {
-        val opened = withContext(Dispatchers.IO) { runCatching { openBook(context, uri, fallbackTitle, format) } }
+        val opened = runCatching { openResourceOnIo { openBook(context, uri, fallbackTitle, format) } }
         opened.onSuccess { b ->
             val saved = if (fromStart) null else LibraryStore.find(context, key)?.position
             val parts = saved?.split(':')
@@ -337,7 +343,7 @@ private fun BookReader(
             fraction = parts?.getOrNull(1)?.toFloatOrNull()?.coerceIn(0f, 1f) ?: 0f
             pending[0] = fraction
             book = b
-        }.onFailure { error = it.message ?: "Could not open this book." }
+        }.onFailure { if (it is CancellationException) throw it; error = it.message ?: "Could not open this book." }
     }
     DisposableEffect(book) {
         val b = book
@@ -406,7 +412,9 @@ private fun BookReader(
                             val url = request.url
                             if (url.host != BOOK_HOST) return WebResourceResponse("text/plain", "utf-8", 403, "Blocked", emptyMap(), ByteArrayInputStream(ByteArray(0)))
                             val path = (url.path ?: "").removePrefix("/")
-                            val bytes = b.read(path) ?: return WebResourceResponse("text/plain", "utf-8", 404, "Not found", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+                            val bytes = try { b.read(path) } catch (_: Exception) {
+                                return WebResourceResponse("text/plain", "utf-8", 413, "Resource too large or unreadable", emptyMap(), ByteArrayInputStream(ByteArray(0)))
+                            } ?: return WebResourceResponse("text/plain", "utf-8", 404, "Not found", emptyMap(), ByteArrayInputStream(ByteArray(0)))
                             val mime = mimeFor(path)
                             if (mime == "application/xhtml+xml" || mime == "text/html") {
                                 var html = String(bytes, Charsets.UTF_8)
