@@ -1,4 +1,4 @@
-# MUGEN 0.12.1: vídeo, audio y lectura
+# MUGEN 0.12.2: vídeo, audio y lectura
 
 ## Vídeo a pantalla completa
 
@@ -83,3 +83,14 @@ gradle assembleDebug -PdevicePreview=true
 ```
 
 Esto genera `com.parkingconcepts.mortimer.preview`, con nombre «MUGEN Preview» y almacenamiento independiente. El APK normal conserva `com.parkingconcepts.mortimer`. Las claves de depuración de diferentes equipos o ejecuciones de CI pueden ser distintas: Android no admite una actualización normal entre ellas. Una migración de firma requiere consentimiento y copia de seguridad; restaurar los datos privados no restaura por sí solo los permisos SAF concedidos a la instalación anterior.
+
+
+## Recuperación del lector EPUB (0.12.2)
+
+MUGEN se ofrece como visor para documentos `content://` de tipo `application/epub+zip` o `application/x-epub+zip` desde Files/Descargas. La actividad pública solo reenvía ese documento al lector privado, con el permiso de lectura recibido. No registra archivos PDF ni descarga URLs remotas como si fueran EPUB. La apertura externa no añade entradas a la biblioteca.
+
+Los metadatos y capítulos reconocen BOM UTF-8/UTF-16 y codificaciones XML/HTML declaradas. Al transformar un capítulo a UTF-8 se actualiza también su declaración XML. Las referencias de manifiesto decodifican entidades XML sin perder espacios del nombre y los enlaces de ancla sin ruta se resuelven contra el documento actual. La búsqueda usa la misma decodificación.
+
+La apertura ofrece `Retry` y, si falta el permiso original, `Reconnect folder`. Un fallo de WebView o del XML del capítulo ofrece `Retry chapter` y `Compatibility mode`, que reinterpreta ese libro como HTML durante esa sesión. No corrige un ZIP dañado, un archivo ausente ni DRM. No se inicia el guardado del progreso hasta que el capítulo haya cargado el puente de lectura.
+
+`EpubReaderTest` cubre paquetes y capítulos UTF-16, rutas escapadas, anclas, entrada externa y permisos, registro de tipos y limpieza de caché. `EpubReaderDeviceTest` prueba un EPUB UTF-16 y la recuperación de un capítulo mal formado en una pantalla virtual, sin tocar la pantalla física ni guardar progreso. Las comprobaciones sobre libros personales requieren el argumento manual `probeExistingEpub=yes`; no registran títulos, fragmentos ni capturas.
