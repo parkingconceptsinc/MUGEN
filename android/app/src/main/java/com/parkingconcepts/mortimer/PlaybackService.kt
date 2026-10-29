@@ -95,7 +95,10 @@ class PlaybackService : MediaLibraryService() {
                 .setAudioProcessors(arrayOf(AudioEffects.balanceProcessor))
                 .build()
         }
-        player = ExoPlayer.Builder(this, renderers).setSeekBackIncrementMs(10_000).setSeekForwardIncrementMs(10_000).build().apply {
+        player = ExoPlayer.Builder(this, renderers)
+            .setSeekBackIncrementMs(10_000).setSeekForwardIncrementMs(10_000)
+            .setWakeMode(C.WAKE_MODE_LOCAL)
+            .build().apply {
             setAudioAttributes(androidx.media3.common.AudioAttributes.DEFAULT, true)
             setHandleAudioBecomingNoisy(true)
         }
