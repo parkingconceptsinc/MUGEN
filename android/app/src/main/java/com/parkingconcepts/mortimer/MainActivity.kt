@@ -187,7 +187,7 @@ private val SECTIONS = listOf(
     Section("books", "Books", "▤"),
     Section("comics", "Comics", "▧"),
     Section("photos", "Photos", "▦"),
-    Section("eq", "Equalizer", "≋"),
+    Section("eq", "Audio Lab", "≋"),
     Section("services", "Services", "♪"),
     Section("settings", "Settings", "⚙"),
 )
@@ -233,7 +233,7 @@ private fun mediaItemFor(item: LibraryItem): MediaItem = MediaItem.Builder()
     .build()
 
 /** Reads title, artist and album tags so the music list shows real names. Runs on a background thread. */
-private fun withAudioTags(context: Context, item: LibraryItem): LibraryItem {
+internal fun withAudioTags(context: Context, item: LibraryItem): LibraryItem {
     val retriever = MediaMetadataRetriever()
     return try {
         retriever.setDataSource(context, item.androidUri)
@@ -284,6 +284,7 @@ private fun MortimerApp(
     val c = LocalMortimerColors.current
     val scope = rememberCoroutineScope()
     var playlistsOpen by rememberSaveable { mutableStateOf(false) }
+    var deviceScanOpen by remember { mutableStateOf(false) }
     val audioPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     LaunchedEffect(Unit) {
         val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
@@ -496,6 +497,7 @@ private fun MortimerApp(
                 }
                 libraryError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp)) }
                 LibraryAccessNotice(library, resumeTick)
+                DeviceScanAccessNotice(library, resumeTick)
                 Spacer(Modifier.height(if (section == "editor") 0.dp else 12.dp))
                 AnimatedContent(
                     targetState = section,
@@ -528,7 +530,7 @@ private fun MortimerApp(
                     val content = Modifier.fillMaxSize()
                     when (targetSection) {
                     "home" -> HomeSection(library, content, onGo = { section = it }, openExternal = { openExternal(it.androidUri, mimeForItem(it)) })
-                    "music" -> MusicSection(library, currentUri, content, onAddFiles = { addFiles("audio") }, onAddFolder = { addFolder("audio") },
+                    "music" -> MusicSection(library, currentUri, content, onAddFiles = { addFiles("audio") }, onAddFolder = { addFolder("audio") }, onScanDevice = { deviceScanOpen = true },
                         onPlaylists = { playlistsOpen = true },
                         onPlay = { list, i -> playList(list, i) },
                         onQueue = { item, next ->
@@ -538,23 +540,23 @@ private fun MortimerApp(
                         },
                         onRemove = { item -> Covers.forget(context, item.uri); commit { list -> list.filter { it.uri != item.uri } } })
                     "playing" -> NowPlayingSection(player, current, currentTitle, isPlaying, queueVersion, playbackError, content, onEqualizer = { section = "eq" }, onPlaylists = { playlistsOpen = true })
-                    "videos" -> VideosSection(library, content, onAddFiles = { addFiles("videos") }, onAddFolder = { addFolder("videos") },
+                    "videos" -> VideosSection(library, content, onAddFiles = { addFiles("videos") }, onAddFolder = { addFolder("videos") }, onScanDevice = { deviceScanOpen = true },
                         onPlay = { item -> playVideo(item) },
                         onRemove = { item -> Covers.forget(context, item.uri); commit { list -> list.filter { it.uri != item.uri } } })
                     "editor" -> VideoStudioScreen(library, content, editorItem, editorPosition, onInitialConsumed = { editorItem = null }, onExit = { navigate("videos") }, onExportState = { busy, saving -> editorProcessing = busy; editorSaving = saving })
                     "books", "comics" -> ShelfSection(
                         kind = targetSection, library = library, modifier = content,
-                        onAddFiles = { addFiles(targetSection) }, onAddFolder = { addFolder(targetSection) },
+                        onAddFiles = { addFiles(targetSection) }, onAddFolder = { addFolder(targetSection) }, onScanDevice = { deviceScanOpen = true },
                         onChange = { commit(it) }, openExternal = { openExternal(it.androidUri, mimeForItem(it)) },
                     )
                     "photos" -> PhotosSection(content)
-                    "eq" -> EqualizerSection(content)
+                    "eq" -> EqualizerSection(content, player)
                     "services" -> Column(content) {
                         HomeCard("♫", "Spotify", "Open the official Spotify app", "Open") { openSpotify() }
                         Text("Spotify plays in its official app. MUGEN uses its native player for local files.", color = c.muted, fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp))
                     }
                     "settings" -> SettingsSection(library, themePref, onTheme, palettePref, onPalette, player, content, onEqualizer = { section = "eq" },
-                        onResetProgress = { commit { list -> list.map { it.copy(progress = 0f, position = "", openedAt = 0) } } })
+                        onDeviceScan = { deviceScanOpen = true }, onResetProgress = { commit { list -> list.map { it.copy(progress = 0f, position = "", openedAt = 0) } } })
                     }
                 }
                 if (current != null && section != "playing" && section != "photos" && section != "editor") {
@@ -601,6 +603,9 @@ private fun MortimerApp(
         text = { Text(if (editorSaving) "Wait until the file finishes saving." else "Your project is preserved. The current MP4 render will be canceled.") },
         confirmButton = { TextButton(enabled = !editorSaving, onClick = { leaveEditorFor = null; section = target }) { Text("Leave") } },
         dismissButton = { TextButton(onClick = { leaveEditorFor = null }) { Text("Stay in Editor") } }) }
+    if (deviceScanOpen) DeviceScanDialog(library, onImport = { items ->
+        libraryMutex.withLock { withContext(NonCancellable) { library = withContext(Dispatchers.IO) { mergeDeviceScan(context, items) }; libraryError = null } }
+    }, onClose = { deviceScanOpen = false })
     if (playlistsOpen) MusicPlaylistDialog(player, onClose = { playlistsOpen = false })
     videoOpen?.let { item ->
         val videos = library.filter { it.kind == "videos" }
@@ -760,6 +765,7 @@ private fun MusicSection(
     onAddFiles: () -> Unit,
     onAddFolder: () -> Unit,
     onPlaylists: () -> Unit,
+    onScanDevice: () -> Unit,
     onPlay: (List<LibraryItem>, Int) -> Unit,
     onQueue: (LibraryItem, Boolean) -> Unit,
     onRemove: (LibraryItem) -> Unit,
@@ -783,6 +789,7 @@ private fun MusicSection(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp)) {
             ActionButton("＋ Add music", primary = true, onClick = onAddFiles)
             ActionButton("▤ Add folder", primary = false, onClick = onAddFolder)
+            ActionButton("⌕ Scan device", primary = false, onClick = onScanDevice)
             ActionButton("♫ Playlists", primary = false, onClick = onPlaylists)
             if (filtered.isNotEmpty()) ActionButton("⤮ Shuffle", primary = false) { onPlay(filtered.shuffled(), 0) }
         }
@@ -869,7 +876,7 @@ private fun MusicSection(
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun VideosSection(library: List<LibraryItem>, modifier: Modifier, onAddFiles: () -> Unit, onAddFolder: () -> Unit, onPlay: (LibraryItem) -> Unit, onRemove: (LibraryItem) -> Unit) {
+private fun VideosSection(library: List<LibraryItem>, modifier: Modifier, onAddFiles: () -> Unit, onAddFolder: () -> Unit, onScanDevice: () -> Unit, onPlay: (LibraryItem) -> Unit, onRemove: (LibraryItem) -> Unit) {
     val c = LocalMortimerColors.current
     val videos = remember(library) { library.filter { it.kind == "videos" }.sortedBy { naturalKey(it.title) } }
     var query by remember { mutableStateOf("") }
@@ -878,6 +885,7 @@ private fun VideosSection(library: List<LibraryItem>, modifier: Modifier, onAddF
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp)) {
             ActionButton("＋ Add videos", primary = true, onClick = onAddFiles)
             ActionButton("▤ Add folder", primary = false, onClick = onAddFolder)
+            ActionButton("⌕ Scan device", primary = false, onClick = onScanDevice)
         }
         if (videos.isEmpty()) {
             Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 16.dp).clip(RoundedCornerShape(20.dp)).background(c.panel).padding(horizontal = 20.dp, vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -1091,7 +1099,7 @@ private fun NowPlayingSection(player: Player, current: LibraryItem?, title: Stri
 }
 
 @Composable
-private fun SettingsSection(library: List<LibraryItem>, themePref: String, onTheme: (String) -> Unit, palettePref: String, onPalette: (String) -> Unit, player: Player, modifier: Modifier, onEqualizer: () -> Unit, onResetProgress: () -> Unit) {
+private fun SettingsSection(library: List<LibraryItem>, themePref: String, onTheme: (String) -> Unit, palettePref: String, onPalette: (String) -> Unit, player: Player, modifier: Modifier, onEqualizer: () -> Unit, onDeviceScan: () -> Unit, onResetProgress: () -> Unit) {
     val context = LocalContext.current
     val c = LocalMortimerColors.current
     var confirm by remember { mutableStateOf(false) }
@@ -1141,7 +1149,7 @@ private fun SettingsSection(library: List<LibraryItem>, themePref: String, onThe
                 }
             }
             Spacer(Modifier.height(6.dp))
-            MenuItem("≋ Equalizer, balance, and volume boost") { onEqualizer() }
+            MenuItem("≋ Audio Lab · equalizer, voice and synth") { onEqualizer() }
         }
         SettingsCard("Library") {
             Text(
@@ -1149,6 +1157,7 @@ private fun SettingsSection(library: List<LibraryItem>, themePref: String, onThe
                 color = c.text, fontSize = 14.sp,
             )
             Text("Your media stays in its original location. MUGEN saves library references and reading progress, including for supported removable storage.", color = c.muted, fontSize = 12.sp, lineHeight = 18.sp, modifier = Modifier.padding(top = 5.dp, bottom = 10.dp))
+            MenuItem("Scan device · find media in all shared folders") { onDeviceScan() }
             MenuItem(if (coversCleared) "✓ Artwork cache cleared" else "Regenerate artwork cache") { Covers.clear(context); coversCleared = true }
             MenuItem("Clear reading progress", danger = true) { confirm = true }
         }

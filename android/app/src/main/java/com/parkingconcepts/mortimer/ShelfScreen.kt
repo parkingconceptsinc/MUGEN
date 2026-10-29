@@ -97,6 +97,7 @@ fun ShelfSection(
     library: List<LibraryItem>,
     onAddFiles: () -> Unit,
     onAddFolder: () -> Unit,
+    onScanDevice: () -> Unit = {},
     onChange: ((List<LibraryItem>) -> List<LibraryItem>) -> Unit,
     openExternal: (LibraryItem) -> Unit,
     modifier: Modifier = Modifier,
@@ -127,6 +128,7 @@ fun ShelfSection(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp)) {
             ActionButton("＋ Add files", primary = true, onClick = onAddFiles)
             ActionButton("▤ Add folder", primary = false, onClick = onAddFolder)
+            ActionButton("⌕ Scan device", primary = false, onClick = onScanDevice)
         }
         if (shelf.isEmpty()) {
             Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 16.dp).clip(RoundedCornerShape(20.dp)).background(c.panel).padding(horizontal = 20.dp, vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
