@@ -10,6 +10,8 @@ class EpubPackage(
     val spine: List<String>,
     val toc: List<TocEntry>,
     val cover: String?,
+    val legacySpine: List<String> = spine,
+    val mediaTypes: Map<String, String> = emptyMap(),
 ) {
     data class TocEntry(val label: String, val href: String, val depth: Int)
 
@@ -28,6 +30,12 @@ class EpubPackage(
 
         private fun plain(html: String): String =
             Html.fromHtml(html, Html.FROM_HTML_MODE_COMPACT).toString().replace(Regex("\\s+"), " ").trim()
+
+        private fun emptyNavigation(html: String): Boolean {
+            val body = Regex("""<(?:\w+:)?body\b[^>]*>(.*?)</(?:\w+:)?body\s*>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+                .find(html)?.groupValues?.get(1) ?: return false
+            return plain(body).isBlank() && !Regex("""<(?:\w+:)?(?:img|svg|image|object|video|audio|canvas)\b""", RegexOption.IGNORE_CASE).containsMatchIn(body)
+        }
 
         /** Resolves [href] relative to the folder of [base], dropping "." and ".." segments. */
         fun resolve(base: String, href: String): String {
@@ -62,12 +70,14 @@ class EpubPackage(
             }.toList()
             val byId = items.associateBy { it.id }
 
-            val spine = Regex("""<(?:\w+:)?itemref\b([^>]*)>""", RegexOption.IGNORE_CASE).findAll(opf)
-                .mapNotNull { m -> attr(m.groupValues[1], "idref")?.let { byId[it] } }
-                .filter { it.type.contains("html", true) || it.href.endsWith(".xhtml", true) || it.href.endsWith(".html", true) || it.href.endsWith(".htm", true) }
-                .map { it.href }
-                .filter { zip.getEntry(it) != null }
+            val ordered = Regex("""<(?:\w+:)?itemref\b([^>]*)>""", RegexOption.IGNORE_CASE).findAll(opf)
+                .mapNotNull { m -> attr(m.groupValues[1], "idref")?.let { byId[it] }?.let { it to attr(m.groupValues[1], "linear").equals("no", true) } }
+                .filter { (item, _) -> item.type.contains("html", true) || item.href.endsWith(".xhtml", true) || item.href.endsWith(".html", true) || item.href.endsWith(".htm", true) }
+                .filter { zip.getEntry(it.first.href) != null }
                 .toList()
+            val legacySpine = ordered.map { it.first.href }
+            val spine = ordered.filterNot { (item, nonlinear) -> nonlinear ||
+                (item.props.split(Regex("\\s+")).contains("nav") && text(zip, item.href)?.let(::emptyNavigation) == true) }.map { it.first.href }
 
             val title = Regex("""<dc:title[^>]*>(.*?)</dc:title>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
                 .find(opf)?.groupValues?.get(1)?.let { plain(it) }?.takeIf { it.isNotBlank() }
@@ -112,7 +122,7 @@ class EpubPackage(
                         }
                 }
             }
-            return EpubPackage(title, spine, toc, cover)
+            return EpubPackage(title, spine, toc, cover, legacySpine, items.associate { it.href to it.type })
         }
     }
 }

@@ -2,6 +2,8 @@
     <!-- Explicit visibility for the opt-in Preview-to-normal folder migration test. -->
     <queries><package android:name="com.parkingconcepts.mortimer" /></queries>
     <application>
+        <activity android:name=".MainActivity" android:allowEmbedded="true" />
+        <activity android:name=".EpubReaderActivity" android:allowEmbedded="true" />
         <activity android:name=".BookQaActivity" android:exported="false" android:allowEmbedded="true"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density"
             android:theme="@android:style/Theme.Material.NoActionBar" />

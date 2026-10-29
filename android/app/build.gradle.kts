@@ -15,8 +15,8 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["appLabel"] = "MUGEN"
         // Increment both values whenever an Android change is prepared for distribution.
-        versionCode = providers.gradleProperty("androidVersionCode").orElse("1202").get().toInt()
-        versionName = providers.gradleProperty("androidVersionName").orElse("0.12.2").get()
+        versionCode = providers.gradleProperty("androidVersionCode").orElse("1203").get().toInt()
+        versionName = providers.gradleProperty("androidVersionName").orElse("0.12.3").get()
     }
 
     compileOptions {

@@ -47,6 +47,31 @@ class EpubReaderTest {
         try { openBook(context, Uri.fromFile(xmlEscaped), "Book", "epub").use { assertEquals(listOf("OPS/A&B.xhtml"), it.chapters) } }
         finally { xmlEscaped.delete() }
     }
+    @Test fun skipsEmptyNavigationAndNonlinearDocumentsWithoutHidingARealContentsPage() = runBlocking<Unit> {
+        val opf = """<package><manifest><item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/><item id="aside" href="aside.xhtml" media-type="application/xhtml+xml"/><item id="c" href="chapter.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="missing-cover"/><itemref idref="nav"/><itemref idref="aside" linear="no"/><itemref idref="c"/></spine></package>"""
+        fun book(nav: String) = epub(opf, mapOf("OPS/nav.xhtml" to nav.toByteArray(), "OPS/aside.xhtml" to "<html><body>Aside</body></html>".toByteArray(), "OPS/chapter.xhtml" to "<html><body>Chapter</body></html>".toByteArray()))
+        for ((nav, chapters) in listOf("<html><body><nav><h2></h2><ol/></nav></body></html>" to listOf("OPS/chapter.xhtml"),
+            "<html><body><nav><h2>Contents</h2><ol><li><a href='chapter.xhtml'>Chapter</a></li></ol></nav></body></html>" to listOf("OPS/nav.xhtml", "OPS/chapter.xhtml"))) {
+            val file = book(nav)
+            try { openBook(context, Uri.fromFile(file), "Book", "epub").use { assertEquals(chapters, it.chapters) } }
+            finally { file.delete() }
+        }
+    }
+    @Test fun keepsTheSameReadingDocumentWhenLegacyChapterNumbersShift() {
+        val legacy = listOf("empty-nav.xhtml", "first.xhtml", "aside.xhtml", "second.xhtml")
+        val chapters = listOf("first.xhtml", "second.xhtml")
+        assertEquals(1 to .4f, restoredBookPosition("3:0.4", 4, chapters, legacy))
+        assertEquals(0 to 0f, restoredBookPosition("0:1.0", 4, chapters, legacy))
+        assertEquals(1 to 0f, restoredBookPosition("2:0.5", 4, chapters, legacy))
+        assertEquals(1 to .6f, restoredBookPosition("1:0.6", 2, chapters, legacy))
+        assertEquals(0 to 0f, restoredBookPosition(null, 0, chapters, legacy))
+    }
+    @Test fun honorsManifestXhtmlForHtmlNamedChaptersWithNamespacedSvg() = runBlocking<Unit> {
+        val opf = """<package><manifest><item id="c" href="cover.html" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c"/></spine></package>"""
+        val file = epub(opf, mapOf("OPS/cover.html" to """<html xmlns="http://www.w3.org/1999/xhtml"><body><svg:svg xmlns:svg="http://www.w3.org/2000/svg" viewBox="0 0 160 240"/></body></html>""".toByteArray()))
+        try { openBook(context, Uri.fromFile(file), "Book", "epub").use { assertEquals("application/xhtml+xml", it.mimeType(it.chapters.single())) } }
+        finally { file.delete() }
+    }
     @Test fun resolvesAnchorOnlyLinksAndEncodedFragmentsAgainstTheCurrentDocument() {
         assertEquals("OPS/chapter.xhtml#part 1", EpubPackage.resolve("OPS/chapter.xhtml", "#part%201"))
         assertEquals("OPS/chapter.xhtml", EpubPackage.resolve("OPS/chapter.xhtml", ""))

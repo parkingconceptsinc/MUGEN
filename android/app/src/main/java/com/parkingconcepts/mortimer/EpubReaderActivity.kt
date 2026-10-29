@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.ViewGroup
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -191,7 +192,12 @@ internal class OpenedBook(
     private val zip: ZipFile?,
     private val file: File?,
     private val inline: Map<String, ByteArray>,
+    val legacyChapters: List<String> = chapters,
+    private val mediaTypes: Map<String, String> = emptyMap(),
 ) : Closeable {
+    fun mimeType(path: String): String = mediaTypes[path]?.takeIf {
+        it.matches(Regex("[A-Za-z0-9!#$&^_.+-]+/[A-Za-z0-9!#$&^_.+-]+"))
+    } ?: mimeFor(path)
     private var closed = false
     @Synchronized
     fun read(path: String): ByteArray? {
@@ -242,7 +248,7 @@ internal suspend fun openBook(context: Context, uri: Uri, title: String, format:
     try {
         val pkg = EpubPackage.read(zip)
         check(pkg.spine.isNotEmpty()) { "This EPUB contains no chapters." }
-        return OpenedBook(pkg.title ?: title, pkg.spine, pkg.toc, zip, file, emptyMap())
+        return OpenedBook(pkg.title ?: title, pkg.spine, pkg.toc, zip, file, emptyMap(), pkg.legacySpine, pkg.mediaTypes)
     } catch (e: Exception) {
         zip.close(); file.delete()
         throw e
@@ -361,10 +367,9 @@ internal fun BookReader(
         error = null; book = null; rendered = false
         val opened = runCatching { openResourceOnIo { openBook(context, uri, fallbackTitle, format) } }
         opened.onSuccess { b ->
-            val saved = if (fromStart) null else LibraryStore.find(context, key)?.position
-            val parts = saved?.split(':')
-            chapter = parts?.getOrNull(0)?.toIntOrNull()?.coerceIn(0, b.chapters.lastIndex) ?: 0
-            fraction = parts?.getOrNull(1)?.toFloatOrNull()?.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f
+            val saved = if (fromStart) null else LibraryStore.find(context, key)
+            val position = restoredBookPosition(saved?.position, saved?.pages ?: 0, b.chapters, b.legacyChapters)
+            chapter = position.first; fraction = position.second
             pending[0] = fraction
             book = b
         }.onFailure {
@@ -400,7 +405,12 @@ internal fun BookReader(
             }
             b == null -> Text("Opening $fallbackTitle…", color = theme.fg, modifier = Modifier.align(Alignment.Center))
             else -> {
-                val webView = remember(b) { WebView(context) }
+                val webView = remember(b) { WebView(context).apply {
+                    // AndroidView otherwise supplies WRAP_CONTENT layout params. Chromium then
+                    // treats its viewport height as zero while resolving vh units, collapsing
+                    // paged chapters and their cover images even inside fillMaxSize().
+                    layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                } }
                 var compatibility by remember(b) { mutableStateOf(false) }
                 var pageError by remember(b) { mutableStateOf<String?>(null) }
                 var searchQuery by remember(b) { mutableStateOf("") }
@@ -470,7 +480,7 @@ internal fun BookReader(
                             val bytes = try { b.read(path) } catch (_: Exception) {
                                 return WebResourceResponse("text/plain", "utf-8", 413, "Resource too large or unreadable", emptyMap(), ByteArrayInputStream(ByteArray(0)))
                             } ?: return WebResourceResponse("text/plain", "utf-8", 404, "Not found", emptyMap(), ByteArrayInputStream(ByteArray(0)))
-                            val mime = mimeFor(path)
+                            val mime = b.mimeType(path)
                             if (mime == "application/xhtml+xml" || mime == "text/html") {
                                 val responseMime = if (compatibility) "text/html" else mime
                                 return WebResourceResponse(responseMime, "utf-8", ByteArrayInputStream(prepareBookHtml(bytes, responseMime == "application/xhtml+xml", readerCss(currentSettings))))

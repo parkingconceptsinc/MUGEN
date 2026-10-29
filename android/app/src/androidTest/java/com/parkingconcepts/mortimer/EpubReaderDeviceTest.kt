@@ -40,24 +40,30 @@ class EpubReaderDeviceTest {
     @Test fun utf16AndMalformedChaptersRecoverInTheActualReader() {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val fixtures = ArrayList<java.io.File>()
-        fun fixture(utf16: Boolean, broken: Boolean): android.net.Uri {
+        fun fixture(utf16: Boolean, broken: Boolean, cover: Boolean = false, svg: Boolean = false): android.net.Uri {
             val file = java.io.File.createTempFile("reader-qa-", ".epub", context.cacheDir); fixtures.add(file)
             val charset = if (utf16) Charsets.UTF_16 else Charsets.UTF_8
             val encoding = if (utf16) "UTF-16" else "UTF-8"
             val text = if (broken) "Recovered chapter &nbsp; test" else "Ilusión y café"
+            val chapterPath = if (svg) "chapter.html" else "chapter.xhtml"
+            val body = if (svg) """<svg:svg xmlns:svg="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 160 240"><svg:image width="160" height="240" xlink:href="cover.png"/></svg:svg>""" else if (cover) """<img src="cover.png" alt="Synthetic cover" style="height:100%"/>""" else "<p>$text</p>"
+            val bitmap = android.graphics.Bitmap.createBitmap(160, 240, android.graphics.Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.RED) }
+            val image = java.io.ByteArrayOutputStream().use { output -> bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, output); output.toByteArray() }
+            bitmap.recycle()
             java.util.zip.ZipOutputStream(file.outputStream()).use { zip ->
                 mapOf("META-INF/container.xml" to """<container><rootfiles><rootfile full-path="OPS/package.opf"/></rootfiles></container>""".toByteArray(),
-                    "OPS/package.opf" to """<?xml version="1.0" encoding="$encoding"?><package><manifest><item id="c" href="chapter.xhtml" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c"/></spine></package>""".toByteArray(charset),
-                    "OPS/chapter.xhtml" to """<?xml version="1.0" encoding="$encoding"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Test</title></head><body><p>$text</p></body></html>""".toByteArray(charset)).forEach { (path, bytes) ->
+                    "OPS/package.opf" to """<?xml version="1.0" encoding="$encoding"?><package><manifest><item id="c" href="$chapterPath" media-type="application/xhtml+xml"/></manifest><spine><itemref idref="c"/></spine></package>""".toByteArray(charset),
+                    "OPS/cover.png" to image,
+                    "OPS/$chapterPath" to """<?xml version="1.0" encoding="$encoding"?><html xmlns="http://www.w3.org/1999/xhtml"><head><title>Test</title></head><body>$body</body></html>""".toByteArray(charset)).forEach { (path, bytes) ->
                     zip.putNextEntry(java.util.zip.ZipEntry(path)); zip.write(bytes); zip.closeEntry()
                 }
             }
             return android.net.Uri.fromFile(file)
         }
-        try { fullReaderChecks(listOf(fixture(true, false), fixture(false, true)), setOf(1)) }
+        try { fullReaderChecks(listOf(fixture(true, false), fixture(false, true), fixture(false, false, cover = true), fixture(false, false, svg = true)), setOf(1), setOf(2, 3)) }
         finally { fixtures.forEach { it.delete() } }
     }
-    private fun fullReaderChecks(uris: List<android.net.Uri>, compatibilityExpected: Set<Int> = emptySet()) {
+    private fun fullReaderChecks(uris: List<android.net.Uri>, compatibilityExpected: Set<Int> = emptySet(), visibleImageExpected: Set<Int> = emptySet()) {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val before = LibraryStore.load(context)
@@ -110,9 +116,11 @@ class EpubReaderDeviceTest {
                     val done = CountDownLatch(1)
                     instrumentation.runOnMainSync {
                         val web = BookQaActivity.current.get()?.window?.decorView?.let(::findWeb)
-                        if (web == null) done.countDown() else web.evaluateJavascript("JSON.stringify({setup:typeof window.mortimerSetup, body:!!document.body, errors:document.getElementsByTagName('parsererror').length})") { value ->
+                        if (web == null) done.countDown() else web.evaluateJavascript("JSON.stringify({setup:typeof window.mortimerSetup, body:!!document.body, errors:document.getElementsByTagName('parsererror').length, imageVisible:(function(){var im=document.querySelector('img')||document.getElementsByTagNameNS('http://www.w3.org/2000/svg','image')[0];if(!im)return false;var r=im.getBoundingClientRect();return (im.namespaceURI==='http://www.w3.org/2000/svg'||(im.complete && im.naturalWidth>0)) && r.width>0 && r.height>0 && r.left<innerWidth && r.top<innerHeight && r.right>0 && r.bottom>0;})(), bodyHeight:document.body ? document.body.getBoundingClientRect().height : 0})") { value ->
                             last = value
-                            ready = value.contains("function") && value.contains("true") && value.contains("0")
+                            val details = JSONObject(org.json.JSONArray("[$value]").getString(0))
+                            ready = details.optString("setup") == "function" && details.optBoolean("body") && details.optInt("errors", -1) == 0 &&
+                                (index !in visibleImageExpected || details.optBoolean("imageVisible"))
                             done.countDown()
                         }
                     }
