@@ -100,6 +100,14 @@ class PlaybackService : MediaLibraryService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = librarySession
 
     private inner class LibraryCallback : MediaLibrarySession.Callback {
+        private val requestResolver = PlaybackRequestResolver(
+            loadLibrary = ::loadAudioLibrary,
+            findMatches = ::findAudioMatches,
+            lastPlayed = ::lastPlayedItem,
+            isKnownAudioUri = ::isKnownAudioUri,
+            displayName = ::displayName,
+        )
+
         override fun onGetLibraryRoot(
             session: MediaLibrarySession,
             browser: MediaSession.ControllerInfo,
@@ -335,33 +343,7 @@ class PlaybackService : MediaLibraryService() {
             mediaItems: List<MediaItem>
         ): ListenableFuture<List<MediaItem>> {
             return libraryExecutor.submit<List<MediaItem>> {
-                val resolved = mutableListOf<MediaItem>()
-                mediaItems.forEach { item ->
-                    val searchQuery = item.requestMetadata.searchQuery
-                    if (searchQuery != null) {
-                        val library = loadAudioLibrary()
-                        val selected = if (searchQuery.isBlank()) {
-                            lastPlayedItem(library) ?: library.firstOrNull()
-                        } else {
-                            findAudioMatches(searchQuery).firstOrNull()
-                        }
-                        if (selected != null) resolved += selected
-                    } else {
-                        resolveUri(item)?.let { uri ->
-                            resolved += MediaItem.Builder()
-                                .setMediaId(uri.toString())
-                                .setUri(uri)
-                                .setMediaMetadata(
-                                    item.mediaMetadata.buildUpon()
-                                        .setTitle(item.mediaMetadata.title ?: displayName(uri))
-                                        .setIsPlayable(true)
-                                        .build()
-                                )
-                                .build()
-                        }
-                    }
-                }
-                resolved
+                mediaItems.mapNotNull(requestResolver::resolveItem)
             }
         }
 
@@ -374,43 +356,8 @@ class PlaybackService : MediaLibraryService() {
             startPositionMs: Long
         ): ListenableFuture<MediaItemsWithStartPosition> {
             return libraryExecutor.submit<MediaItemsWithStartPosition> {
-                if (mediaItems.size == 1) {
-                    val selectedUri = resolveUri(mediaItems.first())
-                    if (selectedUri != null && isKnownAudioUri(selectedUri)) {
-                        val queue = loadAudioLibrary()
-                        val selectedIndex = queue.indexOfFirst { it.localConfiguration?.uri == selectedUri }
-                        if (selectedIndex >= 0) {
-                            return@submit MediaItemsWithStartPosition(queue, selectedIndex, startPositionMs)
-                        }
-                    }
-                }
-                MediaItemsWithStartPosition(
-                    mediaItems.mapNotNull { item ->
-                        resolveUri(item)?.let { uri ->
-                            MediaItem.Builder()
-                                .setMediaId(uri.toString())
-                                .setUri(uri)
-                                .setMediaMetadata(
-                                    item.mediaMetadata.buildUpon()
-                                        .setTitle(item.mediaMetadata.title ?: displayName(uri))
-                                        .setIsPlayable(true)
-                                        .build()
-                                )
-                                .build()
-                        }
-                    },
-                    startIndex,
-                    startPositionMs
-                )
+                requestResolver.resolveQueue(mediaItems, startIndex, startPositionMs)
             }
-        }
-
-        private fun resolveUri(item: MediaItem): Uri? {
-            item.localConfiguration?.uri?.let { return it }
-            item.requestMetadata.mediaUri?.let { return it }
-            val rawId = item.mediaId
-            if (!rawId.startsWith("content://") && !rawId.startsWith("file://")) return null
-            return runCatching { Uri.parse(rawId) }.getOrNull()
         }
     }
 

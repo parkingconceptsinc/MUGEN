@@ -13,8 +13,8 @@ android {
         minSdk = 26
         targetSdk = 35
         // Increment both values whenever an Android change is prepared for distribution.
-        versionCode = providers.gradleProperty("androidVersionCode").orElse("901").get().toInt()
-        versionName = providers.gradleProperty("androidVersionName").orElse("0.9.1").get()
+        versionCode = providers.gradleProperty("androidVersionCode").orElse("902").get().toInt()
+        versionName = providers.gradleProperty("androidVersionName").orElse("0.9.2").get()
     }
 
     compileOptions {
@@ -62,4 +62,5 @@ dependencies {
     implementation("me.zhanghai.android.libarchive:library:1.1.6")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.robolectric:robolectric:4.14.1")
 }
