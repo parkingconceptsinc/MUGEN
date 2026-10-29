@@ -140,8 +140,7 @@ class StudioWorkspaceDeviceTest {
         var images = reader(1280, 800)
         val manager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
         val display = manager.createVirtualDisplay("MUGEN Studio QA", 1280, 800, 160, images.surface,
-            // Private displays destroy their tasks on removal instead of migrating them to the physical display.
-            DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION)
+            DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY or DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC or DisplayManager.VIRTUAL_DISPLAY_FLAG_PRESENTATION)
         val automation = instrumentation.uiAutomation
         val oldInfo = automation.serviceInfo
         automation.serviceInfo = automation.serviceInfo.apply { flags = flags or android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS }
@@ -211,6 +210,11 @@ class StudioWorkspaceDeviceTest {
         } finally {
             automation.dropShellPermissionIdentity()
             automation.serviceInfo = oldInfo
+            // Close our fixture before removing a public display, including every assertion-failure path.
+            // Android must never migrate the fixture task onto the user's physical display.
+            instrumentation.runOnMainSync { StudioQaActivity.current.get()?.finishAndRemoveTask() }
+            StudioQaActivity.destroyed.await(10, TimeUnit.SECONDS)
+            instrumentation.waitForIdleSync()
             display.release(); images.close(); thread.quitSafely(); bitmap.getAndSet(null)?.recycle(); file.delete()
         }
     }
