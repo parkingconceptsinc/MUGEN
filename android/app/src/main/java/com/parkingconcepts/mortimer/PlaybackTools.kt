@@ -1,7 +1,18 @@
 package com.parkingconcepts.mortimer
 
 import android.content.Context
+import androidx.media3.common.Player
 import java.security.MessageDigest
+
+internal fun togglePlayback(player: Player) {
+    if (player.playWhenReady && player.playbackState != Player.STATE_ENDED && player.playbackState != Player.STATE_IDLE) {
+        player.pause()
+    } else {
+        if (player.playbackState == Player.STATE_ENDED) player.seekToDefaultPosition()
+        if (player.playbackState == Player.STATE_IDLE) player.prepare()
+        player.play()
+    }
+}
 
 internal fun mediaKey(uri: String): String = MessageDigest.getInstance("SHA-256")
     .digest(uri.toByteArray()).joinToString("") { "%02x".format(it) }

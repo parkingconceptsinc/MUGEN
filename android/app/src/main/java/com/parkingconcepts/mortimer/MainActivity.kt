@@ -924,7 +924,7 @@ private fun MiniPlayer(player: Player, current: LibraryItem, title: String?, isP
                 Text(title ?: current.title, color = c.text, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(error ?: current.artist.ifBlank { if (isPlaying) "Playing" else "Paused" }, color = if (error != null) Color(0xFFFF7A66) else c.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            RoundButton(if (isPlaying) "Ⅱ" else "▶", primary = true) { if (player.isPlaying) player.pause() else player.play() }
+            RoundButton(if (isPlaying) "Ⅱ" else "▶", primary = true) { togglePlayback(player) }
             Spacer(Modifier.width(6.dp))
             RoundButton("⏭", primary = false) { if (player.hasNextMediaItem()) player.seekToNextMediaItem() }
         }
@@ -1005,7 +1005,7 @@ private fun NowPlayingSection(player: Player, current: LibraryItem?, title: Stri
                         RoundButton("⤮", primary = player.shuffleModeEnabled, size = 40) { player.shuffleModeEnabled = !player.shuffleModeEnabled }
                     }
                     RoundButton("⏮", primary = false, size = 44) { player.seekToPrevious() }
-                    RoundButton(if (isPlaying) "Ⅱ" else "▶", primary = true, size = 62) { if (player.isPlaying) player.pause() else player.play() }
+                    RoundButton(if (isPlaying) "Ⅱ" else "▶", primary = true, size = 62) { togglePlayback(player) }
                     RoundButton("⏭", primary = false, size = 44) { if (player.hasNextMediaItem()) player.seekToNextMediaItem() }
                     key(queueVersion) {
                         val mode = player.repeatMode

@@ -161,7 +161,7 @@ internal fun VideoPlayerDialog(
         if (captionPanel) SubtitleControls(timeline, sync, captionEnabled, position, subtitleError,
             onLoad = { captionPicker.launch(arrayOf("text/*", "application/x-subrip", "application/octet-stream", "*/*")) },
             reference = reference, onReference = { reference = it }, playing = playing,
-            onTogglePlayback = { if (player.isPlaying) player.pause() else player.play() },
+            onTogglePlayback = { togglePlayback(player) },
             onSeek = { player.seekTo((player.currentPosition + it).coerceIn(0, duration.coerceAtLeast(0))) },
             onEnabled = { captionEnabled = it }, onSync = { sync = it }, onClose = { captionPanel = false })
         if (editor) VideoEditorDialog(item, duration, position, onPreview = { player.seekTo(it) }, onClose = { editor = false; view?.showController() })

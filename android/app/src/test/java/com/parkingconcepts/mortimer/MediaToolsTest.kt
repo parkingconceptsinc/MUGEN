@@ -6,6 +6,7 @@ import android.net.Uri
 import android.view.LayoutInflater
 import android.view.TextureView
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.Player
 import androidx.media3.ui.PlayerView
 import androidx.media3.ui.AspectRatioFrameLayout
 import org.junit.Assert.*
@@ -20,6 +21,24 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class MediaToolsTest {
+    @Test fun transportReplaysEndedMediaAndCanPauseWhileBuffering() {
+        fun actions(state: Int, ready: Boolean): List<String> {
+            val calls = ArrayList<String>()
+            val player = java.lang.reflect.Proxy.newProxyInstance(Player::class.java.classLoader, arrayOf(Player::class.java)) { _, method, _ ->
+                when (method.name) {
+                    "getPlayWhenReady" -> ready
+                    "getPlaybackState" -> state
+                    else -> { calls.add(method.name); null }
+                }
+            } as Player
+            togglePlayback(player)
+            return calls
+        }
+        assertEquals(listOf("seekToDefaultPosition", "play"), actions(Player.STATE_ENDED, true))
+        assertEquals(listOf("prepare", "play"), actions(Player.STATE_IDLE, false))
+        assertEquals(listOf("pause"), actions(Player.STATE_BUFFERING, true))
+        assertEquals(listOf("play"), actions(Player.STATE_READY, false))
+    }
     @Test fun repeatedPositionUpdatesDoNotRestartControllerHideTimeout() {
         val view = CountingPlayerView(RuntimeEnvironment.getApplication())
         updateVideoView(view, null, AspectRatioFrameLayout.RESIZE_MODE_FIT, false)
