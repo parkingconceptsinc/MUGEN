@@ -46,11 +46,12 @@ class PlaybackService : MediaLibraryService() {
     private val playbackHandler = Handler(Looper.getMainLooper())
     private var lastPositionSave = 0L
     @Volatile private var closing = false
+    private var pendingAudioQueue: AudioQueue? = null
     private var lastQueuedSnapshot: AudioQueue? = null
     private val queueCheckpoint = Runnable { checkpointAudioQueue() }
     private fun checkpointAudioQueue() {
         if (!::player.isInitialized) return
-        val snapshot = snapshotAudioQueue(player) ?: return
+        val snapshot = pendingAudioQueue ?: snapshotAudioQueue(player) ?: return
         if (snapshot == lastQueuedSnapshot) return
         lastQueuedSnapshot = snapshot
         libraryExecutor.execute {
@@ -126,8 +127,13 @@ class PlaybackService : MediaLibraryService() {
         player.addListener(object : Player.Listener {
             override fun onEvents(player: Player, events: Player.Events) {
                 if (!closing && events.containsAny(Player.EVENT_TIMELINE_CHANGED, Player.EVENT_MEDIA_ITEM_TRANSITION)) {
-                    playbackHandler.removeCallbacks(queueCheckpoint)
-                    playbackHandler.postDelayed(queueCheckpoint, 300)
+                    // Capture while this is still music. A rapid switch to video must
+                    // not erase a music snapshot waiting for its debounced disk write.
+                    snapshotAudioQueue(player)?.let { snapshot ->
+                        pendingAudioQueue = snapshot
+                        playbackHandler.removeCallbacks(queueCheckpoint)
+                        playbackHandler.postDelayed(queueCheckpoint, 300)
+                    }
                 }
             }
             override fun onIsPlayingChanged(isPlaying: Boolean) { if (!isPlaying) savePlaybackPosition() }
@@ -607,6 +613,7 @@ class PlaybackService : MediaLibraryService() {
         closing = true
         playbackHandler.removeCallbacksAndMessages(null)
         savePlaybackPosition()
+        if (::player.isInitialized) snapshotAudioQueue(player)?.let { pendingAudioQueue = it }
         checkpointAudioQueue()
         // Release audio effects and player even if session construction failed partway through.
         AudioEffects.release()
