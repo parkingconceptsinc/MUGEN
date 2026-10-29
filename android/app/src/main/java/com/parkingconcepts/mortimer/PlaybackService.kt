@@ -389,7 +389,8 @@ class PlaybackService : MediaLibraryService() {
             startPositionMs: Long
         ): ListenableFuture<MediaItemsWithStartPosition> {
             return libraryExecutor.submit<MediaItemsWithStartPosition> {
-                requestResolver.resolveQueue(mediaItems, startIndex, startPositionMs)
+                requestResolver.resolveQueue(mediaItems, startIndex, startPositionMs,
+                    expandSingleItem = controller.packageName != packageName)
             }
         }
     }

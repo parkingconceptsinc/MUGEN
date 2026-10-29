@@ -46,11 +46,12 @@ internal class PlaybackRequestResolver(
         requests: List<MediaItem>,
         startIndex: Int,
         startPositionMs: Long,
+        expandSingleItem: Boolean = true,
     ): MediaItemsWithStartPosition {
         val resolved = requests.mapIndexedNotNull { index, item ->
             resolveItem(item)?.let { index to it }
         }
-        if (requests.size == 1 && resolved.size == 1) {
+        if (expandSingleItem && requests.size == 1 && resolved.size == 1) {
             val selectedUri = resolved.first().second.localConfiguration?.uri
             if (selectedUri != null && isKnownAudioUri(selectedUri)) {
                 val library = loadLibrary()
