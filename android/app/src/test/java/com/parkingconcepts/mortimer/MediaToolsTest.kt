@@ -13,7 +13,6 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import java.util.concurrent.TimeUnit
 
 @UnstableApi
 @RunWith(RobolectricTestRunner::class)
@@ -63,7 +62,8 @@ class MediaToolsTest {
         val uri = "content://reader/final-position"
         LibraryStore.add(context, listOf(LibraryItem(uri, "Book", "books", "epub")))
         ReaderCheckpoints.save(context, ReadingCheckpoint(uri, "2:0.2", 0.2f, 5))
-        ReaderCheckpoints.save(context, ReadingCheckpoint(uri, "3:0.8", 0.8f, 5)).get(5, TimeUnit.SECONDS)
+        ReaderCheckpoints.save(context, ReadingCheckpoint(uri, "3:0.8", 0.8f, 5))
+        ReaderCheckpoints.awaitPendingWrites()
         assertEquals("3:0.8", LibraryStore.find(context, uri)?.position)
     }
     @Test fun mediaPositionsResetNearEndAndRemainIndependent() {

@@ -292,7 +292,7 @@ private fun MortimerApp(
     LaunchedEffect(resumeTick) {
         libraryMutex.withLock {
             try {
-                library = withContext(Dispatchers.IO) { LibraryStore.load(context) }
+                library = withContext(Dispatchers.IO) { ReaderCheckpoints.awaitPendingWrites(); LibraryStore.load(context) }
                 libraryError = null
             } catch (cancelled: CancellationException) { throw cancelled }
             catch (error: Exception) { libraryError = error.message ?: "Could not read the library." }
@@ -389,6 +389,7 @@ private fun MortimerApp(
     var queueVersion by remember { mutableIntStateOf(0) }
     var videoOpen by rememberSaveable { mutableStateOf<LibraryItem?>(null) }
     fun playVideo(item: LibraryItem) {
+        playbackError = null
         player.currentMediaItem?.let { PlaybackPositions.save(context, it.mediaId, player.currentPosition, player.duration) }
         videoOpen = item
         player.setMediaItem(mediaItemFor(item))

@@ -33,6 +33,7 @@ internal object ReaderCheckpoints {
     private val versions = ConcurrentHashMap<String, Long>()
     private val sequence = AtomicLong()
     private val writer = Executors.newSingleThreadExecutor { Thread(it, "MUGEN-reading-progress").apply { isDaemon = true } }
+    fun awaitPendingWrites() { writer.submit {}.get() }
     fun save(context: Context, checkpoint: ReadingCheckpoint): Future<*> {
         val app = context.applicationContext
         val version = sequence.incrementAndGet()
@@ -60,7 +61,7 @@ internal fun PersistReaderProgress(checkpoint: ReadingCheckpoint): String? {
     }
     DisposableEffect(owner, checkpoint.uri) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_STOP) ReaderCheckpoints.save(context, latest)
+            if (event == Lifecycle.Event.ON_PAUSE || event == Lifecycle.Event.ON_STOP) ReaderCheckpoints.save(context, latest)
         }
         owner.lifecycle.addObserver(observer)
         onDispose { owner.lifecycle.removeObserver(observer); ReaderCheckpoints.save(context, latest) }
