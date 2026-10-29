@@ -26,6 +26,14 @@ El APK de depuración se genera en `app/build/outputs/apk/debug/app-debug.apk`. 
 
 ## Estado y limitaciones
 
+### 0.11.0 (versionCode 1100)
+
+- Editor con vista previa real del recorte, giro y resolución, bucle del fragmento y borrador automático por vídeo. Si cambias ajustes después de exportar, se exige regenerar el MP4 antes de guardarlo.
+- Exportación SRT con desfase y deriva aplicados; desde el editor se recorta y se lleva el tiempo a cero para acompañar al MP4. Los subtítulos siguen siendo un archivo separado.
+- Listas de música guardadas, renombrado y eliminación, con orden y duplicados conservados. Reanudación de la última cola de audio y su pista seleccionada; las colas de vídeo no la sobrescriben.
+- Búsqueda literal en todo el EPUB/TXT, resultados por capítulo y apertura con texto resaltado. Se cancela al cambiar la consulta o cerrar; límites de 64 MiB y 500 coincidencias con aviso si el resultado es parcial.
+- Pruebas de dispositivo sin abrir actividades: decodificación de vista previa y exportación con los mismos efectos usando un clip sintético de cuatro segundos.
+
 ### 0.10.0 (versionCode 1000)
 
 - Vídeo a pantalla completa con superficie TextureView, controles nativos, botón permanente para mostrarlos y opción de fijarlos. Ajuste de imagen, velocidades, navegación entre vídeos, subtítulos integrados y reanudación por archivo.

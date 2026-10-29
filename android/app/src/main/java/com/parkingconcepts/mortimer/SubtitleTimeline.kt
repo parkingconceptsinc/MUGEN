@@ -56,8 +56,27 @@ internal class SubtitleTimeline(cues: List<SubtitleCue>) {
     }
 }
 
+/** Apply calibration once, optionally intersecting and rebasing to an edited clip. */
+internal fun SubtitleTimeline.toSrt(sync: SubtitleSync, clipStartMs: Long = 0, clipEndMs: Long = Long.MAX_VALUE): String {
+    require(clipStartMs >= 0 && clipEndMs > clipStartMs)
+    fun stamp(ms: Long): String = java.lang.String.format(java.util.Locale.ROOT, "%02d:%02d:%02d,%03d",
+        ms / 3_600_000, ms / 60_000 % 60, ms / 1000 % 60, ms % 1000)
+    var index = 0
+    return buildString {
+        for (cue in cues) {
+            val start = maxOf(clipStartMs, sync.videoTime(cue.startMs))
+            val end = minOf(clipEndMs, sync.videoTime(cue.endMs))
+            if (end <= start) continue
+            append(++index).append('\n').append(stamp(start - clipStartMs)).append(" --> ")
+                .append(stamp(end - clipStartMs)).append('\n')
+            append(cue.text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+                .append("\n\n")
+        }
+    }
+}
+
 internal fun subtitleTimestamp(raw: String): Long? {
-    val match = Regex("^(?:(\\d{1,3}):)?(\\d{2}):(\\d{2})[.,](\\d{1,3})$").matchEntire(raw) ?: return null
+    val match = Regex("^(?:(\\d{1,6}):)?(\\d{2}):(\\d{2})[.,](\\d{1,3})$").matchEntire(raw) ?: return null
     val hours = match.groupValues[1].toLongOrNull() ?: 0
     val minutes = match.groupValues[2].toLong()
     val seconds = match.groupValues[3].toLong()
