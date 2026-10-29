@@ -495,6 +495,7 @@ private fun MortimerApp(
                     }
                 }
                 libraryError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp)) }
+                LibraryAccessNotice(library, resumeTick)
                 Spacer(Modifier.height(if (section == "editor") 0.dp else 12.dp))
                 AnimatedContent(
                     targetState = section,
@@ -596,10 +597,10 @@ private fun MortimerApp(
     }
 
     leaveEditorFor?.let { target -> AlertDialog(onDismissRequest = { leaveEditorFor = null },
-        title = { Text(if (editorSaving) "Guardando MP4" else "¿Cancelar exportación y salir?") },
-        text = { Text(if (editorSaving) "Espera a que termine de guardarse el archivo." else "El montaje se conserva. Se cancelará únicamente el MP4 en proceso.") },
-        confirmButton = { TextButton(enabled = !editorSaving, onClick = { leaveEditorFor = null; section = target }) { Text("Salir") } },
-        dismissButton = { TextButton(onClick = { leaveEditorFor = null }) { Text("Seguir en Editor") } }) }
+        title = { Text(if (editorSaving) "Saving MP4" else "Cancel export and leave?") },
+        text = { Text(if (editorSaving) "Wait until the file finishes saving." else "Your project is preserved. The current MP4 render will be canceled.") },
+        confirmButton = { TextButton(enabled = !editorSaving, onClick = { leaveEditorFor = null; section = target }) { Text("Leave") } },
+        dismissButton = { TextButton(onClick = { leaveEditorFor = null }) { Text("Stay in Editor") } }) }
     if (playlistsOpen) MusicPlaylistDialog(player, onClose = { playlistsOpen = false })
     videoOpen?.let { item ->
         val videos = library.filter { it.kind == "videos" }

@@ -1,4 +1,4 @@
-# MUGEN 0.12.0: vídeo, audio y lectura
+# MUGEN 0.12.1: vídeo, audio y lectura
 
 ## Vídeo a pantalla completa
 
@@ -21,7 +21,9 @@ La sincronización por referencias no utiliza reconocimiento de voz. El texto se
 
 ## MUGEN Studio: pestaña Editor
 
-«Editor» es una sección propia en la barra de pestañas y en el menú lateral. «Abrir en Editor», desde un vídeo, lleva su archivo y cabezal al estudio. El espacio se organiza en medios/proyectos, visor, línea de tiempo e inspector, tomando como referencia el flujo de [DaVinci Resolve](https://www.blackmagicdesign.com/products/davinciresolve/edit). En tablet se muestran visor e inspector en paralelo; en teléfono vertical se apilan. «Ampliar visor» deja más espacio para revisar el montaje.
+«Editor» es una sección propia en la barra de pestañas y en el menú lateral. «Open in Editor», desde un vídeo, lleva su archivo y cabezal al estudio. El espacio se organiza en medios/proyectos, visor, línea de tiempo e inspector, tomando como referencia el flujo de [DaVinci Resolve](https://www.blackmagicdesign.com/products/davinciresolve/edit). En tablet se muestran visor e inspector en paralelo; en teléfono vertical se apilan. «Expand viewer» deja más espacio para revisar el montaje. Los textos del editor están en inglés, como el resto de los controles de la aplicación.
+
+La importación comprueba primero el permiso y la apertura del archivo. Si Android retiró el acceso, «Reconnect folder» permite concederlo de nuevo a la carpeta original y reintenta la importación. «Retry import» y «Select video again» permiten recuperarse también de permisos de archivos sueltos revocados. Una importación fallida conserva el proyecto anterior completo. El aviso «Reconnect folders» recupera el acceso de la biblioteca sin cambiar sus rutas ni el progreso. Los metadatos usan MediaExtractor como alternativa cuando MediaMetadataRetriever no reconoce un contenedor; si tampoco se encuentra una pista de vídeo válida, se explica el fallo.
 
 - **Proyectos y medios:** importar vídeos de la biblioteca o del selector Android, añadir clips, renombrar proyectos y reabrirlos. Los proyectos tienen escritura atómica y respaldo independiente. Si ambos son ilegibles, se impide sobrescribirlos. Los originales no se copian ni modifican.
 - **Montaje:** hasta 64 clips secuenciales, dividir en el cabezal, duplicar, eliminar y mover a izquierda/derecha. La eliminación cierra el hueco. La línea de tiempo tiene zoom 1–16×, desplazamiento horizontal, selección y búsqueda por cabezal. Las bandas V1/A1 representan el vídeo y el estado del audio; no son una forma de onda medida.
@@ -69,6 +71,8 @@ gradle connectedDebugAndroidTest -PdevicePreview=true
 `MediaPipelineDeviceTest` usa un clip sintético incluido en los recursos de prueba; comprueba fotogramas de vista previa con giro y tamaño, duración del recorte y exportación sin pista de audio. No pide foco de audio y limpia los archivos temporales. El dispositivo debe admitir los códecs y efectos solicitados.
 
 Verificación local de 0.12.0: 90 pruebas unitarias correctas, lint sin errores y cinco pruebas de dispositivo correctas en Samsung SM-X900 con Android 16/API 36, usando Preview. Se prueban el montaje con velocidades distintas y audio tras un primer clip mudo, el último salto en una secuencia rápida y la conservación del fotograma al cambiar ajustes. El MP4 sintético se decodificó además fuera de Android: RMS cero en la introducción muda y audio presente en el segundo clip.
+
+Verificación de 0.12.1: 96 pruebas unitarias, lint sin errores y las cinco pruebas de dispositivo correctas. La prueba de interfaz empieza sin proyecto: importa un archivo inaccesible, comprueba las acciones de recuperación y después carga un clip sintético por el flujo normal del editor. Una comprobación manual optativa importa los metadatos de un vídeo real sin mostrar imágenes ni escribir proyectos o biblioteca. El auxiliar de migración de carpetas también es optativo: exige autorización explícita, tres raíces concretas que Preview ya tenga concedidas y un receptor con la misma firma. Solo existe en androidTest; no se ejecuta en las pruebas ordinarias ni añade una puerta de acceso al APK distribuido.
 
 La prueba de interfaz usa una pantalla virtual secundaria con contenido sintético, sin abrir la biblioteca del usuario ni guardar proyectos. Verifica dividir/deshacer/rehacer, inspector, giro y visor ampliado, y guarda capturas a 1280×800, 420×900 y 860×440. Requiere Android 14/API 34 y pantallas secundarias; la actividad de prueba solo existe en debug, no está exportada, exige el identificador de su pantalla virtual y se cierra si cambia de pantalla. La prueba cierra su actividad y espera su destrucción antes de retirar la pantalla, también si falla una aserción. Estas capturas se revisaron visualmente; no constituyen una prueba de todos los gestos ni de todos los formatos personales.
 

@@ -33,11 +33,11 @@ internal fun StudioTimeline(project: StudioProject, selected: String, position: 
     val index = project.clips.indexOfFirst { it.id == selected }
     Column(Modifier.fillMaxWidth().background(StudioPanel, RoundedCornerShape(10.dp)).padding(8.dp)) {
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-            TextButton(enabled = !locked, onClick = onSplit) { Text("✂ Dividir") }
-            TextButton(enabled = !locked && index > 0, onClick = { onMove(-1) }) { Text("← Mover") }
-            TextButton(enabled = !locked && index < project.clips.lastIndex, onClick = { onMove(1) }) { Text("Mover →") }
-            TextButton(enabled = !locked && project.clips.size < 64, onClick = onDuplicate) { Text("Duplicar") }
-            TextButton(enabled = !locked && project.clips.size > 1, onClick = onDelete) { Text("Eliminar") }
+            TextButton(enabled = !locked, onClick = onSplit) { Text("✂ Split") }
+            TextButton(enabled = !locked && index > 0, onClick = { onMove(-1) }) { Text("← Move") }
+            TextButton(enabled = !locked && index < project.clips.lastIndex, onClick = { onMove(1) }) { Text("Move →") }
+            TextButton(enabled = !locked && project.clips.size < 64, onClick = onDuplicate) { Text("Duplicate") }
+            TextButton(enabled = !locked && project.clips.size > 1, onClick = onDelete) { Text("Delete") }
             TextButton(enabled = zoom > 1, onClick = { zoom /= 2 }) { Text("−") }
             Text("${zoom}×", Modifier.padding(top = 15.dp), fontSize = 12.sp)
             TextButton(enabled = zoom < 16, onClick = { zoom *= 2 }) { Text("＋") }
@@ -66,7 +66,7 @@ internal fun StudioTimeline(project: StudioProject, selected: String, position: 
                             Text("V1 · ${i + 1} ${clip.source.title}", fontSize = 11.sp, lineHeight = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             if (clipWidth >= 65.dp && !compact) Text("${clip.edit.speed}× · ${studioTime(clip.duration)}", fontSize = 10.sp, lineHeight = 12.sp, maxLines = 1)
                             Spacer(Modifier.weight(1f))
-                            Text(if (clip.edit.mute || clip.edit.volume == 0f) "A1 · Silencio" else "A1 · ${(clip.edit.volume * 100).toInt()}%", fontSize = 10.sp, lineHeight = 12.sp, maxLines = 1,
+                            Text(if (clip.edit.mute || clip.edit.volume == 0f) "A1 · Muted" else "A1 · ${(clip.edit.volume * 100).toInt()}%", fontSize = 10.sp, lineHeight = 12.sp, maxLines = 1,
                                 modifier = Modifier.fillMaxWidth().background(Color(0xFF204C40)))
                         }
                     }
@@ -81,10 +81,10 @@ internal fun StudioTimeline(project: StudioProject, selected: String, position: 
             onValueChange = { onSeek((it * project.duration).toLong()) }, enabled = !locked,
             modifier = Modifier.fillMaxWidth().height(if (compact) 32.dp else 48.dp), valueRange = 0f..1f)
         if (!compact) Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Cabezal · ${studioTime(position)}", fontSize = 11.sp)
+            Text("Playhead · ${studioTime(position)}", fontSize = 11.sp)
             if (zoom > 1) Row {
-                TextButton(onClick = { scope.launch { scroll.animateScrollTo((scroll.value - scroll.viewportSize / 2).coerceAtLeast(0)) } }) { Text("‹ Vista") }
-                TextButton(onClick = { scope.launch { scroll.animateScrollTo((scroll.value + scroll.viewportSize / 2).coerceAtMost(scroll.maxValue)) } }) { Text("Vista ›") }
+                TextButton(onClick = { scope.launch { scroll.animateScrollTo((scroll.value - scroll.viewportSize / 2).coerceAtLeast(0)) } }) { Text("‹ View") }
+                TextButton(onClick = { scope.launch { scroll.animateScrollTo((scroll.value + scroll.viewportSize / 2).coerceAtMost(scroll.maxValue)) } }) { Text("View ›") }
             }
             Text("Total · ${studioTime(project.duration)}", fontSize = 11.sp)
         }

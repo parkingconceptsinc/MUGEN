@@ -26,6 +26,13 @@ El APK de depuración se genera en `app/build/outputs/apk/debug/app-debug.apk`. 
 
 ## Estado y limitaciones
 
+### 0.12.1 (versionCode 1201)
+
+- Editor en inglés, coherente con los controles de la aplicación.
+- Comprobación del acceso al archivo antes de leer metadatos; los permisos caducados ofrecen reconectar la carpeta, reintentar o seleccionar el vídeo de nuevo sin reemplazar el proyecto actual.
+- Aviso para recuperar acceso a carpetas guardadas tras una reinstalación. Se exige elegir la carpeta original y se conservan biblioteca y progreso.
+- Lectura alternativa con MediaExtractor cuando MediaMetadataRetriever rechaza un contenedor. Pruebas de importación desde la interfaz y de permisos revocados, recuperación y cancelación.
+
 ### 0.12.0 (versionCode 1200)
 
 - MUGEN Studio sustituye el modal anterior por la pestaña Editor, con visor ampliable, línea de tiempo e inspector para tablet y teléfono.

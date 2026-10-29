@@ -15,8 +15,8 @@ internal data class StudioSource(val uri: String, val title: String, val duratio
     val fps: Double = 30.0, val estimatedFps: Boolean = true) {
     fun validate(): StudioSource {
         require(Uri.parse(uri).scheme in listOf("content", "file") && uri.length <= 8192 && title.length <= 1024)
-        require(duration in MIN_TRIM_MS..604_800_000) { "El vídeo «$title» debe durar entre 0,5 segundos y 7 días." }
-        require(width in 0..32768 && height in 0..32768 && fps.isFinite() && fps in 1.0..240.0) { "Dimensiones o frecuencia de vídeo no compatibles: $title" }
+        require(duration in MIN_TRIM_MS..604_800_000) { "The video «$title» must be between 0.5 seconds and 7 days long." }
+        require(width in 0..32768 && height in 0..32768 && fps.isFinite() && fps in 1.0..240.0) { "Unsupported video dimensions or frame rate: $title" }
         return this
     }
     fun snap(time: Long) = ((time * fps / 1000).roundToLong() * 1000 / fps).roundToLong().coerceIn(0, duration)
@@ -31,9 +31,9 @@ internal data class StudioProject(val id: String = UUID.randomUUID().toString(),
     val duration: Long get() = clips.sumOf { it.duration }
     fun validate(): StudioProject {
         UUID.fromString(id)
-        require(name.isNotBlank() && name.length <= 80 && clips.size in 1..64) { "El proyecto admite de 1 a 64 clips." }
+        require(name.isNotBlank() && name.length <= 80 && clips.size in 1..64) { "A project needs between 1 and 64 clips." }
         clips.forEach { it.validate() }
-        require(clips.map { it.id }.distinct().size == clips.size && duration <= 86_400_000) { "Proyecto demasiado largo o clips duplicados sin identificador propio." }
+        require(clips.map { it.id }.distinct().size == clips.size && duration <= 86_400_000) { "Project is too long or clip identifiers are duplicated." }
         require(aspect in listOf("source", "16:9", "9:16", "1:1") && height in listOf(0, 720, 1080))
         return this
     }
@@ -55,11 +55,11 @@ internal data class StudioProject(val id: String = UUID.randomUUID().toString(),
     }
     fun replace(id: String, edit: VideoEditSpec) = copy(clips = clips.map { if (it.id == id) it.copy(edit = edit.validate(it.source.duration)) else it }).validate()
     fun split(time: Long): StudioProject {
-        require(clips.size < 64) { "Máximo 64 clips." }
+        require(clips.size < 64) { "Up to 64 clips are supported." }
         val at = locate(time)
         val clip = clips[at.index]
         val source = clip.source.snap(at.sourceMs)
-        require(source - clip.edit.startMs >= MIN_TRIM_MS && clip.edit.endMs - source >= MIN_TRIM_MS) { "Deja al menos 0,5 s de fuente a cada lado del corte." }
+        require(source - clip.edit.startMs >= MIN_TRIM_MS && clip.edit.endMs - source >= MIN_TRIM_MS) { "Keep at least 0.5 source seconds on each side of the cut." }
         val pieces = listOf(clip.copy(edit = clip.edit.copy(endMs = source)), clip.copy(id = UUID.randomUUID().toString(), edit = clip.edit.copy(startMs = source)))
         return copy(clips = clips.take(at.index) + pieces + clips.drop(at.index + 1)).validate()
     }
@@ -129,24 +129,29 @@ internal fun parseStudioTime(value: String): Long? {
 
 internal fun readStudioSource(context: Context, uri: Uri, title: String): StudioSource {
     val reader = MediaMetadataRetriever()
+    val extractor = MediaExtractor()
     try {
-        reader.setDataSource(context, uri)
-        val duration = reader.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: error("No se puede leer la duración de $title")
-        val extractor = MediaExtractor()
-        val fps = try {
+        val metadataReady = runCatching { reader.setDataSource(context, uri) }.isSuccess
+        fun metadata(key: Int) = if (metadataReady) reader.extractMetadata(key) else null
+        val track = runCatching {
             extractor.setDataSource(context, uri, null)
             (0 until extractor.trackCount).asSequence().map { extractor.getTrackFormat(it) }
-                .firstOrNull { it.getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true }?.let { format ->
-                    runCatching { format.getInteger(MediaFormat.KEY_FRAME_RATE).toDouble() }.getOrElse {
-                        runCatching { format.getFloat(MediaFormat.KEY_FRAME_RATE).toDouble() }.getOrNull()
-                    }
-                }?.takeIf { it.isFinite() && it in 1.0..240.0 }
-        } catch (_: Exception) { null } finally { extractor.release() }
-        val rotation = reader.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
-        val w = reader.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
-        val h = reader.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
-        require(w > 0 && h > 0) { "«$title» no contiene una pista de vídeo legible." }
+                .firstOrNull { it.getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true }
+        }.getOrNull()
+        fun integer(key: String) = track?.let { runCatching { it.getInteger(key) }.getOrNull() }
+        val fps = track?.let { format ->
+            runCatching { format.getInteger(MediaFormat.KEY_FRAME_RATE).toDouble() }.getOrElse {
+                runCatching { format.getFloat(MediaFormat.KEY_FRAME_RATE).toDouble() }.getOrNull()
+            }
+        }?.takeIf { it.isFinite() && it in 1.0..240.0 }
+        val duration = metadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull()?.takeIf { it > 0 }
+            ?: track?.let { runCatching { it.getLong(MediaFormat.KEY_DURATION) / 1000 }.getOrNull() }
+            ?: error("Could not read this video's duration. Select it again or try another format.")
+        val rotation = metadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: integer(MediaFormat.KEY_ROTATION) ?: 0
+        val w = metadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull()?.takeIf { it > 0 } ?: integer(MediaFormat.KEY_WIDTH) ?: 0
+        val h = metadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull()?.takeIf { it > 0 } ?: integer(MediaFormat.KEY_HEIGHT) ?: 0
+        require(w > 0 && h > 0) { "This file does not contain a readable video track. Select another video." }
         return StudioSource(uri.toString(), title.take(1024), duration, if (rotation % 180 == 0) w else h,
             if (rotation % 180 == 0) h else w, fps ?: 30.0, fps == null).validate()
-    } finally { reader.release() }
+    } finally { reader.release(); extractor.release() }
 }

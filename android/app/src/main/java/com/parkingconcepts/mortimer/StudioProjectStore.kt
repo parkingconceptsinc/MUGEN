@@ -27,16 +27,16 @@ internal object StudioProjectStore {
                 return StudioSavedProject(project, json.optLong("playhead", 0).coerceIn(0, project.duration))
             } catch (_: Exception) { /* Preserve damaged copies for recovery. */ }
         }
-        throw IOException("No se puede abrir el proyecto ni su respaldo. Se han conservado ambos archivos.")
+        throw IOException("Could not open the project or its recovery copy. Both files were preserved.")
     }
     @Synchronized fun save(context: Context, project: StudioProject, playhead: Long) {
         project.validate()
         val target = file(context, project.id)
         if (listOf(target, File(target.path + ".bak"), File(target.path + ".recovery"), File(target.path + ".recovery.bak")).any { it.exists() }) load(context, project.id)
         val bytes = project.json().put("playhead", playhead.coerceIn(0, project.duration)).toString().toByteArray(Charsets.UTF_8)
-        require(bytes.size <= MAX_METADATA_BYTES) { "Proyecto demasiado grande." }
+        require(bytes.size <= MAX_METADATA_BYTES) { "Project is too large." }
         val known = list(context)
-        if (!target.exists() && project.id !in known) require(known.size < 50) { "Máximo 50 proyectos. Elimina uno para crear otro." }
+        if (!target.exists() && project.id !in known) require(known.size < 50) { "Up to 50 projects are supported. Remove one before creating another." }
         atomic(target, bytes); runCatching { atomic(File(target.path + ".recovery"), bytes) }
         context.getSharedPreferences("video_studio", Context.MODE_PRIVATE).edit().putString("last", project.id).apply()
     }
@@ -50,7 +50,7 @@ internal object StudioProjectStore {
     @Synchronized fun delete(context: Context, id: String) {
         val target = file(context, id)
         listOf(target, File(target.path + ".bak"), File(target.path + ".new"), File(target.path + ".recovery"), File(target.path + ".recovery.bak"), File(target.path + ".recovery.new"))
-            .forEach { if (it.exists() && !it.delete()) throw IOException("No se pudo eliminar el proyecto.") }
+            .forEach { if (it.exists() && !it.delete()) throw IOException("Could not delete the project.") }
         val prefs = context.getSharedPreferences("video_studio", Context.MODE_PRIVATE)
         if (prefs.getString("last", null) == id) prefs.edit().remove("last").apply()
     }
