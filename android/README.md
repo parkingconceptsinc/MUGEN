@@ -26,6 +26,15 @@ El APK de depuración se genera en `app/build/outputs/apk/debug/app-debug.apk`. 
 
 ## Estado y limitaciones
 
+### 0.9.3 (versionCode 903)
+
+- Biblioteca con escritura atómica, copia de respaldo y recuperación del último estado válido. Si ambas copias están dañadas, se bloquea la escritura y se muestra el error para evitar pérdidas silenciosas.
+- Cambios de biblioteca sobre el estado persistido más reciente; importaciones sin duplicados, cancelables y con progreso. Los errores de acceso a carpetas ya no se presentan como una importación vacía correcta.
+- Lectores y portadas con límites de memoria y caché, limpieza de recursos al cancelar y protección frente a cierres durante una decodificación.
+- Las descargas de actualización conservan su estado al recrearse la pantalla, permiten reintentos y comprueban el paquete y la versión además del checksum.
+
+Consulta [ROBUSTNESS_REVIEW.md](ROBUSTNESS_REVIEW.md) para el alcance, pruebas y comprobaciones pendientes en dispositivos.
+
 ### 0.9.2 (versionCode 902)
 
 - Las órdenes de voz de Android Auto se resuelven también al reemplazar la cola. Una búsqueda selecciona la canción encontrada; una orden vacía usa la última canción reproducida o la primera disponible.

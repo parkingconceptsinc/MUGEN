@@ -18,7 +18,7 @@ class EpubPackage(
             Regex("""(?:^|\s)$name\s*=\s*["']([^"']*)["']""", RegexOption.IGNORE_CASE).find(tag)?.groupValues?.get(1)
 
         private fun text(zip: ZipFile, path: String): String? =
-            zip.getEntry(path)?.let { e -> zip.getInputStream(e).use { it.readBytes().toString(Charsets.UTF_8) } }
+            zip.getEntry(path)?.let { e -> zip.getInputStream(e).use { it.readBytesLimited(MAX_METADATA_BYTES).toString(Charsets.UTF_8) } }
 
         private fun plain(html: String): String =
             Html.fromHtml(html, Html.FROM_HTML_MODE_COMPACT).toString().replace(Regex("\\s+"), " ").trim()

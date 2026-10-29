@@ -33,7 +33,6 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.security.MessageDigest
 import java.util.zip.ZipFile
-import java.util.zip.ZipInputStream
 
 /** Cover thumbnails for the shelves, extracted once and kept in app storage. */
 object Covers {
@@ -68,7 +67,9 @@ object Covers {
         val none = File(dir(context), "$name.none")
         if (!jpg.exists()) {
             if (none.exists()) return null
-            val extracted = runCatching { extract(context, item) }.getOrNull()
+            // Access and I/O failures may be temporary (for example a detached USB).
+            // Only remember "no cover" after a successful inspection of the file.
+            val extracted = try { extract(context, item) } catch (_: Exception) { return null }
             if (extracted == null) {
                 runCatching { none.createNewFile() }
                 return null
@@ -84,8 +85,7 @@ object Covers {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         if (bounds.outWidth <= 0) return null
-        var sample = 1
-        while (bounds.outWidth / (sample * 2) >= SIZE && bounds.outHeight / (sample * 2) >= SIZE) sample *= 2
+        val sample = imageSampleSize(bounds.outWidth, bounds.outHeight, SIZE, SIZE)
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
     }
 
@@ -126,36 +126,31 @@ object Covers {
     }
 
     private fun zipFirstImage(context: Context, item: LibraryItem): Bitmap? {
-        val resolver = context.contentResolver
-        val names = ArrayList<String>()
-        resolver.openInputStream(item.androidUri)?.use { input ->
-            ZipInputStream(input).use { zip ->
-                while (true) {
-                    val e = zip.nextEntry ?: break
-                    if (!e.isDirectory && extensionOf(e.name) in IMAGE_EXTENSIONS && !e.name.startsWith("__MACOSX")) names.add(e.name)
-                }
+        val tmp = File.createTempFile("cover_", ".zip", context.cacheDir)
+        try {
+            context.contentResolver.openInputStream(item.androidUri)?.use { input ->
+                tmp.outputStream().use { output -> input.copyLimitedTo(output, MAX_CACHE_BYTES) }
+            } ?: return null
+            // Enumerating ZipFile's directory avoids decompressing every intervening
+            // entry just to find the first cover in natural order.
+            ZipFile(tmp).use { zip ->
+                val first = zip.entries().asSequence().filter {
+                    !it.isDirectory && extensionOf(it.name) in IMAGE_EXTENSIONS &&
+                        !it.name.startsWith("__MACOSX") && !it.name.substringAfterLast('/').startsWith('.')
+                }.minByOrNull { naturalKey(it.name) } ?: return null
+                return scaled(zip.getInputStream(first).use { it.readBytesLimited(MAX_IMAGE_BYTES) })
             }
-        }
-        val first = names.minByOrNull { naturalKey(it) } ?: return null
-        resolver.openInputStream(item.androidUri)?.use { input ->
-            ZipInputStream(input).use { zip ->
-                while (true) {
-                    val e = zip.nextEntry ?: break
-                    if (e.name == first) return scaled(zip.readBytes())
-                }
-            }
-        }
-        return null
+        } finally { tmp.delete() }
     }
 
     private fun epubCover(context: Context, item: LibraryItem): Bitmap? {
         val tmp = File(context.cacheDir, "cover_${System.nanoTime()}.epub")
         try {
-            context.contentResolver.openInputStream(item.androidUri)?.use { input -> tmp.outputStream().use { input.copyTo(it) } } ?: return null
+            context.contentResolver.openInputStream(item.androidUri)?.use { input -> tmp.outputStream().use { output -> input.copyLimitedTo(output, MAX_CACHE_BYTES) } } ?: return null
             ZipFile(tmp).use { zip ->
                 val path = EpubPackage.read(zip).cover ?: return null
                 val entry = zip.getEntry(path) ?: return null
-                return scaled(zip.getInputStream(entry).use { it.readBytes() })
+                return scaled(zip.getInputStream(entry).use { it.readBytesLimited(MAX_IMAGE_BYTES) })
             }
         } finally {
             tmp.delete()

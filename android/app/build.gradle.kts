@@ -13,8 +13,8 @@ android {
         minSdk = 26
         targetSdk = 35
         // Increment both values whenever an Android change is prepared for distribution.
-        versionCode = providers.gradleProperty("androidVersionCode").orElse("902").get().toInt()
-        versionName = providers.gradleProperty("androidVersionName").orElse("0.9.2").get()
+        versionCode = providers.gradleProperty("androidVersionCode").orElse("903").get().toInt()
+        versionName = providers.gradleProperty("androidVersionName").orElse("0.9.3").get()
     }
 
     compileOptions {

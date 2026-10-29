@@ -97,7 +97,7 @@ fun ShelfSection(
     library: List<LibraryItem>,
     onAddFiles: () -> Unit,
     onAddFolder: () -> Unit,
-    onChange: (List<LibraryItem>) -> Unit,
+    onChange: ((List<LibraryItem>) -> List<LibraryItem>) -> Unit,
     openExternal: (LibraryItem) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -199,16 +199,16 @@ fun ShelfSection(
             onOpen = { fromStart -> menu = null; openReader(context, item, fromStart, openExternal) },
             onMark = { read ->
                 menu = null
-                onChange(library.map { if (it.uri == item.uri) it.copy(progress = if (read) 1f else 0f, position = if (read) (if (it.format == "epub" || it.format == "txt") "${(it.pages - 1).coerceAtLeast(0)}:1" else (it.pages - 1).coerceAtLeast(0).toString()) else "", openedAt = if (read) System.currentTimeMillis() else 0) else it })
+                onChange { list -> list.map { if (it.uri == item.uri) it.copy(progress = if (read) 1f else 0f, position = if (read) (if (it.format == "epub" || it.format == "txt") "${(it.pages - 1).coerceAtLeast(0)}:1" else (it.pages - 1).coerceAtLeast(0).toString()) else "", openedAt = if (read) System.currentTimeMillis() else 0) else it } }
             },
             onMove = {
                 menu = null
-                onChange(library.map { if (it.uri == item.uri) it.copy(kind = if (it.kind == "books") "comics" else "books") else it })
+                onChange { list -> list.map { if (it.uri == item.uri) it.copy(kind = if (it.kind == "books") "comics" else "books") else it } }
             },
             onRemove = {
                 menu = null
                 Covers.forget(context, item.uri)
-                onChange(library.filter { it.uri != item.uri })
+                onChange { list -> list.filter { it.uri != item.uri } }
             },
         )
     }

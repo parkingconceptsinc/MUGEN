@@ -55,6 +55,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -152,9 +153,9 @@ private fun ComicReader(
     var loading by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(key) {
-        withContext(Dispatchers.IO) {
-            runCatching { openPageSource(context, uri, format) { pct -> loading = pct } }
-        }.onSuccess { source = it }.onFailure { error = it.message ?: "Could not open this file." }
+        runCatching { openResourceOnIo { openPageSource(context, uri, format) { pct -> loading = pct } } }
+            .onSuccess { source = it }
+            .onFailure { if (it is CancellationException) throw it; error = it.message ?: "Could not open this file." }
     }
     DisposableEffect(source) {
         val s = source
