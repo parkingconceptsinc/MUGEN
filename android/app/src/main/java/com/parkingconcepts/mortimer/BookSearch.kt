@@ -48,7 +48,7 @@ internal suspend fun searchBook(chapters: List<String>, query: String, read: (St
         if (resource == null) { unreadable++; continue }
         bytes += resource.size
         if (bytes > maxBytes) return BookSearchResult(results, searched, true, unreadable)
-        val text = plainText(resource.toString(Charsets.UTF_8))
+        val text = plainText(decodeBookMarkup(resource))
         var at = text.indexOf(term, ignoreCase = true)
         val first = at
         var chapterCount = 0

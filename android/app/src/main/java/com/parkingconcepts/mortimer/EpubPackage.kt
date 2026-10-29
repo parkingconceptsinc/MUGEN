@@ -14,11 +14,17 @@ class EpubPackage(
     data class TocEntry(val label: String, val href: String, val depth: Int)
 
     companion object {
+        private fun xmlValue(value: String): String = Regex("&(#x[0-9a-fA-F]+|#[0-9]+|amp|lt|gt|quot|apos);").replace(value) { match ->
+            when (val entity = match.groupValues[1]) {
+                "amp" -> "&"; "lt" -> "<"; "gt" -> ">"; "quot" -> "\""; "apos" -> "'"
+                else -> runCatching { String(Character.toChars(if (entity.startsWith("#x")) entity.drop(2).toInt(16) else entity.drop(1).toInt())) }.getOrDefault(match.value)
+            }
+        }
         private fun attr(tag: String, name: String): String? =
-            Regex("""(?:^|\s)$name\s*=\s*["']([^"']*)["']""", RegexOption.IGNORE_CASE).find(tag)?.groupValues?.get(1)
+            Regex("""(?:^|\s)$name\s*=\s*["']([^"']*)["']""", RegexOption.IGNORE_CASE).find(tag)?.groupValues?.get(1)?.let(::xmlValue)
 
         private fun text(zip: ZipFile, path: String): String? =
-            zip.getEntry(path)?.let { e -> zip.getInputStream(e).use { it.readBytesLimited(MAX_METADATA_BYTES).toString(Charsets.UTF_8) } }
+            zip.getEntry(path)?.let { e -> zip.getInputStream(e).use { decodeBookMarkup(it.readBytesLimited(MAX_METADATA_BYTES)) } }
 
         private fun plain(html: String): String =
             Html.fromHtml(html, Html.FROM_HTML_MODE_COMPACT).toString().replace(Regex("\\s+"), " ").trim()
@@ -27,6 +33,7 @@ class EpubPackage(
         fun resolve(base: String, href: String): String {
             val clean = Uri.decode(href.substringBefore('#'))
             val fragment = href.substringAfter('#', "")
+            if (clean.isEmpty()) return base.substringBefore('#') + if (fragment.isEmpty()) "" else "#${Uri.decode(fragment)}"
             val parts = ArrayList<String>()
             val dir = base.substringBeforeLast('/', "")
             (if (clean.startsWith("/")) clean.drop(1) else if (dir.isEmpty()) clean else "$dir/$clean").split('/').forEach { p ->
@@ -37,14 +44,14 @@ class EpubPackage(
                 }
             }
             val path = parts.joinToString("/")
-            return if (fragment.isNotEmpty()) "$path#$fragment" else path
+            return if (fragment.isNotEmpty()) "$path#${Uri.decode(fragment)}" else path
         }
 
         fun read(zip: ZipFile): EpubPackage {
-            val container = text(zip, "META-INF/container.xml") ?: error("EPUB no válido: falta container.xml.")
+            val container = text(zip, "META-INF/container.xml") ?: error("Invalid EPUB: container.xml is missing.")
             val opfPath = Regex("""full-path\s*=\s*["']([^"']+)["']""").find(container)?.groupValues?.get(1)
-                ?: error("No se encontró el paquete de lectura EPUB.")
-            val opf = text(zip, opfPath) ?: error("Falta el archivo OPF.")
+                ?.let(::xmlValue) ?: error("The EPUB reading package could not be found.")
+            val opf = text(zip, opfPath) ?: error("The EPUB package file is missing.")
 
             data class Item(val id: String, val href: String, val type: String, val props: String)
             val items = Regex("""<(?:\w+:)?item\b([^>]*)>""", RegexOption.IGNORE_CASE).findAll(opf).mapNotNull { m ->
@@ -101,7 +108,7 @@ class EpubPackage(
                     Regex("""<navPoint\b.*?<text>(.*?)</text>.*?<content\b[^>]*src\s*=\s*["']([^"']+)["']""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
                         .findAll(xml).forEach { m ->
                             val label = plain(m.groupValues[1])
-                            if (label.isNotBlank()) toc.add(TocEntry(label, resolve(ncx.href, m.groupValues[2]), 0))
+                            if (label.isNotBlank()) toc.add(TocEntry(label, resolve(ncx.href, xmlValue(m.groupValues[2])), 0))
                         }
                 }
             }

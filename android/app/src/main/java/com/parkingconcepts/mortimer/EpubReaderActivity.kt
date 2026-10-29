@@ -11,6 +11,7 @@ import android.os.Looper
 import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
+import android.webkit.WebResourceError
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
@@ -59,10 +60,10 @@ import java.util.zip.ZipFile
 private data class BookTheme(val label: String, val bg: Color, val fg: Color, val link: String, val css: String, val cssFg: String)
 
 private val BOOK_THEMES = linkedMapOf(
-    "dark" to BookTheme("Oscuro", Color(0xFF121218), Color(0xFFE8E6E3), "#ff9a76", "#121218", "#e8e6e3"),
-    "black" to BookTheme("Negro", Color(0xFF000000), Color(0xFFD6D6D6), "#ff9a76", "#000000", "#d6d6d6"),
+    "dark" to BookTheme("Dark", Color(0xFF121218), Color(0xFFE8E6E3), "#ff9a76", "#121218", "#e8e6e3"),
+    "black" to BookTheme("Black", Color(0xFF000000), Color(0xFFD6D6D6), "#ff9a76", "#000000", "#d6d6d6"),
     "sepia" to BookTheme("Sepia", Color(0xFFF4ECD8), Color(0xFF5B4636), "#a0522d", "#f4ecd8", "#5b4636"),
-    "light" to BookTheme("Claro", Color(0xFFFFFFFF), Color(0xFF1A1A1A), "#c94f2d", "#ffffff", "#1a1a1a"),
+    "light" to BookTheme("Light", Color(0xFFFFFFFF), Color(0xFF1A1A1A), "#c94f2d", "#ffffff", "#1a1a1a"),
 )
 
 private val BOOK_FONTS = linkedMapOf(
@@ -183,7 +184,7 @@ private const val READER_JS = """
 """
 
 /** An opened book: chapters in reading order and a way to fetch any file inside it. */
-private class OpenedBook(
+internal class OpenedBook(
     val title: String,
     val chapters: List<String>,
     val toc: List<EpubPackage.TocEntry>,
@@ -218,7 +219,7 @@ private fun decodeText(bytes: ByteArray): String {
     return String(bytes, Charset.forName("windows-1252"))
 }
 
-private suspend fun openBook(context: Context, uri: Uri, title: String, format: String): OpenedBook {
+internal suspend fun openBook(context: Context, uri: Uri, title: String, format: String): OpenedBook {
     val jobContext = currentCoroutineContext()
     if (format == "txt") {
         val bytes = context.contentResolver.openInputStream(uri)?.use { input ->
@@ -265,6 +266,19 @@ private fun mimeFor(path: String): String = when (extensionOf(path)) {
 }
 
 private const val BOOK_HOST = "book.local"
+
+internal fun prepareBookHtml(bytes: ByteArray, xml: Boolean, css: String = readerCss(BookSettings())): ByteArray {
+    var html = decodeBookMarkup(bytes)
+        .replace(Regex("(?i)(<\\?xml[^>]*encoding\\s*=\\s*)[\"'][^\"']*[\"']"), "$1\"UTF-8\"")
+        .replace(Regex("(?is)<script\\b[^>]*/>"), "")
+        .replace(Regex("(?is)<script\\b.*?</script>"), "")
+    val inject = if (xml) "<style id=\"mortimer-style\"><![CDATA[\n$css\n]]></style><script><![CDATA[\n$READER_JS\n]]></script>"
+        else "<style id=\"mortimer-style\">$css</style><script>$READER_JS</script>"
+    val head = Regex("(?i)</head>").find(html)
+    html = if (head != null) html.substring(0, head.range.first) + inject + html.substring(head.range.first)
+        else Regex("(?i)<body[^>]*>").find(html)?.let { m -> html.substring(0, m.range.last + 1) + inject + html.substring(m.range.last + 1) } ?: (inject + html)
+    return html.toByteArray(Charsets.UTF_8)
+}
 
 class EpubReaderActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -313,7 +327,7 @@ private class ReaderBridge(
 
 @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
 @Composable
-private fun BookReader(
+internal fun BookReader(
     uri: Uri,
     fallbackTitle: String,
     format: String,
@@ -321,11 +335,15 @@ private fun BookReader(
     onClose: () -> Unit,
     onChrome: (Boolean) -> Unit,
     onLightTheme: (Boolean) -> Unit,
+    persistProgress: Boolean = true,
 ) {
     val context = LocalContext.current
     val key = uri.toString()
     var book by remember { mutableStateOf<OpenedBook?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var attempt by remember { mutableIntStateOf(0) }
+    var reconnect by remember { mutableStateOf(false) }
+    var rendered by remember { mutableStateOf(false) }
     var settings by remember { mutableStateOf(BookSettings.load(context)) }
     val theme = BOOK_THEMES[settings.theme] ?: BOOK_THEMES.getValue("dark")
 
@@ -339,7 +357,8 @@ private fun BookReader(
     // Fraction/anchor to apply when the next chapter finishes loading.
     val pending = remember { arrayOf<Any?>(0f, null) }
 
-    LaunchedEffect(key) {
+    LaunchedEffect(key, attempt) {
+        error = null; book = null; rendered = false
         val opened = runCatching { openResourceOnIo { openBook(context, uri, fallbackTitle, format) } }
         opened.onSuccess { b ->
             val saved = if (fromStart) null else LibraryStore.find(context, key)?.position
@@ -348,7 +367,11 @@ private fun BookReader(
             fraction = parts?.getOrNull(1)?.toFloatOrNull()?.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f
             pending[0] = fraction
             book = b
-        }.onFailure { if (it is CancellationException) throw it; error = it.message ?: "Could not open this book." }
+        }.onFailure {
+            if (it is CancellationException) throw it
+            error = if (it is SecurityException) "Access to this book has expired. Reconnect its folder or open it again from Files."
+                else it.message ?: "Could not open this book."
+        }
     }
     DisposableEffect(book) {
         val b = book
@@ -358,7 +381,7 @@ private fun BookReader(
     LaunchedEffect(settings.theme) { onLightTheme(settings.theme == "sepia" || settings.theme == "light") }
 
     var progressError: String? = null
-    book?.let { b -> progressError = PersistReaderProgress(ReadingCheckpoint(key, "$chapter:${"%.4f".format(java.util.Locale.US, fraction)}",
+    book?.takeIf { persistProgress && rendered }?.let { b -> progressError = PersistReaderProgress(ReadingCheckpoint(key, "$chapter:${"%.4f".format(java.util.Locale.US, fraction)}",
         if (chapter == b.chapters.lastIndex && fraction >= 0.999f) 1f else (chapter + fraction) / b.chapters.size, b.chapters.size)) }
 
     BackHandler(enabled = sheet != null) { sheet = null }
@@ -369,11 +392,17 @@ private fun BookReader(
             error != null -> Column(Modifier.align(Alignment.Center).padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(error!!, color = theme.fg, fontSize = 16.sp)
                 Spacer(Modifier.height(16.dp))
-                ReaderButton("Volver", theme.fg) { onClose() }
+                ReaderButton("Retry", DarkColors.accent) { attempt++ }
+                libraryFolderFor(uri)?.takeIf { !hasLibraryUriAccess(context, uri) }?.let {
+                    ReaderButton("Reconnect folder", DarkColors.accent) { reconnect = true }
+                }
+                ReaderButton("Back", theme.fg) { onClose() }
             }
-            b == null -> Text("Abriendo $fallbackTitle…", color = theme.fg, modifier = Modifier.align(Alignment.Center))
+            b == null -> Text("Opening $fallbackTitle…", color = theme.fg, modifier = Modifier.align(Alignment.Center))
             else -> {
                 val webView = remember(b) { WebView(context) }
+                var compatibility by remember(b) { mutableStateOf(false) }
+                var pageError by remember(b) { mutableStateOf<String?>(null) }
                 var searchQuery by remember(b) { mutableStateOf("") }
                 var searchMatches by remember(b) { mutableIntStateOf(0) }
                 var wholeBook by remember(b) { mutableStateOf(false) }
@@ -403,18 +432,18 @@ private fun BookReader(
                 val currentSettings by rememberUpdatedState(settings)
 
                 fun load(index: Int, startFraction: Float, anchor: String? = null) {
-                    finished = false
+                    finished = false; rendered = false; pageError = null
                     chapter = index.coerceIn(0, b.chapters.lastIndex)
                     fraction = startFraction
                     pending[0] = startFraction
                     pending[1] = anchor
-                    webView.loadUrl("https://$BOOK_HOST/" + Uri.encode(b.chapters[chapter], "/") + (anchor?.let { "#$it" } ?: ""))
+                    webView.loadUrl("https://$BOOK_HOST/" + Uri.encode(b.chapters[chapter], "/") + (anchor?.let { "#${Uri.encode(it)}" } ?: ""))
                 }
                 fun turn(dir: Int) { webView.evaluateJavascript("window.mortimerPage && window.mortimerPage($dir)", null) }
 
                 val bridge = remember(b) {
                     ReaderBridge(
-                        onPosition = { f, page, pages -> fraction = f; pageInfo = page to pages },
+                        onPosition = { f, page, pages -> if (rendered) { fraction = f; pageInfo = page to pages } },
                         onEdge = { dir ->
                             if (dir > 0) { if (chapter < b.chapters.lastIndex) load(chapter + 1, 0f) else finished = true }
                             else if (chapter > 0) load(chapter - 1, 1f)
@@ -443,17 +472,8 @@ private fun BookReader(
                             } ?: return WebResourceResponse("text/plain", "utf-8", 404, "Not found", emptyMap(), ByteArrayInputStream(ByteArray(0)))
                             val mime = mimeFor(path)
                             if (mime == "application/xhtml+xml" || mime == "text/html") {
-                                var html = String(bytes, Charsets.UTF_8)
-                                    .replace(Regex("(?is)<script\\b[^>]*/>"), "")
-                                    .replace(Regex("(?is)<script\\b.*?</script>"), "")
-                                val xml = mime == "application/xhtml+xml"
-                                val css = readerCss(currentSettings)
-                                val inject = if (xml) "<style id=\"mortimer-style\"><![CDATA[\n$css\n]]></style><script><![CDATA[\n$READER_JS\n]]></script>"
-                                    else "<style id=\"mortimer-style\">$css</style><script>$READER_JS</script>"
-                                val head = Regex("(?i)</head>").find(html)
-                                html = if (head != null) html.substring(0, head.range.first) + inject + html.substring(head.range.first)
-                                    else Regex("(?i)<body[^>]*>").find(html)?.let { m -> html.substring(0, m.range.last + 1) + inject + html.substring(m.range.last + 1) } ?: (inject + html)
-                                return WebResourceResponse(mime, "utf-8", ByteArrayInputStream(html.toByteArray(Charsets.UTF_8)))
+                                val responseMime = if (compatibility) "text/html" else mime
+                                return WebResourceResponse(responseMime, "utf-8", ByteArrayInputStream(prepareBookHtml(bytes, responseMime == "application/xhtml+xml", readerCss(currentSettings))))
                             }
                             return WebResourceResponse(mime, null, ByteArrayInputStream(bytes))
                         }
@@ -477,10 +497,24 @@ private fun BookReader(
                             val anchor = pending[1] as String?
                             val f = pending[0] as Float
                             view.evaluateJavascript(
-                                "window.mortimerSetup && window.mortimerSetup(${currentSettings.paged}, $f, ${if (anchor != null) JSONObject.quote(anchor) else "null"})",
-                                { pendingFind?.let { query -> view.findAllAsync(query); pendingFind = null } },
+                                "document.getElementsByTagName('parsererror').length === 0 && typeof window.mortimerSetup === 'function'",
+                                { ready ->
+                                    if (ready != "true") { rendered = false; pageError = "This chapter could not be displayed. Retry or use compatibility mode." }
+                                    else {
+                                        rendered = true; pageError = null
+                                        view.evaluateJavascript("window.mortimerSetup(${currentSettings.paged}, $f, ${if (anchor != null) JSONObject.quote(anchor) else "null"})") {
+                                            pendingFind?.let { query -> view.findAllAsync(query); pendingFind = null }
+                                        }
+                                    }
+                                },
                             )
                             pending[1] = null
+                        }
+                        override fun onReceivedError(view: WebView, request: WebResourceRequest, failure: WebResourceError) {
+                            if (request.isForMainFrame) { rendered = false; pageError = "Could not load this chapter. Retry or reopen the book." }
+                        }
+                        override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
+                            if (request.isForMainFrame) { rendered = false; pageError = "Chapter unavailable (HTTP ${response.statusCode}). Retry or reopen the book." }
                         }
                     }
                     load(chapter, fraction)
@@ -492,7 +526,7 @@ private fun BookReader(
 
                 // Restyle the open chapter when settings change, keeping the reading position.
                 LaunchedEffect(settings) {
-                    settings.save(context)
+                    if (persistProgress) settings.save(context)
                     webView.setBackgroundColor(AndroidColor.TRANSPARENT)
                     val f = fraction
                     pending[0] = f
@@ -503,6 +537,15 @@ private fun BookReader(
                 }
 
                 AndroidView(factory = { webView }, modifier = Modifier.fillMaxSize().systemBarsPadding())
+
+                pageError?.let { failure ->
+                    Column(Modifier.align(Alignment.Center).padding(24.dp).background(theme.bg, RoundedCornerShape(16.dp)).padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(failure, color = theme.fg)
+                        ReaderButton("Retry chapter", DarkColors.accent) { load(chapter, fraction) }
+                        if (!compatibility) ReaderButton("Compatibility mode", DarkColors.accent) { compatibility = true; load(chapter, fraction) }
+                    }
+                }
 
                 if (chrome) {
                     val panel = theme.bg.copy(alpha = 0.96f)
@@ -554,7 +597,7 @@ private fun BookReader(
                         Spacer(Modifier.height(14.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             ReaderButton("Continue reading", theme.fg) { finished = false }
-                            ReaderButton("Volver a la biblioteca", DarkColors.accent) { onClose() }
+                            ReaderButton("Back to library", DarkColors.accent) { onClose() }
                         }
                     }
                 }
@@ -601,7 +644,7 @@ private fun BookReader(
                             }
                         }
                     }
-                    "toc" -> ReaderSheet("Contenido", theme, onClose = { sheet = null }) {
+                    "toc" -> ReaderSheet("Contents", theme, onClose = { sheet = null }) {
                         LazyColumn(Modifier.heightIn(max = 460.dp)) {
                             itemsIndexed(b.toc) { _, entry ->
                                 val index = b.chapters.indexOf(entry.href.substringBefore('#'))
@@ -618,7 +661,7 @@ private fun BookReader(
                             }
                         }
                     }
-                    "settings" -> ReaderSheet("Texto", theme, onClose = { sheet = null }) {
+                    "settings" -> ReaderSheet("Text", theme, onClose = { sheet = null }) {
                         Text("Text size · ${settings.fontSize}%", color = theme.fg, fontSize = 13.sp)
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             ReaderButton("A−", theme.fg) { settings = settings.copy(fontSize = (settings.fontSize - 10).coerceAtLeast(70)) }
@@ -630,15 +673,18 @@ private fun BookReader(
                             )
                             ReaderButton("A+", theme.fg) { settings = settings.copy(fontSize = (settings.fontSize + 10).coerceAtMost(220)) }
                         }
-                        ChoiceRow("Letra", BOOK_FONTS.toList(), settings.font, theme) { settings = settings.copy(font = it) }
-                        ChoiceRow("Interlineado", listOf(1.3f to "1.3", 1.6f to "1.6", 1.9f to "1.9", 2.2f to "2.2"), settings.lineHeight, theme) { settings = settings.copy(lineHeight = it) }
-                        ChoiceRow("Tema", BOOK_THEMES.map { it.key to it.value.label }, settings.theme, theme) { settings = settings.copy(theme = it) }
+                        ChoiceRow("Font", BOOK_FONTS.toList(), settings.font, theme) { settings = settings.copy(font = it) }
+                        ChoiceRow("Line spacing", listOf(1.3f to "1.3", 1.6f to "1.6", 1.9f to "1.9", 2.2f to "2.2"), settings.lineHeight, theme) { settings = settings.copy(lineHeight = it) }
+                        ChoiceRow("Theme", BOOK_THEMES.map { it.key to it.value.label }, settings.theme, theme) { settings = settings.copy(theme = it) }
                         ChoiceRow("Reading mode", listOf(true to "Paged", false to "Continuous"), settings.paged, theme) { settings = settings.copy(paged = it) }
                     }
                 }
             }
         }
         progressError?.let { Text(it, color = theme.fg, modifier = Modifier.align(Alignment.Center).background(theme.bg).padding(14.dp)) }
+    }
+    if (reconnect) libraryFolderFor(uri)?.let { folder ->
+        ReconnectFoldersDialog(listOf(folder), onRestored = { reconnect = false; attempt++ }, onClose = { reconnect = false })
     }
 }
 

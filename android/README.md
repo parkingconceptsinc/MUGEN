@@ -26,6 +26,13 @@ El APK de depuración se genera en `app/build/outputs/apk/debug/app-debug.apk`. 
 
 ## Estado y limitaciones
 
+### 0.12.2 (versionCode 1202)
+
+- Apertura de EPUB con «Abrir con MUGEN» desde Files/Descargas cuando el proveedor declara el tipo EPUB. La entrada externa acepta documentos content:// y conserva el permiso temporal de lectura; no añade archivos automáticamente a la biblioteca.
+- Paquetes, capítulos y búsqueda con UTF-8, UTF-16 y codificaciones declaradas; referencias XML escapadas y enlaces a anclas del mismo documento.
+- Reintento y reconexión de carpeta en errores de apertura. Los fallos de visualización muestran reintento del capítulo y modo de compatibilidad HTML, en vez de quedar sin controles de recuperación.
+- El progreso solo empieza a guardarse tras cargar los controles del capítulo; lector en inglés. Pruebas unitarias y de WebView real con EPUB sintéticos, sin cambiar el progreso de los libros personales.
+
 ### 0.12.1 (versionCode 1201)
 
 - Editor en inglés, coherente con los controles de la aplicación.
