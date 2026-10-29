@@ -45,6 +45,24 @@ class PlaybackService : MediaLibraryService() {
     private lateinit var player: ExoPlayer
     private val playbackHandler = Handler(Looper.getMainLooper())
     private var lastPositionSave = 0L
+    @Volatile private var closing = false
+    private var lastQueuedSnapshot: AudioQueue? = null
+    private val queueCheckpoint = Runnable { checkpointAudioQueue() }
+    private fun checkpointAudioQueue() {
+        if (!::player.isInitialized) return
+        val snapshot = snapshotAudioQueue(player) ?: return
+        if (snapshot == lastQueuedSnapshot) return
+        lastQueuedSnapshot = snapshot
+        libraryExecutor.execute {
+            try {
+                MusicPlaylists.saveQueue(this, snapshot)
+                getSharedPreferences("playback_tools", MODE_PRIVATE).edit().remove("queue_error").apply()
+            } catch (failure: Exception) {
+                getSharedPreferences("playback_tools", MODE_PRIVATE).edit().putString("queue_error", failure.message ?: "Could not save the audio queue.").apply()
+                if (!closing) playbackHandler.post { if (lastQueuedSnapshot == snapshot) lastQueuedSnapshot = null }
+            }
+        }
+    }
     private val maintenance = object : Runnable {
         override fun run() {
             if (!::player.isInitialized) return
@@ -106,6 +124,12 @@ class PlaybackService : MediaLibraryService() {
         player.setAudioSessionId(sessionId)
         AudioEffects.attach(this, sessionId)
         player.addListener(object : Player.Listener {
+            override fun onEvents(player: Player, events: Player.Events) {
+                if (!closing && events.containsAny(Player.EVENT_TIMELINE_CHANGED, Player.EVENT_MEDIA_ITEM_TRANSITION)) {
+                    playbackHandler.removeCallbacks(queueCheckpoint)
+                    playbackHandler.postDelayed(queueCheckpoint, 300)
+                }
+            }
             override fun onIsPlayingChanged(isPlaying: Boolean) { if (!isPlaying) savePlaybackPosition() }
             override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
                 oldPosition.mediaItem?.let { if (oldPosition.mediaItem?.mediaId != newPosition.mediaItem?.mediaId) PlaybackPositions.save(this@PlaybackService, it.mediaId, oldPosition.positionMs) }
@@ -359,6 +383,11 @@ class PlaybackService : MediaLibraryService() {
             controller: MediaSession.ControllerInfo
         ): ListenableFuture<MediaItemsWithStartPosition> {
             return libraryExecutor.submit<MediaItemsWithStartPosition> {
+                MusicPlaylists.loadQueue(this@PlaybackService)?.let { saved ->
+                    val items = saved.tracks.map { it.mediaItem() }
+                    return@submit MediaItemsWithStartPosition(items, saved.selected,
+                        PlaybackPositions.get(this@PlaybackService, saved.tracks[saved.selected].uri))
+                }
                 val library = loadAudioLibrary()
                 if (library.isEmpty()) {
                     throw IllegalStateException("No local audio is available for playback resumption.")
@@ -546,6 +575,7 @@ class PlaybackService : MediaLibraryService() {
                     .setArtist(artist)
                     .setAlbumTitle(album)
                     .setGenre(genre)
+                    .setMediaType(MediaMetadata.MEDIA_TYPE_MUSIC)
                     .setIsBrowsable(false)
                     .setIsPlayable(true)
                     .build()
@@ -574,14 +604,16 @@ class PlaybackService : MediaLibraryService() {
     }
 
     override fun onDestroy() {
+        closing = true
         playbackHandler.removeCallbacksAndMessages(null)
         savePlaybackPosition()
+        checkpointAudioQueue()
         // Release audio effects and player even if session construction failed partway through.
         AudioEffects.release()
         librarySession?.release()
         librarySession = null
         if (::player.isInitialized) player.release()
-        libraryExecutor.shutdownNow()
+        libraryExecutor.shutdown()
         super.onDestroy()
     }
 

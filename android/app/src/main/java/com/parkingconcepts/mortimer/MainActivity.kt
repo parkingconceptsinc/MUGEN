@@ -225,6 +225,7 @@ private fun mediaItemFor(item: LibraryItem): MediaItem = MediaItem.Builder()
             .setTitle(item.title)
             .setArtist(item.artist.ifBlank { null })
             .setAlbumTitle(item.album.ifBlank { null })
+            .setMediaType(if (item.kind == "audio") MediaMetadata.MEDIA_TYPE_MUSIC else MediaMetadata.MEDIA_TYPE_MOVIE)
             .build()
     )
     .build()
@@ -280,6 +281,7 @@ private fun MortimerApp(
     val context = LocalContext.current
     val c = LocalMortimerColors.current
     val scope = rememberCoroutineScope()
+    var playlistsOpen by rememberSaveable { mutableStateOf(false) }
     val audioPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
     LaunchedEffect(Unit) {
         val permission = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
@@ -511,6 +513,7 @@ private fun MortimerApp(
                     when (targetSection) {
                     "home" -> HomeSection(library, content, onGo = { section = it }, openExternal = { openExternal(it.androidUri, mimeForItem(it)) })
                     "music" -> MusicSection(library, currentUri, content, onAddFiles = { addFiles("audio") }, onAddFolder = { addFolder("audio") },
+                        onPlaylists = { playlistsOpen = true },
                         onPlay = { list, i -> playList(list, i) },
                         onQueue = { item, next ->
                             if (player.mediaItemCount == 0) playList(listOf(item), 0)
@@ -518,7 +521,7 @@ private fun MortimerApp(
                             else player.addMediaItem(mediaItemFor(item))
                         },
                         onRemove = { item -> Covers.forget(context, item.uri); commit { list -> list.filter { it.uri != item.uri } } })
-                    "playing" -> NowPlayingSection(player, current, currentTitle, isPlaying, queueVersion, playbackError, content, onEqualizer = { section = "eq" })
+                    "playing" -> NowPlayingSection(player, current, currentTitle, isPlaying, queueVersion, playbackError, content, onEqualizer = { section = "eq" }, onPlaylists = { playlistsOpen = true })
                     "videos" -> VideosSection(library, content, onAddFiles = { addFiles("videos") }, onAddFolder = { addFolder("videos") },
                         onPlay = { item -> playVideo(item) },
                         onRemove = { item -> Covers.forget(context, item.uri); commit { list -> list.filter { it.uri != item.uri } } })
@@ -576,6 +579,7 @@ private fun MortimerApp(
         }
     }
 
+    if (playlistsOpen) MusicPlaylistDialog(player, onClose = { playlistsOpen = false })
     videoOpen?.let { item ->
         val videos = library.filter { it.kind == "videos" }
         val videoIndex = videos.indexOfFirst { it.uri == item.uri }
@@ -730,6 +734,7 @@ private fun MusicSection(
     modifier: Modifier,
     onAddFiles: () -> Unit,
     onAddFolder: () -> Unit,
+    onPlaylists: () -> Unit,
     onPlay: (List<LibraryItem>, Int) -> Unit,
     onQueue: (LibraryItem, Boolean) -> Unit,
     onRemove: (LibraryItem) -> Unit,
@@ -753,6 +758,7 @@ private fun MusicSection(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp)) {
             ActionButton("＋ Add music", primary = true, onClick = onAddFiles)
             ActionButton("▤ Add folder", primary = false, onClick = onAddFolder)
+            ActionButton("♫ Playlists", primary = false, onClick = onPlaylists)
             if (filtered.isNotEmpty()) ActionButton("⤮ Shuffle", primary = false) { onPlay(filtered.shuffled(), 0) }
         }
         if (audio.isEmpty()) {
@@ -948,7 +954,7 @@ private fun RoundButton(label: String, primary: Boolean, size: Int = 42, onClick
 }
 
 @Composable
-private fun NowPlayingSection(player: Player, current: LibraryItem?, title: String?, isPlaying: Boolean, queueVersion: Int, error: String?, modifier: Modifier, onEqualizer: () -> Unit) {
+private fun NowPlayingSection(player: Player, current: LibraryItem?, title: String?, isPlaying: Boolean, queueVersion: Int, error: String?, modifier: Modifier, onEqualizer: () -> Unit, onPlaylists: () -> Unit) {
     val context = LocalContext.current
     val c = LocalMortimerColors.current
     val (position, duration) = rememberPosition(player, true)
@@ -962,6 +968,7 @@ private fun NowPlayingSection(player: Player, current: LibraryItem?, title: Stri
     LazyColumn(modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         item {
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                TextButton(onClick = onPlaylists) { Text("Music playlists") }
                 Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
                     Box(
                         Modifier.widthIn(max = 360.dp).fillMaxWidth(0.82f).aspectRatio(0.92f).clip(RoundedCornerShape(34.dp))

@@ -12,10 +12,11 @@ android {
         applicationId = "com.parkingconcepts.mortimer"
         minSdk = 26
         targetSdk = 35
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["appLabel"] = "MUGEN"
         // Increment both values whenever an Android change is prepared for distribution.
-        versionCode = providers.gradleProperty("androidVersionCode").orElse("1000").get().toInt()
-        versionName = providers.gradleProperty("androidVersionName").orElse("0.10.0").get()
+        versionCode = providers.gradleProperty("androidVersionCode").orElse("1100").get().toInt()
+        versionName = providers.gradleProperty("androidVersionName").orElse("0.11.0").get()
     }
 
     compileOptions {
@@ -74,4 +75,6 @@ dependencies {
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.14.1")
+    androidTestImplementation("androidx.test:runner:1.6.2")
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
 }

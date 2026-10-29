@@ -376,7 +376,30 @@ private fun BookReader(
                 val webView = remember(b) { WebView(context) }
                 var searchQuery by remember(b) { mutableStateOf("") }
                 var searchMatches by remember(b) { mutableIntStateOf(0) }
-                LaunchedEffect(sheet, searchQuery) { if (sheet == "search") webView.findAllAsync(searchQuery.take(512)) }
+                var wholeBook by remember(b) { mutableStateOf(false) }
+                var bookResults by remember(b) { mutableStateOf<BookSearchResult?>(null) }
+                var searching by remember(b) { mutableStateOf(false) }
+                var searchError by remember(b) { mutableStateOf<String?>(null) }
+                var pendingFind by remember(b) { mutableStateOf<String?>(null) }
+                LaunchedEffect(sheet, searchQuery, wholeBook) {
+                    searching = false; bookResults = null; searchError = null
+                    if (sheet != "search") return@LaunchedEffect
+                    if (!wholeBook) { webView.findAllAsync(searchQuery.take(512)); return@LaunchedEffect }
+                    webView.clearMatches()
+                    if (searchQuery.trim().length < 2) return@LaunchedEffect
+                    searching = true
+                    try {
+                        delay(350)
+                        bookResults = withContext(Dispatchers.IO) {
+                            val job = currentCoroutineContext()
+                            searchBook(b.chapters, searchQuery, b::read, { html ->
+                                bookSearchText(html) { job.ensureActive() }
+                            })
+                        }
+                    } catch (cancelled: CancellationException) { throw cancelled }
+                    catch (failure: Exception) { searchError = failure.message ?: "Could not search this book." }
+                    finally { searching = false }
+                }
                 val currentSettings by rememberUpdatedState(settings)
 
                 fun load(index: Int, startFraction: Float, anchor: String? = null) {
@@ -455,7 +478,7 @@ private fun BookReader(
                             val f = pending[0] as Float
                             view.evaluateJavascript(
                                 "window.mortimerSetup && window.mortimerSetup(${currentSettings.paged}, $f, ${if (anchor != null) JSONObject.quote(anchor) else "null"})",
-                                null,
+                                { pendingFind?.let { query -> view.findAllAsync(query); pendingFind = null } },
                             )
                             pending[1] = null
                         }
@@ -544,12 +567,38 @@ private fun BookReader(
                         if (target != null) load(target.coerceIn(0, b.chapters.lastIndex), part.coerceIn(0f, 1f))
                         sheet = null
                     }, onClose = { sheet = null })
-                    "search" -> ReaderSheet("Search current chapter", theme, onClose = { sheet = null; webView.clearMatches() }) {
-                        OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it.take(512) }, singleLine = true, label = { Text("Find text") })
-                        Text("$searchMatches matches", color = theme.fg)
+                    "search" -> ReaderSheet("Find in book", theme, onClose = { sheet = null; webView.clearMatches() }) {
                         Row {
+                            TextButton(onClick = { wholeBook = false }) { Text(if (!wholeBook) "✓ Current chapter" else "Current chapter") }
+                            TextButton(onClick = { wholeBook = true }) { Text(if (wholeBook) "✓ Whole book" else "Whole book") }
+                        }
+                        OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it.take(512) }, singleLine = true, label = { Text("Find text") })
+                        if (!wholeBook) Text("$searchMatches matches", color = theme.fg)
+                        if (!wholeBook) Row {
                             TextButton(enabled = searchMatches > 0, onClick = { webView.findNext(false) }) { Text("Previous") }
                             TextButton(enabled = searchMatches > 0, onClick = { webView.findNext(true) }) { Text("Next") }
+                        }
+                        if (wholeBook) {
+                            if (searching) Text("Searching chapters…", color = theme.fg)
+                            else if (searchQuery.trim().length < 2) Text("Enter at least two characters.", color = theme.fg)
+                            searchError?.let { Text(it, color = theme.fg) }
+                            bookResults?.let { result ->
+                                Text("${result.hits.sumOf { it.count }} matches · ${result.searched} chapters searched" +
+                                    (if (result.limited) " · Search limit reached; refine your query" else "") +
+                                    (if (result.unreadable > 0) " · ${result.unreadable} unreadable chapters" else ""), color = theme.fg)
+                                Text("Open a result to highlight its chapter. Use Current chapter to move between matches.", color = theme.fg, fontSize = 12.sp)
+                                LazyColumn(Modifier.heightIn(max = 320.dp)) {
+                                    itemsIndexed(result.hits) { _, hit ->
+                                        Column(Modifier.fillMaxWidth().clickable {
+                                            pendingFind = searchQuery.trim(); sheet = null; chrome = true
+                                            load(hit.chapter, 0f)
+                                        }.padding(vertical = 10.dp)) {
+                                            Text("Chapter ${hit.chapter + 1} · ${hit.count} matches", color = DarkColors.accent)
+                                            Text(hit.snippet, color = theme.fg, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                     "toc" -> ReaderSheet("Contenido", theme, onClose = { sheet = null }) {

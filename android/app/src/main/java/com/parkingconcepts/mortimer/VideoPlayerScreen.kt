@@ -163,7 +163,8 @@ internal fun VideoPlayerDialog(
             reference = reference, onReference = { reference = it }, playing = playing,
             onTogglePlayback = { togglePlayback(player) },
             onSeek = { player.seekTo((player.currentPosition + it).coerceIn(0, duration.coerceAtLeast(0))) },
-            onEnabled = { captionEnabled = it }, onSync = { sync = it }, onClose = { captionPanel = false })
-        if (editor) VideoEditorDialog(item, duration, position, onPreview = { player.seekTo(it) }, onClose = { editor = false; view?.showController() })
+            onEnabled = { captionEnabled = it }, onSync = { sync = it }, onClose = { captionPanel = false },
+            export = { SaveSubtitleButton(timeline, sync, item.title, setOfNotNull(item.androidUri, captionUri?.let(Uri::parse))) })
+        if (editor) VideoEditorDialog(item, duration, position, timeline, sync, captionUri?.let(Uri::parse), onClose = { editor = false; view?.showController() })
     }
 }

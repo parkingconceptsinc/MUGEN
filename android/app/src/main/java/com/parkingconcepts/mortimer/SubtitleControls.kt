@@ -20,7 +20,7 @@ internal fun SubtitleControls(
     message: String?, onLoad: () -> Unit, onEnabled: (Boolean) -> Unit,
     reference: SubtitleReference?, onReference: (SubtitleReference?) -> Unit,
     playing: Boolean, onTogglePlayback: () -> Unit, onSeek: (Long) -> Unit,
-    onSync: (SubtitleSync) -> Unit, onClose: () -> Unit,
+    onSync: (SubtitleSync) -> Unit, onClose: () -> Unit, export: @Composable () -> Unit = {},
 ) {
     var selected by remember(timeline) { mutableIntStateOf(0) }
     var localError by remember { mutableStateOf<String?>(null) }
@@ -43,6 +43,7 @@ internal fun SubtitleControls(
                     TextButton(onClick = { onEnabled(!enabled) }) { Text(if (enabled) "Hide subtitles" else "Show subtitles") }
                 }
                 message?.let { Text(it) }
+                export()
                 localError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 Text("Offset: ${sync.offsetMs} ms · timing scale: ${"%.5f".format(sync.scale)}")
                 Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
