@@ -1,11 +1,13 @@
 package com.parkingconcepts.mortimer
 
 import android.app.Activity
+import android.content.Context
 import android.net.Uri
 import android.view.LayoutInflater
 import android.view.TextureView
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
+import androidx.media3.ui.AspectRatioFrameLayout
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -18,6 +20,22 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class MediaToolsTest {
+    @Test fun repeatedPositionUpdatesDoNotRestartControllerHideTimeout() {
+        val view = CountingPlayerView(RuntimeEnvironment.getApplication())
+        updateVideoView(view, null, AspectRatioFrameLayout.RESIZE_MODE_FIT, false)
+        val calls = view.timeoutChanges
+        repeat(100) { updateVideoView(view, null, AspectRatioFrameLayout.RESIZE_MODE_FIT, false) }
+        assertEquals(calls, view.timeoutChanges)
+        updateVideoView(view, null, AspectRatioFrameLayout.RESIZE_MODE_FIT, true)
+        assertEquals(calls + 1, view.timeoutChanges)
+    }
+    private class CountingPlayerView(context: Context) : PlayerView(context) {
+        var timeoutChanges = 0
+        override fun setControllerShowTimeoutMs(timeoutMs: Int) {
+            timeoutChanges++
+            super.setControllerShowTimeoutMs(timeoutMs)
+        }
+    }
     @Test fun videoSurfaceUsesTextureAndNativeControlsInsteadOfInvisibleOverlay() {
         val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
         val view = LayoutInflater.from(activity).inflate(R.layout.video_surface, null) as PlayerView

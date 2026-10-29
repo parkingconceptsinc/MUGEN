@@ -39,6 +39,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 @UnstableApi
+internal fun updateVideoView(view: PlayerView, player: Player?, fit: Int, pinned: Boolean) {
+    if (view.player !== player) view.player = player
+    if (view.resizeMode != fit) view.resizeMode = fit
+    val timeout = if (pinned) 0 else 4000
+    // Setting the timeout resets Media3's hide timer, even when its value is
+    // unchanged. Position/subtitle recompositions must not restart that timer.
+    if (view.controllerShowTimeoutMs != timeout) view.controllerShowTimeoutMs = timeout
+    if (view.controllerHideOnTouch != !pinned) view.controllerHideOnTouch = !pinned
+}
+
+@UnstableApi
 @Composable
 internal fun VideoPlayerDialog(
     item: LibraryItem, player: Player, error: String?, onErrorDismiss: () -> Unit,
@@ -132,7 +143,7 @@ internal fun VideoPlayerDialog(
                         setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                         resizeMode = fit; keepScreenOn = true; view = this; showController()
                     } },
-                    update = { it.player = player; it.resizeMode = fit; it.controllerShowTimeoutMs = if(pinned) 0 else 4000; it.controllerHideOnTouch = !pinned; view = it },
+                    update = { updateVideoView(it, player, fit, pinned); view = it },
                     onRelease = { it.player = null; it.keepScreenOn = false },
                     modifier = Modifier.fillMaxSize(),
                 )
