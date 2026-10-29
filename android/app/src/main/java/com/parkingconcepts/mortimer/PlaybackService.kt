@@ -100,8 +100,8 @@ class PlaybackService : MediaLibraryService() {
     @OptIn(UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
-        // Keep the native equalizer/balance pipeline while sharing this one player
-        // between the in-app controller and Android Auto.
+        // Keep one software DSP chain for the app, videos and Android Auto. Float
+        // and encoded offload paths bypass custom processors in Media3 1.6.1.
         val renderers = object : DefaultRenderersFactory(this) {
             @UnstableApi
             override fun buildAudioSink(
@@ -109,9 +109,10 @@ class PlaybackService : MediaLibraryService() {
                 enableFloatOutput: Boolean,
                 enableAudioTrackPlaybackParams: Boolean
             ): AudioSink = DefaultAudioSink.Builder(context)
-                .setEnableFloatOutput(enableFloatOutput)
-                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                .setAudioProcessors(arrayOf(AudioEffects.balanceProcessor))
+                .setEnableFloatOutput(false)
+                .setEnableAudioTrackPlaybackParams(false)
+                .setAudioCapabilities(androidx.media3.exoplayer.audio.AudioCapabilities.DEFAULT_AUDIO_CAPABILITIES)
+                .setAudioProcessors(arrayOf(AudioEffects.processor))
                 .build()
         }
         player = ExoPlayer.Builder(this, renderers)
@@ -120,6 +121,10 @@ class PlaybackService : MediaLibraryService() {
             .build().apply {
             setAudioAttributes(androidx.media3.common.AudioAttributes.DEFAULT, true)
             setHandleAudioBecomingNoisy(true)
+            trackSelectionParameters = trackSelectionParameters.buildUpon().setAudioOffloadPreferences(
+                androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences.Builder()
+                    .setAudioOffloadMode(androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences.AUDIO_OFFLOAD_MODE_DISABLED).build()
+            ).build()
         }
         val sessionId = (getSystemService(AUDIO_SERVICE) as AudioManager).generateAudioSessionId()
         player.setAudioSessionId(sessionId)

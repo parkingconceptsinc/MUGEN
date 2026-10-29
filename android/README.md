@@ -21,10 +21,20 @@ El APK de depuración se genera en `app/build/outputs/apk/debug/app-debug.apk`. 
 - Libros: lector EPUB con imágenes y estilos del libro, índice, tamaño de letra, tipografía, interlineado, temas (oscuro, negro, sepia y claro), páginas o lectura continua, y progreso guardado. Los TXT usan el mismo lector.
 - Cómics: CBZ, CBR (RAR4 y RAR5), CB7 y PDF con modos página, doble página y vertical, dirección manga, ajuste a pantalla o a ancho, zoom, cuadrícula de páginas y progreso guardado. Las estanterías tienen "Seguir leyendo", búsqueda, orden, series por carpeta y menú para marcar como leído, mover o quitar.
 - Fotos tipo álbum desde la galería del teléfono, con álbumes, favoritos, selección múltiple y visor con zoom.
-- Ecualizador de 10 bandas con los ajustes predefinidos de la PWA y ajustes propios, preamplificador, balance y refuerzo de volumen.
+- Audio Lab: ecualizador de 10 bandas, filtros, dinámica, efectos, estudio de voz grabada con afinación y sintetizador con secuenciador. Escaneo opcional del almacenamiento compartido para importar varias carpetas de una vez.
 - Acceso directo a Spotify y servicio de Android Auto.
 
 ## Estado y limitaciones
+
+### 0.13.0 (versionCode 1300)
+
+- Audio Lab sustituye el ecualizador dependiente del hardware por procesamiento PCM: curva de respuesta, analizador FFT, medidores, comparación A/B, presets completos, margen automático, filtros, compresor, puerta, limitador, delay, reverb, chorus y efectos de carácter.
+- Voice graba tomas locales y aplica corrección de tono por tonalidad y escala, intensidad, velocidad de respuesta y transposición. Permite comparar original/procesado y exportar una copia WAV; los ajustes de voz son independientes de la reproducción.
+- Synth ofrece ocho voces, dos osciladores, cuatro formas de onda, envolvente ADSR, filtro resonante, teclado, secuenciador de 16 pasos y exportación WAV.
+- Scan device busca música, vídeos, libros y cómics en almacenamiento compartido y volúmenes montados, con permiso explícito de Android, cancelación, revisión por categorías y deduplicación de las carpetas ya importadas. Conserva biblioteca y progreso.
+- 134 pruebas unitarias y cuatro pruebas en dispositivo: reproducción Media3 con DSP real, afinación/renderizado y rendimiento, archivos del escáner con URI legible, e interacción aislada en pantallas de teléfono y tablet. La prueba de micrófono real y el escaneo de archivos personales requieren acciones del usuario.
+
+Consulta [AUDIO_LAB.md](AUDIO_LAB.md) para uso, alcance y límites.
 
 ### 0.12.3 (versionCode 1203)
 
