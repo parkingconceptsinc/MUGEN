@@ -387,7 +387,16 @@ private fun MortimerApp(
     var isPlaying by remember { mutableStateOf(player.isPlaying) }
     var playbackError by remember { mutableStateOf<String?>(null) }
     var queueVersion by remember { mutableIntStateOf(0) }
-    var videoOpen by remember { mutableStateOf<LibraryItem?>(null) }
+    var videoOpen by rememberSaveable { mutableStateOf<LibraryItem?>(null) }
+    fun playVideo(item: LibraryItem) {
+        player.currentMediaItem?.let { PlaybackPositions.save(context, it.mediaId, player.currentPosition, player.duration) }
+        videoOpen = item
+        player.setMediaItem(mediaItemFor(item))
+        player.prepare()
+        player.seekTo(PlaybackPositions.get(context, item.uri))
+        player.setPlaybackSpeed(1f)
+        player.play()
+    }
 
     DisposableEffect(player) {
         val listener = object : Player.Listener {
@@ -416,7 +425,9 @@ private fun MortimerApp(
 
     fun playList(list: List<LibraryItem>, index: Int) {
         if (list.isEmpty()) return
+        player.currentMediaItem?.let { PlaybackPositions.save(context, it.mediaId, player.currentPosition, player.duration) }
         player.setMediaItems(list.map { mediaItemFor(it) }, index.coerceIn(0, list.lastIndex), 0L)
+        player.setPlaybackSpeed(context.getSharedPreferences("playback_tools", Context.MODE_PRIVATE).getFloat("audio_speed", 1f).coerceIn(0.5f, 2f))
         player.prepare()
         player.play()
     }
@@ -508,7 +519,7 @@ private fun MortimerApp(
                         onRemove = { item -> Covers.forget(context, item.uri); commit { list -> list.filter { it.uri != item.uri } } })
                     "playing" -> NowPlayingSection(player, current, currentTitle, isPlaying, queueVersion, playbackError, content, onEqualizer = { section = "eq" })
                     "videos" -> VideosSection(library, content, onAddFiles = { addFiles("videos") }, onAddFolder = { addFolder("videos") },
-                        onPlay = { item -> videoOpen = item; player.setMediaItem(mediaItemFor(item)); player.prepare(); player.play() },
+                        onPlay = { item -> playVideo(item) },
                         onRemove = { item -> Covers.forget(context, item.uri); commit { list -> list.filter { it.uri != item.uri } } })
                     "books", "comics" -> ShelfSection(
                         kind = targetSection, library = library, modifier = content,
@@ -570,11 +581,16 @@ private fun MortimerApp(
             onErrorDismiss = { playbackError = null },
             onRetry = {
                 playbackError = null
-                player.seekTo(0)
                 player.prepare()
                 player.play()
             },
+            onNavigate = { direction ->
+                val videos = library.filter { it.kind == "videos" }
+                val index = videos.indexOfFirst { it.uri == item.uri }
+                videos.getOrNull(index + direction)?.let { playVideo(it) }
+            },
             onClose = {
+                PlaybackPositions.save(context, item.uri, player.currentPosition, player.duration)
                 videoOpen = null
                 player.pause()
                 playbackError = null
@@ -583,306 +599,6 @@ private fun MortimerApp(
     }
 }
 
-
-/**
- * Full-screen, touch-first video player. Controls are deliberately designed for phones:
- * high-contrast cinematic chrome, precise seeking, ±10-second jumps, speed and fit controls.
- */
-@androidx.media3.common.util.UnstableApi
-@Composable
-private fun VideoPlayerDialog(
-    item: LibraryItem,
-    player: Player,
-    error: String?,
-    onErrorDismiss: () -> Unit,
-    onRetry: () -> Unit,
-    onClose: () -> Unit,
-) {
-    val c = LocalMortimerColors.current
-    var controlsVisible by remember(item.uri) { mutableStateOf(true) }
-    var isPlaying by remember(item.uri) { mutableStateOf(player.isPlaying) }
-    var interactionTick by remember(item.uri) { mutableIntStateOf(0) }
-    var seekFeedback by remember(item.uri) { mutableStateOf<String?>(null) }
-    var seeking by remember(item.uri) { mutableStateOf<Float?>(null) }
-    var speedMenu by remember { mutableStateOf(false) }
-    var fitMenu by remember { mutableStateOf(false) }
-    var speed by remember(item.uri) { mutableFloatStateOf(player.playbackParameters.speed) }
-    var fitMode by remember(item.uri) { mutableIntStateOf(androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT) }
-    var playerView by remember { mutableStateOf<PlayerView?>(null) }
-    val (position, duration) = rememberPosition(player, true)
-
-    DisposableEffect(player) {
-        val listener = object : Player.Listener {
-            override fun onIsPlayingChanged(playing: Boolean) { isPlaying = playing }
-            override fun onPlaybackStateChanged(playbackState: Int) { isPlaying = player.isPlaying }
-        }
-        player.addListener(listener)
-        onDispose { player.removeListener(listener) }
-    }
-    LaunchedEffect(controlsVisible, isPlaying, error, interactionTick, speedMenu, fitMenu, seeking) {
-        if (controlsVisible && isPlaying && error == null && !speedMenu && !fitMenu && seeking == null) {
-            delay(4200)
-            controlsVisible = false
-        }
-    }
-    LaunchedEffect(seekFeedback) {
-        if (seekFeedback != null) {
-            delay(750)
-            seekFeedback = null
-        }
-    }
-
-    Dialog(
-        onDismissRequest = onClose,
-        properties = DialogProperties(
-            usePlatformDefaultWidth = false,
-            decorFitsSystemWindows = false,
-        ),
-    ) {
-        Box(Modifier.fillMaxSize().background(Color.Black)) {
-            AndroidView(
-                factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        this.player = player
-                        useController = false
-                        resizeMode = fitMode
-                        setKeepContentOnPlayerReset(true)
-                        setShutterBackgroundColor(android.graphics.Color.BLACK)
-                        keepScreenOn = true
-                        playerView = this
-                    }
-                },
-                update = {
-                    it.player = player
-                    it.resizeMode = fitMode
-                    it.keepScreenOn = true
-                    playerView = it
-                },
-                onRelease = { it.player = null; it.keepScreenOn = false },
-                modifier = Modifier.fillMaxSize(),
-            )
-
-            // Tap toggles chrome; double-tap left/right skips 10 seconds like a modern mobile player.
-            Box(
-                Modifier.fillMaxSize().pointerInput(item.uri, controlsVisible) {
-                    detectTapGestures(
-                        onTap = {
-                            controlsVisible = !controlsVisible
-                            interactionTick++
-                        },
-                        onDoubleTap = { offset ->
-                            val fraction = offset.x / size.width.coerceAtLeast(1)
-                            if (fraction < 0.35f) {
-                                player.seekTo((player.currentPosition - 10_000L).coerceAtLeast(0L))
-                                seekFeedback = "−10 sec"
-                            } else if (fraction > 0.65f) {
-                                val end = player.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
-                                player.seekTo((player.currentPosition + 10_000L).coerceAtMost(end))
-                                seekFeedback = "+10 sec"
-                            } else {
-                                if (player.isPlaying) player.pause() else player.play()
-                            }
-                            controlsVisible = true
-                            interactionTick++
-                        },
-                    )
-                }
-            )
-            seekFeedback?.let { feedback ->
-                Box(
-                    Modifier.align(Alignment.Center).clip(RoundedCornerShape(24.dp))
-                        .background(Color(0xB8000000)).padding(horizontal = 22.dp, vertical = 14.dp)
-                ) {
-                    Text(feedback, color = Color.White, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            if (controlsVisible || error != null) {
-                Box(
-                    Modifier.fillMaxWidth().height(132.dp).align(Alignment.TopCenter)
-                        .background(Brush.verticalGradient(listOf(Color(0xE6000000), Color.Transparent)))
-                )
-                Row(
-                    Modifier.fillMaxWidth().align(Alignment.TopCenter).statusBarsPadding()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(
-                        Modifier.size(44.dp).clip(CircleShape).background(Color(0x66000000))
-                            .clickable(onClick = onClose),
-                        contentAlignment = Alignment.Center,
-                    ) { Text("✕", color = Color.White, fontSize = 20.sp) }
-                    Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                        Text(item.title.substringBeforeLast('.'), color = Color.White, fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text("MUGEN VIDEO", color = Color.White.copy(alpha = 0.68f), fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold, letterSpacing = 1.7.sp)
-                    }
-                    Box {
-                        Text(
-                            "FIT ▾", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                            modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0x66000000))
-                                .clickable { fitMenu = true }.padding(horizontal = 13.dp, vertical = 10.dp),
-                        )
-                        DropdownMenu(expanded = fitMenu, onDismissRequest = { fitMenu = false }) {
-                            listOf(
-                                "Fit screen" to androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT,
-                                "Fill screen" to androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FILL,
-                                "Crop / zoom" to androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_ZOOM,
-                            ).forEach { (label, mode) ->
-                                DropdownMenuItem(
-                                    text = { Text(label) },
-                                    onClick = { fitMode = mode; playerView?.resizeMode = mode; fitMenu = false },
-                                )
-                            }
-                        }
-                    }
-                }
-
-                BoxWithConstraints(
-                    Modifier.fillMaxWidth().align(Alignment.BottomCenter).navigationBarsPadding()
-                ) {
-                    val compact = maxHeight < 430.dp || maxWidth < 380.dp
-                    Box(
-                        Modifier.fillMaxWidth().height(if (compact) 146.dp else 184.dp)
-                            .align(Alignment.BottomCenter)
-                            .background(Brush.verticalGradient(listOf(Color.Transparent, Color(0xF0000000))))
-                    )
-                    Column(
-                        Modifier.fillMaxWidth().align(Alignment.BottomCenter)
-                            .padding(horizontal = if (compact) 10.dp else 18.dp, vertical = if (compact) 4.dp else 12.dp),
-                    ) {
-                        Slider(
-                            value = (seeking ?: if (duration > 0) position.toFloat() / duration else 0f).coerceIn(0f, 1f),
-                            onValueChange = { seeking = it },
-                            onValueChangeFinished = {
-                                seeking?.let { fraction ->
-                                    if (duration > 0) player.seekTo((fraction * duration).toLong())
-                                }
-                                seeking = null
-                            },
-                            modifier = Modifier.height(if (compact) 30.dp else 40.dp),
-                            colors = SliderDefaults.colors(
-                                thumbColor = c.accent,
-                                activeTrackColor = c.accent,
-                                inactiveTrackColor = Color.White.copy(alpha = 0.35f),
-                            ),
-                        )
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Text(formatTime(seeking?.let { (it * duration).toLong() } ?: position),
-                                color = Color.White, fontSize = if (compact) 10.sp else 12.sp, fontWeight = FontWeight.Medium)
-                            Spacer(Modifier.weight(1f))
-                            Text("-" + formatTime((duration - (seeking?.let { (it * duration).toLong() } ?: position)).coerceAtLeast(0L)),
-                                color = Color.White.copy(alpha = 0.72f), fontSize = if (compact) 10.sp else 12.sp)
-                        }
-                        Spacer(Modifier.height(if (compact) 2.dp else 8.dp))
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceEvenly,
-                        ) {
-                            VideoControlButton("−10", "Back 10 seconds", size = if (compact) 38 else 44) {
-                                player.seekTo((player.currentPosition - 10_000L).coerceAtLeast(0L))
-                                controlsVisible = true
-                                interactionTick++
-                            }
-                            VideoControlButton(if (isPlaying) "Ⅱ" else "▶", if (isPlaying) "Pause" else "Play", primary = true, size = if (compact) 48 else 58) {
-                                if (player.isPlaying) player.pause() else player.play()
-                                controlsVisible = true
-                                interactionTick++
-                            }
-                            VideoControlButton("+10", "Forward 10 seconds", size = if (compact) 38 else 44) {
-                                val end = player.duration.takeIf { it > 0 } ?: Long.MAX_VALUE
-                                player.seekTo((player.currentPosition + 10_000L).coerceAtMost(end))
-                                controlsVisible = true
-                                interactionTick++
-                            }
-                            if (!compact) SpeedControl(speed, speedMenu, onOpen = { speedMenu = true }, onDismiss = { speedMenu = false }, onSelect = { rate ->
-                                speed = rate
-                                player.playbackParameters = androidx.media3.common.PlaybackParameters(rate, player.playbackParameters.pitch)
-                                speedMenu = false
-                                controlsVisible = true
-                            })
-                        }
-                        if (compact) {
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                                SpeedControl(speed, speedMenu, onOpen = { speedMenu = true }, onDismiss = { speedMenu = false }, onSelect = { rate ->
-                                    speed = rate
-                                    player.playbackParameters = androidx.media3.common.PlaybackParameters(rate, player.playbackParameters.pitch)
-                                    speedMenu = false
-                                    controlsVisible = true
-                                })
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (error != null) {
-                Column(
-                    Modifier.align(Alignment.Center).padding(24.dp).fillMaxWidth()
-                        .clip(RoundedCornerShape(22.dp)).background(Color(0xF01B1B22)).padding(22.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text("CAN’T PLAY THIS VIDEO", color = Color.White, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
-                    Spacer(Modifier.height(8.dp))
-                    Text(error, color = Color.White.copy(alpha = 0.82f), textAlign = TextAlign.Center, fontSize = 14.sp)
-                    Spacer(Modifier.height(18.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Button(onClick = onRetry, colors = ButtonDefaults.buttonColors(containerColor = c.accent)) {
-                            Text("Try again", color = c.onAccent)
-                        }
-                        OutlinedButton(onClick = { onErrorDismiss(); onClose() }) { Text("Close", color = Color.White) }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SpeedControl(
-    speed: Float,
-    expanded: Boolean,
-    onOpen: () -> Unit,
-    onDismiss: () -> Unit,
-    onSelect: (Float) -> Unit,
-) {
-    Box {
-        Text(
-            "${"%.2f".format(speed)}×", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-            modifier = Modifier.clip(RoundedCornerShape(50)).background(Color(0x66000000))
-                .clickable(onClick = onOpen).padding(horizontal = 12.dp, vertical = 8.dp),
-        )
-        DropdownMenu(expanded = expanded, onDismissRequest = onDismiss) {
-            listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f).forEach { rate ->
-                DropdownMenuItem(
-                    text = { Text(if (rate == 1f) "Normal" else "${rate}×") },
-                    onClick = { onSelect(rate) },
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun VideoControlButton(
-    label: String,
-    description: String,
-    primary: Boolean = false,
-    size: Int = 44,
-    onClick: () -> Unit,
-) {
-    Box(
-        Modifier.size(size.dp).clip(CircleShape)
-            .background(if (primary) LocalMortimerColors.current.accent else Color(0x66000000))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(label, color = if (primary) LocalMortimerColors.current.onAccent else Color.White,
-            fontSize = if (label.length > 2) 12.sp else 21.sp, fontWeight = FontWeight.Bold)
-    }
-}
 
 /** The PWA's desktop sidebar: bright artwork with glowing uppercase labels, the same in light and dark mode. */
 @Composable
@@ -1228,6 +944,7 @@ private fun RoundButton(label: String, primary: Boolean, size: Int = 42, onClick
 
 @Composable
 private fun NowPlayingSection(player: Player, current: LibraryItem?, title: String?, isPlaying: Boolean, queueVersion: Int, error: String?, modifier: Modifier, onEqualizer: () -> Unit) {
+    val context = LocalContext.current
     val c = LocalMortimerColors.current
     val (position, duration) = rememberPosition(player, true)
     var seeking by remember { mutableStateOf<Float?>(null) }
@@ -1307,10 +1024,11 @@ private fun NowPlayingSection(player: Player, current: LibraryItem?, title: Stri
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
                     listOf(0.75f, 1f, 1.25f, 1.5f, 2f).forEach { s ->
-                        Chip("${if (s % 1f == 0f) s.toInt().toString() else s.toString()}×", speed == s) { speed = s; player.setPlaybackSpeed(s) }
+                        Chip("${if (s % 1f == 0f) s.toInt().toString() else s.toString()}×", speed == s) { speed = s; player.setPlaybackSpeed(s); context.getSharedPreferences("playback_tools", Context.MODE_PRIVATE).edit().putFloat("audio_speed", s).apply() }
                     }
                 }
                 Box(Modifier.padding(top = 10.dp)) { Chip("≋ Equalizer", AudioEffects.currentSettings().enabled) { onEqualizer() } }
+                AudioTools(player, current?.uri ?: player.currentMediaItem?.mediaId, position, duration)
                 if (queue.size > 1) Box(Modifier.fillMaxWidth().padding(top = 16.dp)) { SectionLabel("QUEUE · ${queue.size}") }
             }
         }
@@ -1328,6 +1046,7 @@ private fun NowPlayingSection(player: Player, current: LibraryItem?, title: Stri
                         media.mediaMetadata.artist?.let { Text(it.toString(), color = c.muted, fontSize = 12.sp, maxLines = 1) }
                     }
                     if (!on) Text("✕", color = c.muted, modifier = Modifier.clickable { player.removeMediaItem(index) }.padding(8.dp))
+                    if (index > 0) Text("↑", color = c.muted, modifier = Modifier.clickable { player.moveMediaItem(index, index - 1) }.padding(8.dp))
                 }
             }
         }

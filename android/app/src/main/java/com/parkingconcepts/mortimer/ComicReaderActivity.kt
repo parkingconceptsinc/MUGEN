@@ -33,6 +33,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -205,7 +207,7 @@ private fun BoxScope.ComicPages(
     val config = LocalConfiguration.current
     val screenW = with(density) { config.screenWidthDp.dp.roundToPx() }
     val screenH = with(density) { config.screenHeightDp.dp.roundToPx() }
-    val cache = remember(src) {
+    val cache = remember(src, screenW, screenH, settings.fit) {
         object : LruCache<Int, Bitmap>((Runtime.getRuntime().maxMemory() / 5).toInt()) {
             override fun sizeOf(key: Int, value: Bitmap) = value.byteCount
         }
@@ -213,11 +215,8 @@ private fun BoxScope.ComicPages(
 
     LaunchedEffect(chrome) { onChrome(chrome) }
     LaunchedEffect(settings) { settings.save(context); onKeepAwake(settings.keepAwake) }
-    LaunchedEffect(page) {
-        delay(300)
-        val progress = if (page >= count - 1) 1f else (page + 1f) / count
-        withContext(Dispatchers.IO) { runCatching { LibraryStore.saveProgress(context, key, page.toString(), progress, count) } }
-    }
+    val progressError = PersistReaderProgress(ReadingCheckpoint(key, page.toString(), if (page >= count - 1) 1f else (page + 1f) / count, count))
+    DisposableEffect(cache) { onDispose { cache.evictAll() } }
     BackHandler(enabled = sheet != null) { sheet = null }
 
     val spreads = remember(count, settings.mode) { spreadsFor(count, settings.mode) }
@@ -340,6 +339,8 @@ private fun BoxScope.ComicPages(
                 Text("Page ${page + 1} of $count", color = Color(0xAAFFFFFF), fontSize = 12.sp)
             }
             ChromeButton("▦") { sheet = "pages" }
+            ChromeButton("☆") { sheet = "bookmarks" }
+            ChromeButton("#") { sheet = "jump" }
             ChromeButton("⚙") { sheet = "settings" }
         }
         Column(Modifier.fillMaxWidth().align(Alignment.BottomCenter).background(bar).navigationBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp)) {
@@ -376,6 +377,14 @@ private fun BoxScope.ComicPages(
     }
 
     when (sheet) {
+        "bookmarks" -> BookmarkDialog(key, page.toString(), "Page ${page + 1}", onChoose = { saved ->
+            saved.toIntOrNull()?.let { jump = it.coerceIn(0, count - 1) }; sheet = null
+        }, onClose = { sheet = null })
+        "jump" -> ComicSheet("Go to page", onClose = { sheet = null }) {
+            var number by remember { mutableStateOf((page + 1).toString()) }
+            OutlinedTextField(value = number, onValueChange = { number = it }, label = { Text("Page 1–$count") }, singleLine = true)
+            TextButton(enabled = number.toIntOrNull()?.let { it in 1..count } == true, onClick = { number.toIntOrNull()?.let { jump = it - 1 }; sheet = null }) { Text("Go") }
+        }
         "settings" -> ComicSheet("Reading", onClose = { sheet = null }) {
             OptionRow("Layout", listOf("paged" to "Single page", "double" to "Double page", "vertical" to "Vertical scroll"), settings.mode) { settings = settings.copy(mode = it) }
             OptionRow("Reading direction", listOf(false to "Left → right", true to "Manga (right → left)"), settings.rtl) { settings = settings.copy(rtl = it) }
@@ -399,6 +408,7 @@ private fun BoxScope.ComicPages(
             }
         }
     }
+    progressError?.let { Text(it, color = Color.White, modifier = Modifier.align(Alignment.Center).background(Color(0xDD600000)).padding(12.dp)) }
 }
 
 /** A page that zooms with pinch or double tap; one finger at normal size belongs to the pager. */

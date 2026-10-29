@@ -27,6 +27,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -301,7 +303,10 @@ private class ReaderBridge(
     val onTap: (Int) -> Unit,
 ) {
     private val main = Handler(Looper.getMainLooper())
-    @JavascriptInterface fun position(fraction: Double, page: Int, pages: Int) { main.post { onPosition(fraction.toFloat().coerceIn(0f, 1f), page, pages) } }
+    @JavascriptInterface fun position(fraction: Double, page: Int, pages: Int) {
+        if (!fraction.isFinite() || page < 0 || pages < 0) return
+        main.post { onPosition(fraction.toFloat().coerceIn(0f, 1f), page, pages) }
+    }
     @JavascriptInterface fun edge(dir: Int) { main.post { onEdge(dir) } }
     @JavascriptInterface fun tap(zone: Int) { main.post { onTap(zone) } }
 }
@@ -340,7 +345,7 @@ private fun BookReader(
             val saved = if (fromStart) null else LibraryStore.find(context, key)?.position
             val parts = saved?.split(':')
             chapter = parts?.getOrNull(0)?.toIntOrNull()?.coerceIn(0, b.chapters.lastIndex) ?: 0
-            fraction = parts?.getOrNull(1)?.toFloatOrNull()?.coerceIn(0f, 1f) ?: 0f
+            fraction = parts?.getOrNull(1)?.toFloatOrNull()?.takeIf { it.isFinite() }?.coerceIn(0f, 1f) ?: 0f
             pending[0] = fraction
             book = b
         }.onFailure { if (it is CancellationException) throw it; error = it.message ?: "Could not open this book." }
@@ -352,15 +357,9 @@ private fun BookReader(
     LaunchedEffect(chrome) { onChrome(chrome) }
     LaunchedEffect(settings.theme) { onLightTheme(settings.theme == "sepia" || settings.theme == "light") }
 
-    // Save progress shortly after the position settles.
-    LaunchedEffect(chapter, fraction, book) {
-        val b = book ?: return@LaunchedEffect
-        delay(400)
-        val overall = (chapter + fraction) / b.chapters.size
-        withContext(Dispatchers.IO) {
-            runCatching { LibraryStore.saveProgress(context, key, "$chapter:${"%.4f".format(java.util.Locale.US, fraction)}", if (chapter == b.chapters.lastIndex && fraction >= 0.999f) 1f else overall, b.chapters.size) }
-        }
-    }
+    var progressError: String? = null
+    book?.let { b -> progressError = PersistReaderProgress(ReadingCheckpoint(key, "$chapter:${"%.4f".format(java.util.Locale.US, fraction)}",
+        if (chapter == b.chapters.lastIndex && fraction >= 0.999f) 1f else (chapter + fraction) / b.chapters.size, b.chapters.size)) }
 
     BackHandler(enabled = sheet != null) { sheet = null }
 
@@ -375,6 +374,9 @@ private fun BookReader(
             b == null -> Text("Abriendo $fallbackTitle…", color = theme.fg, modifier = Modifier.align(Alignment.Center))
             else -> {
                 val webView = remember(b) { WebView(context) }
+                var searchQuery by remember(b) { mutableStateOf("") }
+                var searchMatches by remember(b) { mutableIntStateOf(0) }
+                LaunchedEffect(sheet, searchQuery) { if (sheet == "search") webView.findAllAsync(searchQuery.take(512)) }
                 val currentSettings by rememberUpdatedState(settings)
 
                 fun load(index: Int, startFraction: Float, anchor: String? = null) {
@@ -407,6 +409,7 @@ private fun BookReader(
                     webView.isHorizontalScrollBarEnabled = false
                     webView.setBackgroundColor(AndroidColor.TRANSPARENT)
                     webView.addJavascriptInterface(bridge, "Mortimer")
+                    webView.setFindListener { _, count, _ -> searchMatches = count }
                     webView.webViewClient = object : WebViewClient() {
                         override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
                             val url = request.url
@@ -489,6 +492,8 @@ private fun BookReader(
                                 Text(label ?: "Chapter ${chapter + 1} of ${b.chapters.size}", color = theme.fg.copy(alpha = 0.65f), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             }
                             if (b.toc.isNotEmpty()) ReaderButton("☰", theme.fg) { sheet = "toc" }
+                            ReaderButton("☆", theme.fg) { sheet = "bookmarks" }
+                            ReaderButton("⌕", theme.fg) { sheet = "search" }
                             ReaderButton("Aa", theme.fg) { sheet = "settings" }
                         }
                     }
@@ -532,6 +537,21 @@ private fun BookReader(
                 }
 
                 when (sheet) {
+                    "bookmarks" -> BookmarkDialog(key, "$chapter:${"%.4f".format(java.util.Locale.US, fraction)}", "Chapter ${chapter + 1} · ${(fraction * 100).toInt()}%", onChoose = { saved ->
+                        val parts = saved.split(':')
+                        val target = parts.firstOrNull()?.toIntOrNull()
+                        val part = parts.getOrNull(1)?.toFloatOrNull()?.takeIf { it.isFinite() } ?: 0f
+                        if (target != null) load(target.coerceIn(0, b.chapters.lastIndex), part.coerceIn(0f, 1f))
+                        sheet = null
+                    }, onClose = { sheet = null })
+                    "search" -> ReaderSheet("Search current chapter", theme, onClose = { sheet = null; webView.clearMatches() }) {
+                        OutlinedTextField(value = searchQuery, onValueChange = { searchQuery = it.take(512) }, singleLine = true, label = { Text("Find text") })
+                        Text("$searchMatches matches", color = theme.fg)
+                        Row {
+                            TextButton(enabled = searchMatches > 0, onClick = { webView.findNext(false) }) { Text("Previous") }
+                            TextButton(enabled = searchMatches > 0, onClick = { webView.findNext(true) }) { Text("Next") }
+                        }
+                    }
                     "toc" -> ReaderSheet("Contenido", theme, onClose = { sheet = null }) {
                         LazyColumn(Modifier.heightIn(max = 460.dp)) {
                             itemsIndexed(b.toc) { _, entry ->
@@ -569,6 +589,7 @@ private fun BookReader(
                 }
             }
         }
+        progressError?.let { Text(it, color = theme.fg, modifier = Modifier.align(Alignment.Center).background(theme.bg).padding(14.dp)) }
     }
 }
 

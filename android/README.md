@@ -26,6 +26,16 @@ El APK de depuración se genera en `app/build/outputs/apk/debug/app-debug.apk`. 
 
 ## Estado y limitaciones
 
+### 0.10.0 (versionCode 1000)
+
+- Vídeo a pantalla completa con superficie TextureView, controles nativos, botón permanente para mostrarlos y opción de fijarlos. Ajuste de imagen, velocidades, navegación entre vídeos, subtítulos integrados y reanudación por archivo.
+- Subtítulos externos SRT/WebVTT, ajuste manual en milisegundos y sincronización automática por una referencia (desfase) o dos (desfase y deriva). Se siguen la posición real del vídeo, los saltos y la velocidad.
+- Editor básico: recorte, giro, silencio y resolución original/720p/1080p. Exporta una copia MP4 mediante Media3 Transformer y permite cancelar y elegir destino.
+- Audio con repetición A–B, temporizador de apagado en el servicio, velocidad recordada y reordenación de cola.
+- Marcadores por documento en libros y cómics, búsqueda en el capítulo actual de EPUB/TXT, salto directo a página y guardado de progreso al salir o pasar a segundo plano.
+
+Consulta [MEDIA_STUDIO.md](MEDIA_STUDIO.md) para uso, alcance y pruebas.
+
 ### 0.9.3 (versionCode 903)
 
 - Biblioteca con escritura atómica, copia de respaldo y recuperación del último estado válido. Si ambas copias están dañadas, se bloquea la escritura y se muestra el error para evitar pérdidas silenciosas.
