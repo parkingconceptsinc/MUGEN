@@ -31,6 +31,9 @@ class AudioLabStorageTest {
         val s=AudioEffects.Settings(bands=listOf(Float.NaN,1000f),preamp=Float.POSITIVE_INFINITY,bpm=0f,delayFeedback=20f,crusherBits=-5,shiftSemitones=100f).sanitized()
         assertTrue(s.bands.all{it.isFinite()&&it in -12f..12f});assertEquals(0f,s.preamp,0f);assertEquals(.85f,s.delayFeedback,0f);assertEquals(4,s.crusherBits);assertEquals(12f,s.shiftSemitones,0f)
         assertNotNull(AudioEffects.Settings.from(JSONObject("{}")))
+        val synth=SynthSettings(attack=Float.NaN,cutoff=Float.POSITIVE_INFINITY,bpm=Float.NaN,volume=Float.NEGATIVE_INFINITY).clean()
+        assertEquals(.015f,synth.attack,0f);assertEquals(6500f,synth.cutoff,0f);assertEquals(120f,synth.bpm,0f);assertEquals(.35f,synth.volume,0f)
+        val audio=FloatArray(4800);SynthEngine().render(audio,audio.size,synth.copy(sequence=true));assertTrue(audio.all{it.isFinite()})
     }
     private fun source():File=File.createTempFile("wave-source-",".wav",context.cacheDir).apply{RandomAccessFile(this,"rw").use{out->out.write(ByteArray(44));val pcm=ByteBuffer.allocate(4800*2).order(ByteOrder.LITTLE_ENDIAN);repeat(4800){pcm.putShort((kotlin.math.sin(2*Math.PI*440*it/48000)*5000).toInt().toShort())};out.write(pcm.array());waveHeader(out,48000,1,4800)}}
     @Test fun wavRenderingPreservesFramesAndOriginalSourceAndCanAddAnEffectsTail()=runBlocking<Unit>{

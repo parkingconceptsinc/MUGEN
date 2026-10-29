@@ -13,7 +13,12 @@ import kotlinx.coroutines.*
 internal data class SynthSettings(val wave:Int=0,val octave:Int=4,val attack:Float=.015f,val decay:Float=.18f,val sustain:Float=.65f,val release:Float=.25f,
     val cutoff:Float=6500f,val resonance:Float=.707f,val detuneCents:Float=5f,val blend:Float=.3f,val vibratoHz:Float=5f,val vibratoDepth:Float=0f,
     val volume:Float=.35f,val bpm:Float=120f,val sequence:Boolean=false,val steps:List<Int> = listOf(60,-1,64,-1,67,-1,64,-1,57,-1,60,-1,64,-1,67,-1)) {
-    fun clean()=copy(wave=wave.coerceIn(0,3),octave=octave.coerceIn(2,6),attack=attack.coerceIn(.002f,1f),decay=decay.coerceIn(.01f,2f),sustain=sustain.coerceIn(0f,1f),release=release.coerceIn(.01f,2f),cutoff=cutoff.coerceIn(80f,20000f),resonance=resonance.coerceIn(.5f,4f),detuneCents=detuneCents.coerceIn(0f,25f),blend=blend.coerceIn(0f,1f),vibratoHz=vibratoHz.coerceIn(.1f,10f),vibratoDepth=vibratoDepth.coerceIn(0f,1f),volume=volume.coerceIn(0f,.8f),bpm=bpm.coerceIn(40f,240f),steps=List(16){steps.getOrElse(it){-1}.coerceIn(-1,108)})
+    fun clean()=copy(wave=wave.coerceIn(0,3),octave=octave.coerceIn(2,6),
+        attack=attack.finiteRange(.002f,1f,.015f),decay=decay.finiteRange(.01f,2f,.18f),sustain=sustain.finiteRange(0f,1f,.65f),release=release.finiteRange(.01f,2f,.25f),
+        cutoff=cutoff.finiteRange(80f,20000f,6500f),resonance=resonance.finiteRange(.5f,4f,.707f),detuneCents=detuneCents.finiteRange(0f,25f,5f),blend=blend.finiteRange(0f,1f,.3f),
+        vibratoHz=vibratoHz.finiteRange(.1f,10f,5f),vibratoDepth=vibratoDepth.finiteRange(0f,1f,0f),volume=volume.finiteRange(0f,.8f,.35f),bpm=bpm.finiteRange(40f,240f,120f),
+        steps=List(16){steps.getOrElse(it){-1}.coerceIn(-1,108)})
+    private fun Float.finiteRange(min:Float,max:Float,fallback:Float)=if(isFinite())coerceIn(min,max) else fallback
 }
 internal class SynthEngine(private val rate:Int=48000){
     private data class Voice(val note:Int,var phase:Double=0.0,var second:Double=0.0,var level:Double=0.0,var stage:Int=0,var releasing:Boolean=false,var releaseLevel:Double=0.0)
@@ -71,7 +76,7 @@ internal class SynthPreview(context:Context,private val muted:Boolean=false):Aut
                 while(active&&generation==token){generator.render(mono,256,settings);currentStep=generator.step;for(i in mono.indices){stereo[i*2]=mono[i];stereo[i*2+1]=mono[i]};dsp.process(stereo,stereo.size,effects);for(i in pcm.indices)pcm[i]=(stereo[i]*32768).toInt().coerceIn(-32768,32767).toShort()
                     var at=0;while(at<pcm.size&&active&&generation==token){val n=track.write(pcm,at,pcm.size-at,AudioTrack.WRITE_BLOCKING);check(n>0){"Synth audio output failed ($n)."};at+=n}
                 }
-            }catch(failure:Throwable){error=failure.message?:"Synth preview failed."}finally{runCatching{track?.stop()};track?.release();if(generation==token)active=false}
+            }catch(failure:Throwable){if(generation==token)error=failure.message?:"Synth preview failed."}finally{runCatching{track?.stop()};track?.release();if(generation==token)active=false}
         },"MUGEN-synth").apply{isDaemon=true}.start()
     }
     @Synchronized fun stop(){active=false;generation++}
