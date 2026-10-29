@@ -3,6 +3,7 @@ package com.parkingconcepts.mortimer
 import android.content.Context
 import android.net.Uri
 import android.view.LayoutInflater
+import android.view.View
 import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,6 +17,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextAlign
@@ -39,10 +42,10 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 @UnstableApi
-internal fun updateVideoView(view: PlayerView, player: Player?, fit: Int, pinned: Boolean) {
+internal fun updateVideoView(view: PlayerView, player: Player?, fit: Int, pinned: Boolean, interacting: Boolean = false) {
     if (view.player !== player) view.player = player
     if (view.resizeMode != fit) view.resizeMode = fit
-    val timeout = if (pinned) 0 else 4000
+    val timeout = if (pinned || interacting) 0 else 4000
     // Setting the timeout resets Media3's hide timer, even when its value is
     // unchanged. Position/subtitle recompositions must not restart that timer.
     if (view.controllerShowTimeoutMs != timeout) view.controllerShowTimeoutMs = timeout
@@ -56,20 +59,23 @@ internal fun VideoPlayerDialog(
     canPrevious: Boolean, canNext: Boolean,
     onRetry: () -> Unit, onClose: () -> Unit, onNavigate: (Int) -> Unit,
     onEdit: (LibraryItem, Long) -> Unit,
+    persistSettings: Boolean = true,
 ) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("video_settings", Context.MODE_PRIVATE) }
     val key = remember(item.uri) { mediaKey(item.uri) }
-    var pinned by rememberSaveable { mutableStateOf(true) }
+    var pinned by rememberSaveable { mutableStateOf(false) }
+    var controlsVisible by remember { mutableStateOf(true) }
+    var toolbarInteracting by remember { mutableStateOf(false) }
     var fit by rememberSaveable { mutableIntStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
     var view by remember { mutableStateOf<PlayerView?>(null) }
     var playing by remember { mutableStateOf(player.isPlaying) }
     var position by remember { mutableLongStateOf(player.currentPosition.coerceAtLeast(0)) }
     var duration by remember { mutableLongStateOf(player.duration.coerceAtLeast(0)) }
     var captionPanel by rememberSaveable { mutableStateOf(false) }
-    var captionUri by remember(key) { mutableStateOf(prefs.getString("${key}_subtitle", null)) }
-    var captionEnabled by remember(key) { mutableStateOf(prefs.getBoolean("${key}_enabled", true)) }
-    var sync by remember(key) { mutableStateOf(runCatching { SubtitleSync(prefs.getLong("${key}_offset", 0), prefs.getString("${key}_scale", "1")!!.toDouble()) }.getOrDefault(SubtitleSync())) }
+    var captionUri by remember(key) { mutableStateOf(if (persistSettings) prefs.getString("${key}_subtitle", null) else null) }
+    var captionEnabled by remember(key) { mutableStateOf(if (persistSettings) prefs.getBoolean("${key}_enabled", true) else true) }
+    var sync by remember(key) { mutableStateOf(if (persistSettings) runCatching { SubtitleSync(prefs.getLong("${key}_offset", 0), prefs.getString("${key}_scale", "1")!!.toDouble()) }.getOrDefault(SubtitleSync()) else SubtitleSync()) }
     var timeline by remember(key) { mutableStateOf<SubtitleTimeline?>(null) }
     var reference by remember(key, captionUri) { mutableStateOf<SubtitleReference?>(null) }
     var subtitleError by remember { mutableStateOf<String?>(null) }
@@ -92,7 +98,7 @@ internal fun VideoPlayerDialog(
         catch (failure: Exception) { subtitleError = failure.message ?: "Could not load subtitles." }
     }
     LaunchedEffect(key, captionUri, sync, captionEnabled, timeline) {
-        prefs.edit().putString("${key}_subtitle", captionUri).putBoolean("${key}_enabled", captionEnabled)
+        if (persistSettings) prefs.edit().putString("${key}_subtitle", captionUri).putBoolean("${key}_enabled", captionEnabled)
             .putLong("${key}_offset", sync.offsetMs).putString("${key}_scale", sync.scale.toString()).apply()
         player.trackSelectionParameters = player.trackSelectionParameters.buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, timeline != null && captionEnabled).build()
@@ -107,7 +113,7 @@ internal fun VideoPlayerDialog(
     }
     DisposableEffect(player, item.uri) {
         onDispose {
-            if (player.currentMediaItem?.mediaId == item.uri) PlaybackPositions.save(context, item.uri, player.currentPosition, player.duration)
+            if (persistSettings && player.currentMediaItem?.mediaId == item.uri) PlaybackPositions.save(context, item.uri, player.currentPosition, player.duration)
             player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, false).build()
         }
     }
@@ -121,49 +127,64 @@ internal fun VideoPlayerDialog(
             } }
             onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON) }
         }
-        Column(Modifier.fillMaxSize().background(Color.Black).displayCutoutPadding()) {
-            Row(Modifier.fillMaxWidth().background(Color(0xFF141419)).horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onClose) { Text("Close") }
-                TextButton(onClick = { view?.showController() }) { Text("Show controls") }
-                TextButton(onClick = { pinned = !pinned; view?.controllerShowTimeoutMs = if (pinned) 0 else 4000; view?.showController() }) { Text(if (pinned) "Controls pinned" else "Auto-hide") }
-                TextButton(onClick = { player.pause(); captionPanel = true }) { Text("Subtitles") }
-                TextButton(onClick = { player.pause(); onEdit(item, position) }) { Text("Open in Editor") }
-                TextButton(enabled = canPrevious, onClick = { onNavigate(-1) }) { Text("Previous") }
-                TextButton(enabled = canNext, onClick = { onNavigate(1) }) { Text("Next") }
-                TextButton(onClick = { fit = when (fit) { AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM; AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FILL; else -> AspectRatioFrameLayout.RESIZE_MODE_FIT } }) { Text(when(fit) { AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Crop"; AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Stretch"; else -> "Fit" }) }
-                TextButton(onClick = { player.repeatMode = if (player.repeatMode == Player.REPEAT_MODE_ONE) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ONE }) { Text("Repeat") }
-                listOf(0.5f, 1f, 1.25f, 1.5f, 2f).forEach { rate -> TextButton(onClick = { player.setPlaybackSpeed(rate) }) { Text("$rate×") } }
-            }
-            Box(Modifier.weight(1f).fillMaxWidth()) {
+        fun interact(action: () -> Unit) {
+            action()
+            view?.let { updateVideoView(it, player, fit, pinned, toolbarInteracting); it.showController() }
+        }
+        Box(Modifier.fillMaxSize().background(Color.Black).displayCutoutPadding()) {
                 AndroidView(
                     factory = { ctx -> (LayoutInflater.from(ctx).inflate(R.layout.video_surface, null) as PlayerView).apply {
                         this.player = player; useController = true; controllerAutoShow = true
-                        controllerShowTimeoutMs = if (pinned) 0 else 4000; controllerHideOnTouch = !pinned
+                        controllerShowTimeoutMs = if (pinned || toolbarInteracting) 0 else 4000; controllerHideOnTouch = !pinned
+                        isClickable = true
+                        // Hide the whole controller in one step, rather than leaving
+                        // Media3's progress-only strip visible for two more seconds.
+                        setControllerAnimationEnabled(false)
+                        setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { controlsVisible = it == View.VISIBLE })
                         setShowSubtitleButton(true); setShowRewindButton(true); setShowFastForwardButton(true)
                         setShowBuffering(PlayerView.SHOW_BUFFERING_WHEN_PLAYING)
                         resizeMode = fit; keepScreenOn = true; view = this; showController()
                     } },
-                    update = { updateVideoView(it, player, fit, pinned); view = it },
-                    onRelease = { it.player = null; it.keepScreenOn = false },
+                    update = { updateVideoView(it, player, fit, pinned, toolbarInteracting); view = it },
+                    onRelease = { it.setControllerVisibilityListener(null as PlayerView.ControllerVisibilityListener?); it.player = null; it.keepScreenOn = false },
                     modifier = Modifier.fillMaxSize(),
                 )
                 val caption = if (captionEnabled) timeline?.textAt(position, sync).orEmpty() else ""
                 if (caption.isNotBlank()) Text(caption, color = Color.White, fontSize = 22.sp, textAlign = TextAlign.Center,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 18.dp, vertical = if (pinned) 132.dp else 74.dp)
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(horizontal = 18.dp, vertical = if (controlsVisible) 132.dp else 24.dp)
                         .background(Color(0xCC000000)).padding(6.dp), maxLines = 8)
+                if (controlsVisible) Column(Modifier.align(Alignment.TopStart).fillMaxWidth().background(Color(0xDD141419))
+                    .pointerInput(Unit) {
+                        // Observe without consuming: buttons/scrolling keep their gestures.
+                        // A held finger suspends the timeout; release starts a fresh interval.
+                        try { awaitPointerEventScope { while (true) {
+                            toolbarInteracting = awaitPointerEvent(PointerEventPass.Initial).changes.any { it.pressed }
+                        } } } finally { toolbarInteracting = false }
+                    }) {
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = onClose) { Text("Close") }
+                        TextButton(onClick = { interact { pinned = !pinned } }) { Text(if (pinned) "Unpin controls" else "Pin controls") }
+                        TextButton(onClick = { interact { player.pause(); captionPanel = true } }) { Text("Subtitles") }
+                        TextButton(onClick = { player.pause(); onEdit(item, position) }) { Text("Open in Editor") }
+                        TextButton(enabled = canPrevious, onClick = { interact { onNavigate(-1) } }) { Text("Previous") }
+                        TextButton(enabled = canNext, onClick = { interact { onNavigate(1) } }) { Text("Next") }
+                        TextButton(onClick = { interact { fit = when (fit) { AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM; AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FILL; else -> AspectRatioFrameLayout.RESIZE_MODE_FIT } } }) { Text(when(fit) { AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Crop"; AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Stretch"; else -> "Fit" }) }
+                        TextButton(onClick = { interact { player.repeatMode = if (player.repeatMode == Player.REPEAT_MODE_ONE) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ONE } }) { Text("Repeat") }
+                        listOf(0.5f, 1f, 1.25f, 1.5f, 2f).forEach { rate -> TextButton(onClick = { interact { player.setPlaybackSpeed(rate) } }) { Text("$rate×") } }
+                    }
+                    Text("${item.title} · ${playerTime(position)} / ${playerTime(duration)} · ${if(playing) "Playing" else "Paused"}", color = Color.White,
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, maxLines = 1)
+                }
                 if (error != null) Surface(Modifier.align(Alignment.Center).padding(24.dp), shape = MaterialTheme.shapes.large) {
                     Column(Modifier.padding(18.dp)) { Text(error); Button(onClick = onRetry) { Text("Retry from current position") }; TextButton(onClick = onErrorDismiss) { Text("Dismiss error") } }
                 }
-            }
-            Text("${item.title} · ${playerTime(position)} / ${playerTime(duration)} · ${if(playing) "Playing" else "Paused"}", color = Color.White,
-                modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(8.dp), fontSize = 12.sp, maxLines = 1)
         }
         if (captionPanel) SubtitleControls(timeline, sync, captionEnabled, position, subtitleError,
             onLoad = { captionPicker.launch(arrayOf("text/*", "application/x-subrip", "application/octet-stream", "*/*")) },
             reference = reference, onReference = { reference = it }, playing = playing,
             onTogglePlayback = { togglePlayback(player) },
             onSeek = { player.seekTo((player.currentPosition + it).coerceIn(0, duration.coerceAtLeast(0))) },
-            onEnabled = { captionEnabled = it }, onSync = { sync = it }, onClose = { captionPanel = false },
+            onEnabled = { captionEnabled = it }, onSync = { sync = it }, onClose = { captionPanel = false; view?.showController() },
             export = { SaveSubtitleButton(timeline, sync, item.title, setOfNotNull(item.androidUri, captionUri?.let(Uri::parse))) })
     }
 }
