@@ -17,12 +17,14 @@ import kotlinx.coroutines.withContext
 
 @Composable
 internal fun SaveSubtitleButton(timeline: SubtitleTimeline?, sync: SubtitleSync, name: String, originals: Set<Uri>,
-    clipStartMs: Long = 0, clipEndMs: Long = Long.MAX_VALUE) {
+    clipStartMs: Long = 0, clipEndMs: Long = Long.MAX_VALUE, onSavingChanged: (Boolean) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var pending by remember { mutableStateOf<String?>(null) }
     var saving by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(saving) { onSavingChanged(saving) }
+    DisposableEffect(Unit) { onDispose { onSavingChanged(false) } }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/x-subrip")) { uri ->
         val text = pending
         pending = null
