@@ -537,7 +537,9 @@ private fun MortimerApp(
                     }
                 }
                 if (current != null && section != "playing" && section != "photos") {
-                    MiniPlayer(player, current, currentTitle, isPlaying, playbackError) { section = "playing" }
+                    MiniPlayer(player, current, currentTitle, isPlaying, playbackError) {
+                        if (current.kind == "videos") videoOpen = current else section = "playing"
+                    }
                 }
                 if (!wide) {
                     TabBar(section) { section = it }
@@ -574,9 +576,13 @@ private fun MortimerApp(
     }
 
     videoOpen?.let { item ->
+        val videos = library.filter { it.kind == "videos" }
+        val videoIndex = videos.indexOfFirst { it.uri == item.uri }
         VideoPlayerDialog(
             item = item,
             player = player,
+            canPrevious = videoIndex > 0,
+            canNext = videoIndex >= 0 && videoIndex + 1 < videos.size,
             error = playbackError,
             onErrorDismiss = { playbackError = null },
             onRetry = {
@@ -585,9 +591,7 @@ private fun MortimerApp(
                 player.play()
             },
             onNavigate = { direction ->
-                val videos = library.filter { it.kind == "videos" }
-                val index = videos.indexOfFirst { it.uri == item.uri }
-                videos.getOrNull(index + direction)?.let { playVideo(it) }
+                videos.getOrNull(videoIndex + direction)?.let { playVideo(it) }
             },
             onClose = {
                 PlaybackPositions.save(context, item.uri, player.currentPosition, player.duration)
@@ -917,7 +921,7 @@ private fun MiniPlayer(player: Player, current: LibraryItem, title: String?, isP
             }
             Column(Modifier.weight(1f).padding(horizontal = 10.dp)) {
                 Text(title ?: current.title, color = c.text, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(error ?: current.artist.ifBlank { "Playing" }, color = if (error != null) Color(0xFFFF7A66) else c.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(error ?: current.artist.ifBlank { if (isPlaying) "Playing" else "Paused" }, color = if (error != null) Color(0xFFFF7A66) else c.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             RoundButton(if (isPlaying) "Ⅱ" else "▶", primary = true) { if (player.isPlaying) player.pause() else player.play() }
             Spacer(Modifier.width(6.dp))

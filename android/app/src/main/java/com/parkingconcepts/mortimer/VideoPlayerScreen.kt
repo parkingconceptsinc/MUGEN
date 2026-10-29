@@ -42,6 +42,7 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun VideoPlayerDialog(
     item: LibraryItem, player: Player, error: String?, onErrorDismiss: () -> Unit,
+    canPrevious: Boolean, canNext: Boolean,
     onRetry: () -> Unit, onClose: () -> Unit, onNavigate: (Int) -> Unit,
 ) {
     val context = LocalContext.current
@@ -116,8 +117,8 @@ internal fun VideoPlayerDialog(
                 TextButton(onClick = { pinned = !pinned; view?.controllerShowTimeoutMs = if (pinned) 0 else 4000; view?.showController() }) { Text(if (pinned) "Controls pinned" else "Auto-hide") }
                 TextButton(onClick = { player.pause(); captionPanel = true }) { Text("Subtitles") }
                 TextButton(onClick = { player.pause(); editor = true }) { Text("Edit video") }
-                TextButton(onClick = { onNavigate(-1) }) { Text("Previous") }
-                TextButton(onClick = { onNavigate(1) }) { Text("Next") }
+                TextButton(enabled = canPrevious, onClick = { onNavigate(-1) }) { Text("Previous") }
+                TextButton(enabled = canNext, onClick = { onNavigate(1) }) { Text("Next") }
                 TextButton(onClick = { fit = when (fit) { AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM; AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FILL; else -> AspectRatioFrameLayout.RESIZE_MODE_FIT } }) { Text(when(fit) { AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Crop"; AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Stretch"; else -> "Fit" }) }
                 TextButton(onClick = { player.repeatMode = if (player.repeatMode == Player.REPEAT_MODE_ONE) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ONE }) { Text("Repeat") }
                 listOf(0.5f, 1f, 1.25f, 1.5f, 2f).forEach { rate -> TextButton(onClick = { player.setPlaybackSpeed(rate) }) { Text("$rate×") } }
