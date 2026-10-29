@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import android.provider.MediaStore
 import android.provider.OpenableColumns
@@ -42,6 +43,30 @@ import java.util.concurrent.Executors
 class PlaybackService : MediaLibraryService() {
     private var librarySession: MediaLibrarySession? = null
     private lateinit var player: ExoPlayer
+    private val playbackHandler = Handler(Looper.getMainLooper())
+    private var lastPositionSave = 0L
+    private val maintenance = object : Runnable {
+        override fun run() {
+            if (!::player.isInitialized) return
+            val prefs = getSharedPreferences("playback_tools", MODE_PRIVATE)
+            val deadline = prefs.getLong("sleep_deadline", 0L)
+            if (deadline > 0 && System.currentTimeMillis() >= deadline) {
+                player.pause(); prefs.edit().remove("sleep_deadline").apply()
+            }
+            if (player.isPlaying && prefs.getString("loop_uri", null) == player.currentMediaItem?.mediaId) {
+                val loop = runCatching { PlaybackLoop(prefs.getLong("loop_a", -1), prefs.getLong("loop_b", -1)) }.getOrNull()
+                if (loop?.shouldRepeat(player.currentPosition) == true) player.seekTo(loop.startMs)
+            }
+            if (SystemClock.elapsedRealtime() - lastPositionSave >= 5000) {
+                savePlaybackPosition(); lastPositionSave = SystemClock.elapsedRealtime()
+            }
+            playbackHandler.postDelayed(this, if (player.isPlaying) 200 else 1000)
+        }
+    }
+
+    private fun savePlaybackPosition() {
+        if (::player.isInitialized) player.currentMediaItem?.let { PlaybackPositions.save(this, it.mediaId, player.currentPosition, player.duration) }
+    }
     private val searchResults = linkedMapOf<String, List<MediaItem>>()
     // All library reads are serialized on libraryExecutor, so this cache needs no extra lock.
     private var cachedAudioLibrary: List<MediaItem>? = null
@@ -70,7 +95,10 @@ class PlaybackService : MediaLibraryService() {
                 .setAudioProcessors(arrayOf(AudioEffects.balanceProcessor))
                 .build()
         }
-        player = ExoPlayer.Builder(this, renderers).build().apply {
+        player = ExoPlayer.Builder(this, renderers)
+            .setSeekBackIncrementMs(10_000).setSeekForwardIncrementMs(10_000)
+            .setWakeMode(C.WAKE_MODE_LOCAL)
+            .build().apply {
             setAudioAttributes(androidx.media3.common.AudioAttributes.DEFAULT, true)
             setHandleAudioBecomingNoisy(true)
         }
@@ -78,6 +106,10 @@ class PlaybackService : MediaLibraryService() {
         player.setAudioSessionId(sessionId)
         AudioEffects.attach(this, sessionId)
         player.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(isPlaying: Boolean) { if (!isPlaying) savePlaybackPosition() }
+            override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+                oldPosition.mediaItem?.let { if (oldPosition.mediaItem?.mediaId != newPosition.mediaItem?.mediaId) PlaybackPositions.save(this@PlaybackService, it.mediaId, oldPosition.positionMs) }
+            }
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 val uri = mediaItem?.localConfiguration?.uri ?: return
                 // Checking imported SAF entries reads persistent storage; keep that work
@@ -95,6 +127,7 @@ class PlaybackService : MediaLibraryService() {
             }
         })
         librarySession = MediaLibrarySession.Builder(this, player, LibraryCallback()).build()
+        playbackHandler.post(maintenance)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaLibrarySession? = librarySession
@@ -333,7 +366,7 @@ class PlaybackService : MediaLibraryService() {
                 val lastPlayed = lastPlayedItem(library)
                 val selectedIndex = library.indexOfFirst { it.mediaId == lastPlayed?.mediaId }
                     .takeIf { it >= 0 } ?: 0
-                MediaItemsWithStartPosition(library, selectedIndex, C.TIME_UNSET)
+                MediaItemsWithStartPosition(library, selectedIndex, PlaybackPositions.get(this@PlaybackService, library[selectedIndex].mediaId))
             }
         }
 
@@ -356,7 +389,8 @@ class PlaybackService : MediaLibraryService() {
             startPositionMs: Long
         ): ListenableFuture<MediaItemsWithStartPosition> {
             return libraryExecutor.submit<MediaItemsWithStartPosition> {
-                requestResolver.resolveQueue(mediaItems, startIndex, startPositionMs)
+                requestResolver.resolveQueue(mediaItems, startIndex, startPositionMs,
+                    expandSingleItem = controller.packageName != packageName)
             }
         }
     }
@@ -540,6 +574,8 @@ class PlaybackService : MediaLibraryService() {
     }
 
     override fun onDestroy() {
+        playbackHandler.removeCallbacksAndMessages(null)
+        savePlaybackPosition()
         // Release audio effects and player even if session construction failed partway through.
         AudioEffects.release()
         librarySession?.release()

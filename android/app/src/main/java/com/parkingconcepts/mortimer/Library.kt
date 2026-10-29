@@ -35,7 +35,7 @@ data class LibraryItem(
     val progress: Float = 0f,
     val pages: Int = 0,
     val openedAt: Long = 0,
-) {
+) : java.io.Serializable {
     val androidUri: Uri get() = Uri.parse(uri)
     val finished: Boolean get() = progress >= 0.995f
     val started: Boolean get() = openedAt > 0 && progress > 0f && !finished

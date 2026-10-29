@@ -17,6 +17,12 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE, sdk = [28])
 class PlaybackRequestResolverTest {
+    @Test fun nativeSingleSongSelectionDoesNotAddUnselectedDeviceMusic() {
+        val result = resolver().resolveQueue(listOf(second), 0, 5000L, expandSingleItem = false)
+        assertEquals(listOf(second.mediaId), result.mediaItems.map { it.mediaId })
+        assertEquals(0, result.startIndex)
+        assertEquals(5000L, result.startPositionMs)
+    }
     private val first = song("1", "First song")
     private val second = song("2", "Second song")
     private val third = song("3", "Third song")

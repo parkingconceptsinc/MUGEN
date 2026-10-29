@@ -12,9 +12,10 @@ android {
         applicationId = "com.parkingconcepts.mortimer"
         minSdk = 26
         targetSdk = 35
+        manifestPlaceholders["appLabel"] = "MUGEN"
         // Increment both values whenever an Android change is prepared for distribution.
-        versionCode = providers.gradleProperty("androidVersionCode").orElse("903").get().toInt()
-        versionName = providers.gradleProperty("androidVersionName").orElse("0.9.3").get()
+        versionCode = providers.gradleProperty("androidVersionCode").orElse("1000").get().toInt()
+        versionName = providers.gradleProperty("androidVersionName").orElse("0.10.0").get()
     }
 
     compileOptions {
@@ -35,6 +36,13 @@ android {
     }
 
     buildTypes {
+        getByName("debug") {
+            if (providers.gradleProperty("devicePreview").orNull == "true") {
+                applicationIdSuffix = ".preview"
+                versionNameSuffix = "-preview"
+                manifestPlaceholders["appLabel"] = "MUGEN Preview"
+            }
+        }
         getByName("release") {
             isMinifyEnabled = false
             signingConfig = signingConfigs.getByName("release")
@@ -45,6 +53,7 @@ android {
         compose = true
         buildConfig = true
     }
+    testOptions { unitTests.isIncludeAndroidResources = true }
 }
 
 dependencies {
@@ -58,6 +67,8 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.6.1")
     implementation("androidx.media3:media3-ui:1.6.1")
     implementation("androidx.media3:media3-session:1.6.1")
+    implementation("androidx.media3:media3-transformer:1.6.1")
+    implementation("androidx.media3:media3-effect:1.6.1")
     // CBR/CB7 comics (RAR4, RAR5, 7z) through libarchive, from Maven Central.
     implementation("me.zhanghai.android.libarchive:library:1.1.6")
 
