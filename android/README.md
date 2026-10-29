@@ -26,6 +26,13 @@ El APK de depuración se genera en `app/build/outputs/apk/debug/app-debug.apk`. 
 
 ## Estado y limitaciones
 
+### 0.13.1 (versionCode 1301)
+
+- Los controles de vídeo se ocultan por defecto después de cuatro segundos sin interacción durante la reproducción. Un toque los muestra y otro los oculta. Pin controls / Unpin controls permite fijarlos explícitamente.
+- La barra superior y el título siguen la visibilidad del controlador nativo; se superponen al vídeo sin cambiar su tamaño. Los subtítulos externos bajan al margen cuando los controles desaparecen.
+- La pausa conserva los controles visibles. Mantener un dedo sobre la barra suspende el temporizador; soltarlo reinicia el intervalo. Las actualizaciones de posición y subtítulos no reinician la espera.
+- Prueba en pantalla secundaria con vídeo sintético y audio silenciado: inactividad, toque, fijación, pausa/reanudación, pulsación sostenida y tamaños de tablet/teléfono, sin cambiar biblioteca, ajustes ni posiciones personales.
+
 ### 0.13.0 (versionCode 1300)
 
 - Audio Lab sustituye el ecualizador dependiente del hardware por procesamiento PCM: curva de respuesta, analizador FFT, medidores, comparación A/B, presets completos, margen automático, filtros, compresor, puerta, limitador, delay, reverb, chorus y efectos de carácter.

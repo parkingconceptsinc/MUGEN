@@ -43,10 +43,19 @@ class MediaToolsTest {
         val view = CountingPlayerView(RuntimeEnvironment.getApplication())
         updateVideoView(view, null, AspectRatioFrameLayout.RESIZE_MODE_FIT, false)
         val calls = view.timeoutChanges
+        assertEquals(4000, view.controllerShowTimeoutMs)
         repeat(100) { updateVideoView(view, null, AspectRatioFrameLayout.RESIZE_MODE_FIT, false) }
         assertEquals(calls, view.timeoutChanges)
         updateVideoView(view, null, AspectRatioFrameLayout.RESIZE_MODE_FIT, true)
         assertEquals(calls + 1, view.timeoutChanges)
+        updateVideoView(view, null, AspectRatioFrameLayout.RESIZE_MODE_FIT, false, interacting = true)
+        assertEquals(0, view.controllerShowTimeoutMs)
+        assertTrue(view.controllerHideOnTouch)
+        repeat(100) { updateVideoView(view, null, AspectRatioFrameLayout.RESIZE_MODE_FIT, false, interacting = true) }
+        assertEquals(calls + 1, view.timeoutChanges)
+        updateVideoView(view, null, AspectRatioFrameLayout.RESIZE_MODE_FIT, false)
+        assertEquals(4000, view.controllerShowTimeoutMs)
+        assertEquals(calls + 2, view.timeoutChanges)
     }
     private class CountingPlayerView(context: Context) : PlayerView(context) {
         var timeoutChanges = 0

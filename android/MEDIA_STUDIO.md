@@ -1,8 +1,10 @@
-# MUGEN 0.12.3: vídeo, audio y lectura
+# MUGEN 0.13.1: vídeo, audio y lectura
 
 ## Vídeo a pantalla completa
 
-La pantalla anterior desactivaba los controles de `PlayerView` y dependía de una capa táctil Compose sobre la superficie de vídeo. Ahora el reproductor usa `TextureView` y controles nativos dentro de su propia vista. «Show controls» está en la barra superior y «Controls pinned» evita que se oculten al tocar o esperar. La barra se desplaza horizontalmente cuando el espacio es pequeño.
+El reproductor usa `TextureView` y controles nativos de `PlayerView`. Durante la reproducción, los controles, la barra superior y el título se ocultan juntos después de cuatro segundos sin interacción. Un toque sobre el vídeo los muestra; otro los oculta. «Pin controls» los fija hasta pulsar «Unpin controls». La pausa y el final mantienen los controles disponibles. Una pulsación sostenida o un desplazamiento en la barra superior suspende el temporizador hasta soltar el dedo; usar sus botones también reinicia el intervalo.
+
+Las barras se superponen al vídeo y no cambian sus dimensiones al aparecer o desaparecer. La barra superior se desplaza horizontalmente cuando el espacio es pequeño. Los subtítulos externos mantienen un margen para los controles visibles y bajan cuando estos desaparecen. El temporizador solo responde a interacciones y cambios de reproducción; las actualizaciones periódicas de posición o texto no lo reinician. Los controles se ocultan en un solo paso, sin dejar una segunda franja de progreso visible.
 
 Se incluyen reproducción/pausa, saltos de diez segundos, búsqueda en la línea de tiempo, posición/duración, buffering, velocidades, ajuste a pantalla/recorte/estiramiento, repetición y vídeo anterior/siguiente. El vídeo recuerda su posición al cerrar. La actividad mantiene su estado durante cambios de orientación y tamaño.
 
