@@ -26,6 +26,13 @@ El APK de depuración se genera en `app/build/outputs/apk/debug/app-debug.apk`. 
 
 ## Estado y limitaciones
 
+### 0.12.3 (versionCode 1203)
+
+- Corregidas las portadas y páginas vacías al abrir desde Books: WebView usa dimensiones nativas MATCH_PARENT para que Chromium calcule correctamente la altura del visor y las unidades vh.
+- Los capítulos respetan el tipo de contenido declarado por el EPUB: una portada XHTML guardada como .html conserva sus imágenes SVG con prefijo de espacio de nombres.
+- Se omiten entradas no lineales e índices de navegación sin texto ni medios. Los puntos de lectura de versiones anteriores se resuelven al mismo documento, conservando la fracción cuando sigue disponible.
+- Prueba de regresión con portada PNG que exige dimensiones visibles, además de los casos UTF-16 y de compatibilidad. Auditoría optativa que toca las tarjetas reales de Books, comprueba contenido y avance, revisa recursos de los capítulos y restaura los puntos de lectura.
+
 ### 0.12.2 (versionCode 1202)
 
 - Apertura de EPUB con «Abrir con MUGEN» desde Files/Descargas cuando el proveedor declara el tipo EPUB. La entrada externa acepta documentos content:// y conserva el permiso temporal de lectura; no añade archivos automáticamente a la biblioteca.

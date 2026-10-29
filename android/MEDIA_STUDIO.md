@@ -1,4 +1,4 @@
-# MUGEN 0.12.2: vídeo, audio y lectura
+# MUGEN 0.12.3: vídeo, audio y lectura
 
 ## Vídeo a pantalla completa
 
@@ -94,3 +94,14 @@ Los metadatos y capítulos reconocen BOM UTF-8/UTF-16 y codificaciones XML/HTML 
 La apertura ofrece `Retry` y, si falta el permiso original, `Reconnect folder`. Un fallo de WebView o del XML del capítulo ofrece `Retry chapter` y `Compatibility mode`, que reinterpreta ese libro como HTML durante esa sesión. No corrige un ZIP dañado, un archivo ausente ni DRM. No se inicia el guardado del progreso hasta que el capítulo haya cargado el puente de lectura.
 
 `EpubReaderTest` cubre paquetes y capítulos UTF-16, rutas escapadas, anclas, entrada externa y permisos, registro de tipos y limpieza de caché. `EpubReaderDeviceTest` prueba un EPUB UTF-16 y la recuperación de un capítulo mal formado en una pantalla virtual, sin tocar la pantalla física ni guardar progreso. Las comprobaciones sobre libros personales requieren el argumento manual `probeExistingEpub=yes`; no registran títulos, fragmentos ni capturas.
+
+
+## Páginas y portadas vacías al abrir desde Books (0.12.3)
+
+`fillMaxSize()` de Compose no sustituía los parámetros nativos `WRAP_CONTENT` que recibía WebView. Chromium resolvía la altura del viewport como cero al calcular `vh`; el cuerpo quedaba reducido a sus márgenes y las imágenes tenían dimensiones 0×0 aunque estuviesen cargadas. El visor ahora utiliza `MATCH_PARENT` en ambos ejes. Una portada real pasó de 0×0 a 450×695 con la misma URI y los mismos datos.
+
+Los tipos de contenido vienen del manifiesto EPUB y se usa la extensión como alternativa. Esto evita interpretar como HTML una portada declarada XHTML con extensión `.html`, lo que hacía desaparecer elementos SVG con prefijo de espacio de nombres. La regresión de dispositivo incluye una portada SVG de ese tipo.
+
+El orden de lectura respeta `linear="no"` y descarta documentos marcados como navegación cuyo cuerpo no tenga texto ni medios. Se conserva el orden anterior para resolver puntos guardados al mismo capítulo cuando cambia su número. Si el punto pertenecía a una entrada vacía eliminada, se abre el siguiente contenido desde el principio.
+
+La prueba sintética de dispositivo exige que una portada PNG cargada tenga un rectángulo de imagen visible, además de comprobar que el JavaScript del lector se inicialice. `EpubBooksAuditDeviceTest` es una auditoría manual, habilitada con `auditEveryEpubFromBooks=yes`: usa la actividad principal, las tarjetas de Books y la actividad EPUB reales en una pantalla virtual; verifica contenido visible y avance, inspecciona capítulos y referencias locales a imágenes/estilos y guarda un informe en la caché de la app. Restaura los puntos de lectura originales y conserva modificaciones ajenas a la auditoría. No guarda capturas de libros personales ni añade sus archivos al repositorio. Las actividades permiten esa pantalla secundaria solo en el manifiesto debug.
