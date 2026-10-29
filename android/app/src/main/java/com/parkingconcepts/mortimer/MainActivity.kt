@@ -964,7 +964,7 @@ private fun NowPlayingSection(player: Player, current: LibraryItem?, title: Stri
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                 Box(Modifier.fillMaxWidth().padding(top = 8.dp), contentAlignment = Alignment.Center) {
                     Box(
-                        Modifier.fillMaxWidth(0.82f).aspectRatio(0.92f).clip(RoundedCornerShape(34.dp))
+                        Modifier.widthIn(max = 360.dp).fillMaxWidth(0.82f).aspectRatio(0.92f).clip(RoundedCornerShape(34.dp))
                             .background(Brush.radialGradient(listOf(c.accent.copy(alpha = if (c.dark) 0.24f else 0.12f), Color.Transparent)))
                     )
                     if (current != null) {

@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -35,7 +36,7 @@ internal fun SubtitleControls(
     }
     Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         Surface(Modifier.fillMaxWidth().fillMaxHeight(0.94f).padding(12.dp), shape = MaterialTheme.shapes.large) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Subtitles · SRT / WebVTT", style = MaterialTheme.typography.titleLarge)
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = onLoad) { Text("Choose file") }
@@ -69,7 +70,7 @@ internal fun SubtitleControls(
                     TextButton(onClick = { onReference(null); onSync(SubtitleSync()); localError = null }) { Text("Reset") }
                 }
                 Text("Video position: ${playerTime(position)}")
-                LazyColumn(Modifier.weight(1f)) {
+                LazyColumn(Modifier.fillMaxWidth().heightIn(min = 140.dp, max = 300.dp)) {
                     itemsIndexed(timeline?.cues.orEmpty()) { index, cue ->
                         ListItem(
                             headlineContent = { Text(cue.text, maxLines = 3) },
