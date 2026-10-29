@@ -46,7 +46,7 @@ internal class StudioPreview(context: Context, private val scope: CoroutineScope
             }
             override fun onPlayerError(failure: PlaybackException) {
                 updating = false; wantedPlaying = false
-                error = "No se pudo previsualizar: ${failure.errorCodeName}. Reabre el archivo o reduce la resolución."
+                error = "Preview failed: ${failure.errorCodeName}. Reopen the file or reduce the resolution."
             }
         })
     }
@@ -89,7 +89,7 @@ internal class StudioPreview(context: Context, private val scope: CoroutineScope
                 appliedClip = clip; appliedCanvas = canvas
                 appliedRevision = request
                 player.prepare()
-            } catch (failure: Exception) { updating = false; wantedPlaying = false; error = failure.message ?: "Vista previa no disponible." }
+            } catch (failure: Exception) { updating = false; wantedPlaying = false; error = failure.message ?: "Preview unavailable." }
         }
     }
     fun play() {
@@ -100,6 +100,7 @@ internal class StudioPreview(context: Context, private val scope: CoroutineScope
         if (!updating && player.playerError == null) player.play()
     }
     fun pause() { wantedPlaying = false; player.pause() }
+    fun retry() { pause(); appliedClip = null; seek(position) }
     fun step(frames: Int) {
         val p = project ?: return
         pause()

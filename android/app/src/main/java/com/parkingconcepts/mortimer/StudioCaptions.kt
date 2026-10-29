@@ -19,7 +19,7 @@ internal fun loadStudioCaptions(context: Context, video: String, budget: Int = M
     val sync = SubtitleSync(prefs.getLong("${key}_offset", 0), prefs.getString("${key}_scale", "1")!!.toDouble())
     val uri = Uri.parse(raw)
     val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytesLimited(minOf(MAX_METADATA_BYTES, budget)) }
-        ?: error("No se pueden abrir los subtítulos. Selecciona el archivo de nuevo.")
+        ?: error("Could not open the subtitles. Select the file again.")
     return StudioCaptions(parseSubtitles(decodeSubtitleBytes(bytes)), sync, uri, prefs.getBoolean("${key}_enabled", true)) to bytes.size
 }
 
@@ -42,13 +42,13 @@ internal suspend fun studioSubtitleTimeline(context: Context, project: StudioPro
                 val outputEnd = offset + ((end - clip.edit.startMs).toDouble() / clip.edit.speed).roundToLong()
                 if (outputEnd > outputStart) cues.add(SubtitleCue(outputStart, outputEnd, cue.text))
             }
-            require(cues.size <= 50_000) { "Demasiadas frases para el SRT del montaje." }
+            require(cues.size <= 50_000) { "Too many cues for the project SRT." }
         }
         offset += clip.duration
     }
-    require(cues.isNotEmpty()) { "No hay subtítulos dentro de los clips del montaje." }
+    require(cues.isNotEmpty()) { "No subtitles overlap the project clips." }
     val timeline = SubtitleTimeline(cues)
-    require(timeline.toSrt(SubtitleSync()).toByteArray().size <= MAX_METADATA_BYTES) { "El SRT del montaje supera 4 MiB." }
+    require(timeline.toSrt(SubtitleSync()).toByteArray().size <= MAX_METADATA_BYTES) { "The project SRT exceeds 4 MiB." }
     return timeline to protected
 }
 
@@ -73,7 +73,7 @@ internal fun StudioCaptionTools(clip: StudioClip, sourceHead: Long, playing: Boo
     }
     LaunchedEffect(key, refresh) {
         captions = StudioCaptions(null, SubtitleSync(), null); onLoaded(captions)
-        try { captions = withContext(Dispatchers.IO) { loadStudioCaptions(context, clip.source.uri).first }; message = captions.timeline?.let { "${it.cues.size} frases cargadas" }; onLoaded(captions) }
+        try { captions = withContext(Dispatchers.IO) { loadStudioCaptions(context, clip.source.uri).first }; message = captions.timeline?.let { "${it.cues.size} cues loaded" }; onLoaded(captions) }
         catch (cancelled: CancellationException) { throw cancelled }
         catch (failure: Exception) { message = failure.message }
     }
@@ -88,5 +88,5 @@ internal fun StudioCaptionTools(clip: StudioClip, sourceHead: Long, playing: Boo
             captions = captions.copy(sync = sync); onLoaded(captions)
             prefs.edit().putLong("${key}_offset", sync.offsetMs).putString("${key}_scale", sync.scale.toString()).apply()
         }, onClose = { open = false })
-    if (showButton) TextButton(onClick = { pause(); open = true }) { Text("Subtítulos del visor · cargar / sincronizar") }
+    if (showButton) TextButton(onClick = { pause(); open = true }) { Text("Viewer subtitles · load / sync") }
 }

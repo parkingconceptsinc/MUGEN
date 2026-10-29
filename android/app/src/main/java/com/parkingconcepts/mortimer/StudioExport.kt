@@ -28,18 +28,18 @@ internal fun rememberStudioExport(project: StudioProject?, pausePreview: () -> U
             state.saving = true
             scope.launch {
                 try {
-                    require(uri.toString() !in state.snapshot?.clips.orEmpty().map { it.source.uri }) { "Elige un archivo nuevo para conservar los originales." }
+                    require(uri.toString() !in state.snapshot?.clips.orEmpty().map { it.source.uri }) { "Choose a new file to preserve the originals." }
                     withContext(Dispatchers.IO) {
                         val job = currentCoroutineContext()
                         context.contentResolver.openOutputStream(uri, "w")?.use { out ->
                             file.inputStream().use { it.copyLimitedTo(out, Long.MAX_VALUE, { job.ensureActive() }) }
-                        } ?: error("No se pudo abrir el destino.")
+                        } ?: error("Could not open the destination.")
                     }
-                    state.message = "MP4 guardado. Los originales se conservan."; file.delete(); state.output = null
+                    state.message = "MP4 saved. Originals are preserved."; file.delete(); state.output = null
                 } catch (failure: Exception) {
                     withContext(NonCancellable + Dispatchers.IO) { if (uri.toString() !in state.snapshot?.clips.orEmpty().map { it.source.uri }) runCatching { context.contentResolver.delete(uri, null, null) } }
                     if (failure is CancellationException) throw failure
-                    state.message = failure.message ?: "No se pudo guardar el MP4."
+                    state.message = failure.message ?: "Could not save the MP4."
                 } finally { state.saving = false }
             }
         }
@@ -57,20 +57,20 @@ internal fun rememberStudioExport(project: StudioProject?, pausePreview: () -> U
                     .addListener(object : Transformer.Listener {
                         override fun onCompleted(composition: Composition, exportResult: ExportResult) {
                             state.busy = false; state.transformer = null
-                            if (target.length() == 0L) { target.delete(); state.output = null; state.message = "El codificador no produjo vídeo." }
-                            else { state.progress = 100; state.message = "Montaje preparado. Guarda el MP4 en la ubicación que prefieras." }
+                            if (target.length() == 0L) { target.delete(); state.output = null; state.message = "The encoder produced no video." }
+                            else { state.progress = 100; state.message = "Render ready. Save MP4 to choose its destination." }
                         }
                         override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {
                             state.busy = false; state.transformer = null; target.delete(); state.output = null
-                            state.message = "Error ${exportException.errorCodeName}. Prueba 720p o un montaje más corto."
+                            state.message = "Error ${exportException.errorCodeName}. Try 720p or a shorter project."
                         }
                     }).build()
                 state.transformer = engine; state.busy = true
                 engine.start(studioComposition(p), target.path)
-            } catch (failure: Exception) { state.cancel(); state.message = failure.message ?: "No se pudo exportar." }
+            } catch (failure: Exception) { state.cancel(); state.message = failure.message ?: "Could not export." }
         }
     }
-    state.save = { save.launch((state.snapshot?.name ?: "MUGEN") + "-montaje.mp4") }
+    state.save = { save.launch((state.snapshot?.name ?: "MUGEN") + "-edited.mp4") }
     DisposableEffect(state) { onDispose { state.cancel() } }
     LaunchedEffect(state.busy) {
         val progress = ProgressHolder()
@@ -95,11 +95,11 @@ internal class StudioExportState {
 @UnstableApi
 @Composable
 internal fun StudioExportPanel(project: StudioProject, state: StudioExportState, onChange: (StudioProject) -> Unit) {
-    Text("Exportar montaje", style = MaterialTheme.typography.titleMedium)
+    Text("Export project", style = MaterialTheme.typography.titleMedium)
     Text("${project.clips.size} clips · ${studioTime(project.duration)} · MP4 H.264 / AAC")
-    Text("Lienzo común · las barras preservan la imagen completa")
+    Text("Common canvas · letterboxing preserves the full image")
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        listOf("source" to "Fuente", "16:9" to "16:9", "9:16" to "9:16", "1:1" to "1:1").forEach { (id, label) ->
+        listOf("source" to "Source", "16:9" to "16:9", "9:16" to "9:16", "1:1" to "1:1").forEach { (id, label) ->
             FilterChip(selected = project.aspect == id, enabled = !state.busy && !state.saving, onClick = { onChange(project.copy(aspect = id)) }, label = { Text(label) })
         }
     }
@@ -107,12 +107,12 @@ internal fun StudioExportPanel(project: StudioProject, state: StudioExportState,
         listOf(720, 1080).forEach { height -> FilterChip(selected = project.height == height, enabled = !state.busy && !state.saving,
             onClick = { onChange(project.copy(height = height)) }, label = { Text("${height}p") }) }
     }
-    Button(enabled = !state.busy && !state.saving, onClick = state.start) { Text("Crear MP4") }
-    if (state.busy) { LinearProgressIndicator(progress = { state.progress / 100f }, modifier = Modifier.fillMaxWidth()); Text("Procesando ${state.progress}%"); TextButton(onClick = { state.cancel(); state.message = "Exportación cancelada." }) { Text("Cancelar exportación") } }
+    Button(enabled = !state.busy && !state.saving, onClick = state.start) { Text("Create MP4") }
+    if (state.busy) { LinearProgressIndicator(progress = { state.progress / 100f }, modifier = Modifier.fillMaxWidth()); Text("Rendering ${state.progress}%"); TextButton(onClick = { state.cancel(); state.message = "Export canceled." }) { Text("Cancel export") } }
     state.message?.let { Text(it) }
     if (state.output?.isFile == true && !state.busy) {
-        if (state.snapshot != project) Text("El proyecto cambió. Crea el MP4 de nuevo para aplicar los cambios.")
-        Button(enabled = !state.saving && state.snapshot == project, onClick = state.save) { Text(if (state.saving) "Guardando…" else "Guardar MP4…") }
+        if (state.snapshot != project) Text("The project changed. Create MP4 again to include the changes.")
+        Button(enabled = !state.saving && state.snapshot == project, onClick = state.save) { Text(if (state.saving) "Saving…" else "Save MP4…") }
     }
-    Text("Mantén Editor abierto durante el procesamiento. Al salir se cancela la exportación; el proyecto se conserva.", style = MaterialTheme.typography.bodySmall)
+    Text("Keep Editor open during rendering. Leaving cancels the export; the project is preserved.", style = MaterialTheme.typography.bodySmall)
 }

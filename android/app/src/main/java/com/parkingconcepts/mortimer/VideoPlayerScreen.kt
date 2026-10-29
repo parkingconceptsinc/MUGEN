@@ -127,7 +127,7 @@ internal fun VideoPlayerDialog(
                 TextButton(onClick = { view?.showController() }) { Text("Show controls") }
                 TextButton(onClick = { pinned = !pinned; view?.controllerShowTimeoutMs = if (pinned) 0 else 4000; view?.showController() }) { Text(if (pinned) "Controls pinned" else "Auto-hide") }
                 TextButton(onClick = { player.pause(); captionPanel = true }) { Text("Subtitles") }
-                TextButton(onClick = { player.pause(); onEdit(item, position) }) { Text("Abrir en Editor") }
+                TextButton(onClick = { player.pause(); onEdit(item, position) }) { Text("Open in Editor") }
                 TextButton(enabled = canPrevious, onClick = { onNavigate(-1) }) { Text("Previous") }
                 TextButton(enabled = canNext, onClick = { onNavigate(1) }) { Text("Next") }
                 TextButton(onClick = { fit = when (fit) { AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM; AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FILL; else -> AspectRatioFrameLayout.RESIZE_MODE_FIT } }) { Text(when(fit) { AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Crop"; AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Stretch"; else -> "Fit" }) }

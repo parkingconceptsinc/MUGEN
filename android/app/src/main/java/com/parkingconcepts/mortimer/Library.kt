@@ -217,7 +217,7 @@ fun persistReadPermission(context: Context, uri: Uri) {
 suspend fun itemsFromUris(context: Context, uris: List<Uri>, kind: String): List<LibraryItem> = uris.distinct().map { uri ->
     currentCoroutineContext().ensureActive()
     persistReadPermission(context, uri)
-    val name = displayName(context, uri, "Archivo")
+    val name = displayName(context, uri, "File")
     LibraryItem(uri = uri.toString(), title = name, kind = kind, format = formatOf(name, kind), size = fileSize(context, uri))
 }
 
@@ -267,7 +267,7 @@ suspend fun itemsFromTree(context: Context, tree: Uri, kind: String): List<Libra
         check(depth < 64 || dirs.isEmpty()) { "The folder nesting is too deep. Import a smaller subfolder." }
         dirs.forEach { (id, name) -> walk(id, "$folderName/$name", depth + 1) }
     }
-    val rootName = rootId.substringAfterLast(':').substringAfterLast('/').ifBlank { "Carpeta" }
+    val rootName = rootId.substringAfterLast(':').substringAfterLast('/').ifBlank { "Folder" }
     walk(rootId, rootName, 0)
     return out
 }
