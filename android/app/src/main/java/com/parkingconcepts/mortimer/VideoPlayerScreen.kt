@@ -55,6 +55,7 @@ internal fun VideoPlayerDialog(
     item: LibraryItem, player: Player, error: String?, onErrorDismiss: () -> Unit,
     canPrevious: Boolean, canNext: Boolean,
     onRetry: () -> Unit, onClose: () -> Unit, onNavigate: (Int) -> Unit,
+    onEdit: (LibraryItem, Long) -> Unit,
 ) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("video_settings", Context.MODE_PRIVATE) }
@@ -66,7 +67,6 @@ internal fun VideoPlayerDialog(
     var position by remember { mutableLongStateOf(player.currentPosition.coerceAtLeast(0)) }
     var duration by remember { mutableLongStateOf(player.duration.coerceAtLeast(0)) }
     var captionPanel by rememberSaveable { mutableStateOf(false) }
-    var editor by rememberSaveable { mutableStateOf(false) }
     var captionUri by remember(key) { mutableStateOf(prefs.getString("${key}_subtitle", null)) }
     var captionEnabled by remember(key) { mutableStateOf(prefs.getBoolean("${key}_enabled", true)) }
     var sync by remember(key) { mutableStateOf(runCatching { SubtitleSync(prefs.getLong("${key}_offset", 0), prefs.getString("${key}_scale", "1")!!.toDouble()) }.getOrDefault(SubtitleSync())) }
@@ -127,7 +127,7 @@ internal fun VideoPlayerDialog(
                 TextButton(onClick = { view?.showController() }) { Text("Show controls") }
                 TextButton(onClick = { pinned = !pinned; view?.controllerShowTimeoutMs = if (pinned) 0 else 4000; view?.showController() }) { Text(if (pinned) "Controls pinned" else "Auto-hide") }
                 TextButton(onClick = { player.pause(); captionPanel = true }) { Text("Subtitles") }
-                TextButton(onClick = { player.pause(); editor = true }) { Text("Edit video") }
+                TextButton(onClick = { player.pause(); onEdit(item, position) }) { Text("Abrir en Editor") }
                 TextButton(enabled = canPrevious, onClick = { onNavigate(-1) }) { Text("Previous") }
                 TextButton(enabled = canNext, onClick = { onNavigate(1) }) { Text("Next") }
                 TextButton(onClick = { fit = when (fit) { AspectRatioFrameLayout.RESIZE_MODE_FIT -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM; AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> AspectRatioFrameLayout.RESIZE_MODE_FILL; else -> AspectRatioFrameLayout.RESIZE_MODE_FIT } }) { Text(when(fit) { AspectRatioFrameLayout.RESIZE_MODE_ZOOM -> "Crop"; AspectRatioFrameLayout.RESIZE_MODE_FILL -> "Stretch"; else -> "Fit" }) }
@@ -165,6 +165,5 @@ internal fun VideoPlayerDialog(
             onSeek = { player.seekTo((player.currentPosition + it).coerceIn(0, duration.coerceAtLeast(0))) },
             onEnabled = { captionEnabled = it }, onSync = { sync = it }, onClose = { captionPanel = false },
             export = { SaveSubtitleButton(timeline, sync, item.title, setOfNotNull(item.androidUri, captionUri?.let(Uri::parse))) })
-        if (editor) VideoEditorDialog(item, duration, position, timeline, sync, captionUri?.let(Uri::parse), onClose = { editor = false; view?.showController() })
     }
 }

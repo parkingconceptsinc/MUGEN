@@ -32,11 +32,16 @@ internal data class PlaybackLoop(val startMs: Long, val endMs: Long) {
     fun shouldRepeat(position: Long) = position >= endMs
 }
 
-internal data class VideoEditSpec(val startMs: Long, val endMs: Long, val rotation: Int = 0, val mute: Boolean = false, val height: Int = 0) {
+internal data class VideoEditSpec(val startMs: Long, val endMs: Long, val rotation: Int = 0, val mute: Boolean = false, val height: Int = 0,
+    val flip: Boolean = false, val brightness: Float = 0f, val contrast: Float = 0f, val saturation: Float = 0f,
+    val speed: Float = 1f, val volume: Float = 1f, val aspect: String = "source") {
     fun validate(duration: Long): VideoEditSpec {
         require(duration > 0 && startMs >= 0 && endMs <= duration && endMs - startMs >= 500) { "Choose a range of at least half a second inside this video." }
         require(rotation in listOf(0, 90, 180, 270)) { "Invalid rotation." }
         require(height in listOf(0, 720, 1080)) { "Invalid output size." }
+        require(brightness.isFinite() && brightness in -1f..1f && contrast.isFinite() && contrast in -1f..1f && saturation.isFinite() && saturation in -100f..100f) { "Invalid color adjustment." }
+        require(speed.isFinite() && speed in 0.25f..4f && volume.isFinite() && volume in 0f..1f) { "Invalid speed or volume." }
+        require(aspect in listOf("source", "16:9", "9:16", "1:1")) { "Invalid canvas." }
         return this
     }
 }

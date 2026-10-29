@@ -26,6 +26,14 @@ El APK de depuración se genera en `app/build/outputs/apk/debug/app-debug.apk`. 
 
 ## Estado y limitaciones
 
+### 0.12.0 (versionCode 1200)
+
+- MUGEN Studio sustituye el modal anterior por la pestaña Editor, con visor ampliable, línea de tiempo e inspector para tablet y teléfono.
+- Proyectos con varios clips: importar, cortar, duplicar, ordenar, eliminar y deshacer/rehacer. Autoguardado atómico y recuperación del proyecto y cabezal.
+- Tiempos de fuente y montaje separados, entrada/salida numérica, paso nominal de fotograma, zoom y marcas en cabezal. La vista previa aplica automáticamente los ajustes sin perder el fotograma de referencia.
+- Velocidad con tono conservado, giros explícitos, espejo, brillo, contraste, saturación, volumen y silencio; lienzos comunes y exportación del montaje completo a MP4 y SRT.
+- Pruebas de montaje con velocidad/audio, saltos rápidos y fotograma conservado, más interacción y capturas de la interfaz en pantallas virtuales de tablet y teléfono, sin operar la pantalla física.
+
 ### 0.11.0 (versionCode 1100)
 
 - Editor con vista previa real del recorte, giro y resolución, bucle del fragmento y borrador automático por vídeo. Si cambias ajustes después de exportar, se exige regenerar el MP4 antes de guardarlo.
@@ -61,4 +69,4 @@ Consulta [ROBUSTNESS_REVIEW.md](ROBUSTNESS_REVIEW.md) para el alcance, pruebas y
 
 El ecualizador usa el del sistema Android, que en la mayoría de teléfonos tiene 5 bandas: las 10 de la app se adaptan a ellas. Faltan pruebas en un vehículo con Android Auto.
 
-La app no usa WebView ni carga la PWA. No se afirma que el APK esté listo para distribución final hasta que el workflow compile correctamente y las funciones se prueben en dispositivos reales.
+La app no carga la PWA; el lector EPUB/TXT usa un WebView local para el contenido del libro. La validación de cada versión combina compilación, pruebas automatizadas y comprobaciones en dispositivos reales.

@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -182,6 +183,7 @@ private val SECTIONS = listOf(
     Section("music", "Music", "♫"),
     Section("playing", "Now Playing", "◉"),
     Section("videos", "Videos", "▶"),
+    Section("editor", "Editor", "✂"),
     Section("books", "Books", "▤"),
     Section("comics", "Comics", "▧"),
     Section("photos", "Photos", "▦"),
@@ -189,7 +191,7 @@ private val SECTIONS = listOf(
     Section("services", "Services", "♪"),
     Section("settings", "Settings", "⚙"),
 )
-private val TABS = listOf("home", "music", "books", "comics", "photos")
+private val TABS = listOf("home", "music", "editor", "books", "comics", "photos")
 
 /**
  * SAF content URIs often end in an opaque document ID instead of a filename.
@@ -384,6 +386,16 @@ private fun MortimerApp(
     }
 
     var section by rememberSaveable { mutableStateOf("home") }
+    var editorProcessing by remember { mutableStateOf(false) }
+    var editorSaving by remember { mutableStateOf(false) }
+    var leaveEditorFor by remember { mutableStateOf<String?>(null) }
+    fun navigate(target: String) {
+        if (section == "editor" && target != "editor" && (editorProcessing || editorSaving)) leaveEditorFor = target
+        else section = target
+    }
+    var editorItem by rememberSaveable { mutableStateOf<LibraryItem?>(null) }
+    var editorPosition by rememberSaveable { mutableLongStateOf(0) }
+    LaunchedEffect(section) { if (section == "editor") player.pause() }
     var currentUri by remember { mutableStateOf(player.currentMediaItem?.mediaId) }
     var currentTitle by remember { mutableStateOf(player.currentMediaItem?.mediaMetadata?.title?.toString()) }
     var isPlaying by remember { mutableStateOf(player.isPlaying) }
@@ -437,7 +449,7 @@ private fun MortimerApp(
 
     val current = library.firstOrNull { it.uri == currentUri }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
-    BackHandler(enabled = section != "home") { section = "home" }
+    BackHandler(enabled = section != "home") { navigate("home") }
 
     @Composable
     fun Body(modifier: Modifier, wide: Boolean, compact: Boolean) {
@@ -455,11 +467,12 @@ private fun MortimerApp(
             Column(
                 Modifier
                     .fillMaxSize()
-                    .widthIn(max = if (wide) 1120.dp else 760.dp)
+                    .widthIn(max = if (section == "editor") 1800.dp else if (wide) 1120.dp else 760.dp)
                     .statusBarsPadding()
-                    .padding(horizontal = if (compact) 12.dp else 18.dp)
+                    .padding(horizontal = if (section == "editor") 0.dp else if (compact) 12.dp else 18.dp)
             ) {
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(if (section == "editor") 0.dp else 14.dp))
+                if (section != "editor") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (!wide) {
                         Box(Modifier.size(40.dp).clip(CircleShape).clickable { scope.launch { drawerState.open() } }, contentAlignment = Alignment.Center) {
@@ -467,10 +480,11 @@ private fun MortimerApp(
                         }
                         Spacer(Modifier.width(8.dp))
                     }
-                    Column(Modifier.weight(1f)) {
+                    if (section != "editor") Column(Modifier.weight(1f)) {
                         Text("MUGEN PLAYER", color = c.accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
                         Text(SECTIONS.first { it.id == section }.label, color = c.text, fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, style = MaterialTheme.typography.headlineMedium.copy(shadow = androidx.compose.ui.graphics.Shadow(color = c.accent.copy(alpha = 0.24f), blurRadius = 14f)))
                     }
+                }
                 }
                 importing?.let {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -481,13 +495,14 @@ private fun MortimerApp(
                     }
                 }
                 libraryError?.let { Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.padding(top = 6.dp)) }
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(if (section == "editor") 0.dp else 12.dp))
                 AnimatedContent(
                     targetState = section,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth()
                         .pointerInput(section) {
+                            if (section == "editor") return@pointerInput
                             var horizontalDistance = 0f
                             detectHorizontalDragGestures(
                                 onHorizontalDrag = { _, dragAmount -> horizontalDistance += dragAmount },
@@ -525,6 +540,7 @@ private fun MortimerApp(
                     "videos" -> VideosSection(library, content, onAddFiles = { addFiles("videos") }, onAddFolder = { addFolder("videos") },
                         onPlay = { item -> playVideo(item) },
                         onRemove = { item -> Covers.forget(context, item.uri); commit { list -> list.filter { it.uri != item.uri } } })
+                    "editor" -> VideoStudioScreen(library, content, editorItem, editorPosition, onInitialConsumed = { editorItem = null }, onExit = { navigate("videos") }, onExportState = { busy, saving -> editorProcessing = busy; editorSaving = saving })
                     "books", "comics" -> ShelfSection(
                         kind = targetSection, library = library, modifier = content,
                         onAddFiles = { addFiles(targetSection) }, onAddFolder = { addFolder(targetSection) },
@@ -540,13 +556,13 @@ private fun MortimerApp(
                         onResetProgress = { commit { list -> list.map { it.copy(progress = 0f, position = "", openedAt = 0) } } })
                     }
                 }
-                if (current != null && section != "playing" && section != "photos") {
+                if (current != null && section != "playing" && section != "photos" && section != "editor") {
                     MiniPlayer(player, current, currentTitle, isPlaying, playbackError) {
                         if (current.kind == "videos") videoOpen = current else section = "playing"
                     }
                 }
-                if (!wide) {
-                    TabBar(section) { section = it }
+                if (!wide && (section != "editor" || LocalConfiguration.current.screenHeightDp >= 500)) {
+                    TabBar(section) { navigate(it) }
                 } else Spacer(Modifier.navigationBarsPadding().height(8.dp))
             }
         }
@@ -562,7 +578,7 @@ private fun MortimerApp(
         val sidebarWidth = if (maxWidth < 820.dp) 208.dp else 248.dp
         if (wideLayout) {
             Row(Modifier.fillMaxSize()) {
-                Sidebar(section, Modifier.width(sidebarWidth).fillMaxHeight()) { section = it }
+                Sidebar(section, Modifier.width(sidebarWidth).fillMaxHeight()) { navigate(it) }
                 Body(Modifier.weight(1f).fillMaxHeight(), wide = true, compact = compactLayout)
             }
         } else {
@@ -570,7 +586,7 @@ private fun MortimerApp(
                 drawerState = drawerState,
                 drawerContent = {
                     ModalDrawerSheet(drawerContainerColor = Color(0xFF0A0A0E), modifier = Modifier.width(290.dp)) {
-                        Sidebar(section, Modifier.fillMaxSize()) { section = it; scope.launch { drawerState.close() } }
+                        Sidebar(section, Modifier.fillMaxSize()) { navigate(it); scope.launch { drawerState.close() } }
                     }
                 },
             ) {
@@ -579,6 +595,11 @@ private fun MortimerApp(
         }
     }
 
+    leaveEditorFor?.let { target -> AlertDialog(onDismissRequest = { leaveEditorFor = null },
+        title = { Text(if (editorSaving) "Guardando MP4" else "¿Cancelar exportación y salir?") },
+        text = { Text(if (editorSaving) "Espera a que termine de guardarse el archivo." else "El montaje se conserva. Se cancelará únicamente el MP4 en proceso.") },
+        confirmButton = { TextButton(enabled = !editorSaving, onClick = { leaveEditorFor = null; section = target }) { Text("Salir") } },
+        dismissButton = { TextButton(onClick = { leaveEditorFor = null }) { Text("Seguir en Editor") } }) }
     if (playlistsOpen) MusicPlaylistDialog(player, onClose = { playlistsOpen = false })
     videoOpen?.let { item ->
         val videos = library.filter { it.kind == "videos" }
@@ -597,6 +618,9 @@ private fun MortimerApp(
             },
             onNavigate = { direction ->
                 videos.getOrNull(videoIndex + direction)?.let { playVideo(it) }
+            },
+            onEdit = { itemToEdit, at ->
+                player.pause(); editorItem = itemToEdit; editorPosition = at; videoOpen = null; section = "editor"
             },
             onClose = {
                 PlaybackPositions.save(context, item.uri, player.currentPosition, player.duration)

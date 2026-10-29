@@ -1,4 +1,4 @@
-# MUGEN 0.11.0: vídeo, audio y lectura
+# MUGEN 0.12.0: vídeo, audio y lectura
 
 ## Vídeo a pantalla completa
 
@@ -19,13 +19,22 @@ La sincronización por referencias no utiliza reconocimiento de voz. El texto se
 
 «Save corrected SRT» guarda una copia UTF-8 con desfase y deriva ya aplicados. Se descartan frases que terminan antes de cero, se recortan las que lo cruzan y se conservan las superpuestas. Desde el editor, el SRT se limita al fragmento seleccionado y sus tiempos se cuentan desde el inicio de ese fragmento. Es un archivo separado del MP4; no se queman los subtítulos en la imagen.
 
-## Editor básico
+## MUGEN Studio: pestaña Editor
 
-Desde «Edit video», selecciona inicio y final, giro de 0/90/180/270 grados, eliminación de audio y tamaño original/720p/1080p. «Create MP4» procesa una copia con H.264/AAC; «Save MP4» abre el selector de destino de Android. Nunca se modifica el archivo original. Se muestra progreso, se permite cancelar y se limpian salidas incompletas. Mantén abierta la pantalla durante el procesamiento; cerrar el editor cancela la exportación.
+«Editor» es una sección propia en la barra de pestañas y en el menú lateral. «Abrir en Editor», desde un vídeo, lleva su archivo y cabezal al estudio. El espacio se organiza en medios/proyectos, visor, línea de tiempo e inspector, tomando como referencia el flujo de [DaVinci Resolve](https://www.blackmagicdesign.com/products/davinciresolve/edit). En tablet se muestran visor e inspector en paralelo; en teléfono vertical se apilan. «Ampliar visor» deja más espacio para revisar el montaje.
 
-Los límites reales de códecs, resolución y HDR dependen del dispositivo. Se permite fallback del codificador y se muestra un error para reintentar con tamaño original o un recorte más corto. No se incluyen montaje de varias pistas ni exportación de subtítulos quemados.
+- **Proyectos y medios:** importar vídeos de la biblioteca o del selector Android, añadir clips, renombrar proyectos y reabrirlos. Los proyectos tienen escritura atómica y respaldo independiente. Si ambos son ilegibles, se impide sobrescribirlos. Los originales no se copian ni modifican.
+- **Montaje:** hasta 64 clips secuenciales, dividir en el cabezal, duplicar, eliminar y mover a izquierda/derecha. La eliminación cierra el hueco. La línea de tiempo tiene zoom 1–16×, desplazamiento horizontal, selección y búsqueda por cabezal. Las bandas V1/A1 representan el vídeo y el estado del audio; no son una forma de onda medida.
+- **Recorte preciso:** entrada/salida con formato `hh:mm:ss.mmm` o segundos, selector de rango y marcas en el cabezal. Deben quedar al menos 0,5 s de fuente. Un arrastre crea una sola operación de deshacer. Los tiempos de fuente se distinguen del reloj del montaje; las marcas de cabezal se desactivan fuera del clip seleccionado.
+- **Transporte:** reproducción/pausa, inicio, paso nominal de fotograma y bucle opcional del proyecto. La frecuencia viene de la pista de vídeo; si falta se informa de una estimación de 30 fps. Fuentes de frecuencia variable no garantizan un avance de fotograma exacto por este método.
+- **Inspector:** cortes y velocidad 0,25–4× conservando tono, giros explícitos 0/90/180/270°, espejo, brillo, contraste, saturación, silencio y volumen 0–100%. Al terminar un ajuste se pausa y actualiza la vista previa, conservando el fotograma de fuente cuando sigue dentro del rango. No hay un segundo botón de aplicar.
+- **Historial:** deshacer/rehacer hasta 50 operaciones completas. La selección no añade operaciones al historial.
+- **Subtítulos:** carga y sincronización por referencias/manual sobre el tiempo de fuente. La exportación SRT del montaje aplica calibración, recorte, orden de clips y velocidad; sigue siendo un archivo separado.
+- **Exportación:** lienzo común de fuente/16:9/9:16/1:1 y altura 720p/1080p, preservando imagen con barras. «Crear MP4» renderiza el montaje H.264/AAC; «Guardar MP4» elige el destino. Los clips mudos producen silencio cuando otro clip tiene audio. Los cambios posteriores obligan a regenerar el MP4. La navegación avisa antes de cancelar un render y no permite interrumpir el guardado.
 
-«Preview these edits» reproduce el fragmento en bucle con los mismos efectos que la exportación. Usa un ExoPlayer independiente, pausa al pasar a segundo plano y se libera al cerrar. «Start/End at playhead» toma la posición de esa vista previa; antes de iniciarla, usa la posición del vídeo original. Los cambios válidos se guardan automáticamente como borrador por URI y duración del vídeo; «Reset edits» vuelve a los valores iniciales. Al cambiar cualquier ajuste tras crear el MP4, hay que crearlo de nuevo antes de guardarlo para no confundir una exportación anterior con los ajustes actuales.
+Vista previa y exportación comparten rangos, efectos visuales y lienzo. ExoPlayer aplica la velocidad al transporte; Transformer cambia los tiempos y procesa el audio, evitando aplicar la velocidad dos veces a la vista previa. Los saltos rápidos se agrupan y siempre prevalece el último solicitado. Al pasar entre clips puede haber una breve preparación del decodificador; no se promete reproducción sin pausas. El render requiere mantener Editor abierto. Los límites de codificación dependen del dispositivo y los errores permiten reintentar con otro tamaño.
+
+Límites de almacenamiento: 50 proyectos, 64 clips por proyecto, 24 horas de duración final y 4 MiB por proyecto; subtítulos de entrada hasta 4 MiB por archivo y 16 MiB en conjunto, 50000 frases y 4 MiB de SRT final. Son cortes secuenciales: no se implementan pistas superpuestas, transiciones, keyframes, títulos animados ni subtítulos quemados. El autoguardado incluye los ajustes y cabezal, con escrituras serializadas al pasar a segundo plano o salir; deshacer/rehacer pertenece a la sesión abierta.
 
 ## Audio
 
@@ -59,7 +68,9 @@ gradle connectedDebugAndroidTest -PdevicePreview=true
 
 `MediaPipelineDeviceTest` usa un clip sintético incluido en los recursos de prueba; comprueba fotogramas de vista previa con giro y tamaño, duración del recorte y exportación sin pista de audio. No pide foco de audio y limpia los archivos temporales. El dispositivo debe admitir los códecs y efectos solicitados.
 
-Verificación local de 0.11.0: 79 pruebas unitarias correctas y dos pruebas de pipeline correctas en una Samsung SM-X900 con Android 16 (API 36), usando el paquete Preview. No se abrió ninguna actividad para estas dos pruebas. La revisión visual de los nuevos diálogos con contenido personal queda pendiente; el análisis lint no registra errores.
+Verificación local de 0.12.0: 90 pruebas unitarias correctas, lint sin errores y cinco pruebas de dispositivo correctas en Samsung SM-X900 con Android 16/API 36, usando Preview. Se prueban el montaje con velocidades distintas y audio tras un primer clip mudo, el último salto en una secuencia rápida y la conservación del fotograma al cambiar ajustes. El MP4 sintético se decodificó además fuera de Android: RMS cero en la introducción muda y audio presente en el segundo clip.
+
+La prueba de interfaz usa una pantalla virtual secundaria con contenido sintético, sin abrir la biblioteca del usuario ni guardar proyectos. Verifica dividir/deshacer/rehacer, inspector, giro y visor ampliado, y guarda capturas a 1280×800, 420×900 y 860×440. Requiere Android 14/API 34 y pantallas secundarias; la actividad de prueba solo existe en debug, no está exportada, exige el identificador de su pantalla virtual y se cierra si cambia de pantalla. La prueba cierra su actividad y espera su destrucción antes de retirar la pantalla, también si falla una aserción. Estas capturas se revisaron visualmente; no constituyen una prueba de todos los gestos ni de todos los formatos personales.
 
 Para probar sin sustituir una instalación existente con otra firma:
 
