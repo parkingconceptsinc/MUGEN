@@ -26,6 +26,12 @@ El APK de depuración se genera en `app/build/outputs/apk/debug/app-debug.apk`. 
 
 ## Estado y limitaciones
 
+### 0.9.2 (versionCode 902)
+
+- Las órdenes de voz de Android Auto se resuelven también al reemplazar la cola. Una búsqueda selecciona la canción encontrada; una orden vacía usa la última canción reproducida o la primera disponible.
+- Al descartar una petición que no se puede reproducir, se conserva la canción seleccionada y su posición. Si se descarta la propia selección, se usa la siguiente canción disponible, o la última, desde su posición predeterminada.
+- Pruebas de regresión para búsquedas, órdenes vacías, navegación por identificador, selección de cola y bibliotecas vacías.
+
 El ecualizador usa el del sistema Android, que en la mayoría de teléfonos tiene 5 bandas: las 10 de la app se adaptan a ellas. Faltan pruebas en un vehículo con Android Auto.
 
 La app no usa WebView ni carga la PWA. No se afirma que el APK esté listo para distribución final hasta que el workflow compile correctamente y las funciones se prueben en dispositivos reales.
