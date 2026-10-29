@@ -968,9 +968,9 @@ private fun NowPlayingSection(player: Player, current: LibraryItem?, title: Stri
                             .background(Brush.radialGradient(listOf(c.accent.copy(alpha = if (c.dark) 0.24f else 0.12f), Color.Transparent)))
                     )
                     if (current != null) {
-                        CoverImage(current, Modifier.fillMaxWidth(0.70f).aspectRatio(1f).clip(RoundedCornerShape(24.dp)))
+                        CoverImage(current, Modifier.widthIn(max = 300.dp).fillMaxWidth(0.90f).aspectRatio(1f).clip(RoundedCornerShape(24.dp)))
                     } else {
-                        Box(Modifier.fillMaxWidth(0.70f).aspectRatio(1f).clip(RoundedCornerShape(24.dp))
+                        Box(Modifier.widthIn(max = 300.dp).fillMaxWidth(0.90f).aspectRatio(1f).clip(RoundedCornerShape(24.dp))
                             .background(Brush.linearGradient(listOf(c.panel2, c.panel))), contentAlignment = Alignment.Center) {
                             Text("♫", color = c.accent, fontSize = 64.sp, fontWeight = FontWeight.Black)
                         }
