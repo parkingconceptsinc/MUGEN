@@ -1,3 +1,4 @@
+import type { SubtitleSync } from "./subtitles";
 import { createContext, useContext, type RefObject } from "react";
 import type { Comic, ComicProgress, EqSettings, Playlist, ReaderSettings, RepeatMode, Route, Screen, Shelf, SongSort, Track, VideoFit } from "./types";
 
@@ -57,6 +58,9 @@ export type Actions = {
   setSleep(minutes: number | "track" | null): void;
   cycleAB(): void;
   loadSubtitles(file: File): void;
+  setSubtitleSync(sync: SubtitleSync): void;
+  exportSubtitles(): void;
+  clearSubtitles(): void;
   install(): void;
   toast(message: string): void;
   openComic(id: string, options?: { fromStart?: boolean }): void;
@@ -112,7 +116,7 @@ export type PlayerState = {
   sleep: SleepState;
   sleepRemaining: number | null;
   ab: { a: number | null; b: number | null };
-  subtitles: { url: string; name: string } | null;
+  subtitles: { url: string; name: string; sync: SubtitleSync } | null;
   importing: { done: number; total: number; label?: string } | null;
   canInstall: boolean;
   videoRef: RefObject<HTMLVideoElement | null>;

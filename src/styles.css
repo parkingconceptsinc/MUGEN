@@ -2125,3 +2125,5 @@ button:active:not(:disabled), .btn:active:not(:disabled), .iconBtn:active:not(:d
 @media (prefers-reduced-motion: reduce) {
   .vpChrome, .vpCenter .iconBtn.big, .vpTools .toolBtn { transition: none; }
 }
+
+.appUpdate { position: fixed; bottom: max(90px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); z-index: 10000; width: min(92vw, 600px); padding: 16px; background: var(--surface, #202027); color: var(--text, white); border: 1px solid var(--accent); border-radius: 16px; box-shadow: 0 8px 32px #0008; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }

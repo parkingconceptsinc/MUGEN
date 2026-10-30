@@ -1,6 +1,6 @@
 # MUGEN APK — aplicación Android nativa
 
-Este módulo Android está en transición desde el antiguo lanzador WebView a una aplicación nativa con Kotlin, Jetpack Compose y Media3. La PWA permanece separada en la raíz del repositorio y no se modifica por esta aplicación.
+Este módulo Android está en transición desde el antiguo lanzador WebView a una aplicación nativa con Kotlin, Jetpack Compose y Media3. La PWA vive en la raíz del repositorio. Ambas aplicaciones comparten versión y validación de compilación; el estado de paridad funcional está en [docs/PARITY.md](../docs/PARITY.md).
 
 ## Compilar
 

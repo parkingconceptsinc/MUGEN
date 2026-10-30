@@ -1,78 +1,13 @@
-name: MUGEN Android Build
-
+name: MUGEN parity checks
 on:
   pull_request:
-    paths:
-      - "android/**"
-      - ".github/workflows/android-auto.yml"
-      - ".github/workflows/android-release.yml"
-      - ".github/workflows/pwa-build.yml"
-      - "index.html"
-      - "package.json"
-      - "package-lock.json"
-      - "src/**"
-      - "public/**"
-      - "vite.config.ts"
-      - "tsconfig.json"
-  push:
     branches: [main]
-    paths:
-      - "android/**"
-      - ".github/workflows/android-auto.yml"
   workflow_dispatch:
-
+permissions:
+  contents: read
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: parity-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
-
 jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: npm
-      - name: Install PWA dependencies
-        run: npm ci
-      - name: Build PWA
-        run: npm run build
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: "8.9"
-      - name: Test, lint, and assemble Android Auto companion
-        working-directory: android
-        run: gradle testDebugUnitTest lintDebug assembleDebug
-      - name: Print Android lint findings
-        if: always()
-        shell: bash
-        run: |
-          report="android/app/build/intermediates/lint_intermediate_text_report/debug/lintReportDebug/lint-results-debug.txt"
-          if [[ -f "$report" ]]; then
-            cat "$report"
-          else
-            echo "No Android lint text report was generated."
-          fi
-      - name: Upload Android lint report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: MUGEN-android-lint-report
-          path: android/app/build/reports/lint-results-debug.html
-          if-no-files-found: ignore
-          retention-days: 30
-      - name: Rename installable debug APK to MUGEN.apk
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/MUGEN.apk
-      - name: Upload installable debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: MUGEN-Android-APK
-          path: android/app/build/outputs/apk/debug/MUGEN.apk
-          if-no-files-found: error
-          retention-days: 30
+  validate:
+    uses: ./.github/workflows/validate.yml

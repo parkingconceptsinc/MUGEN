@@ -1,8 +1,12 @@
+import groovy.json.JsonSlurper
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
 }
+
+val sharedRelease = JsonSlurper().parse(rootProject.file("../shared/release.json")) as Map<*, *>
 
 android {
     namespace = "com.parkingconcepts.mortimer"
@@ -14,9 +18,9 @@ android {
         targetSdk = 35
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         manifestPlaceholders["appLabel"] = "MUGEN"
-        // Increment both values whenever an Android change is prepared for distribution.
-        versionCode = providers.gradleProperty("androidVersionCode").orElse("1301").get().toInt()
-        versionName = providers.gradleProperty("androidVersionName").orElse("0.13.1").get()
+        // Both apps use the same checked-in release; overrides are for explicit builds.
+        versionCode = providers.gradleProperty("androidVersionCode").orElse(sharedRelease["androidVersionCode"].toString()).get().toInt()
+        versionName = providers.gradleProperty("androidVersionName").orElse(sharedRelease["version"].toString()).get()
     }
 
     compileOptions {

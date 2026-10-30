@@ -1,3 +1,4 @@
+import { decodeSubtitles, parseSubtitles, serializeSubtitles, validateSync, type SubtitleCue } from "./subtitles";
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type InputHTMLAttributes } from "react";
 import { BookOpen, Clapperboard, Disc3, Download, FilePlus, FolderOpen, Library as LibraryIcon, ListMusic, Settings as SettingsIcon, SlidersHorizontal, type LucideIcon, Images } from "lucide-react";
 import { applyAudio, attachElement, EQ_PRESETS, initEngine, resumeEngine } from "./audioEngine";
@@ -8,7 +9,7 @@ import { comicFormatOf, defaultShelf, isComicFile, isTextFormat, makeThumbnail, 
 import { META_VERSION, readItem, readTags, type Incoming } from "./metadata";
 import { readPref, usePref, writePref } from "./prefs";
 import type { Comic, ComicProgress, EqSettings, Playlist, ReaderSettings, RepeatMode, Route, Screen, SongSort, Track, VideoFit } from "./types";
-import { ACCENTS, compareText, formatTime, shuffled, srtToVtt, supported, toTrack, trackKey } from "./util";
+import { ACCENTS, compareText, formatTime, shuffled, supported, toTrack, trackKey } from "./util";
 import { captureVideoFrame } from "./thumbnails";
 import { MiniPlayer, TrackMenu } from "./components";
 import { Library } from "./screens/Library";
@@ -141,7 +142,9 @@ export function Player() {
   const [sleep, setSleepState] = useState<SleepState>({ endsAt: null, endOfTrack: false });
   const [now, setNow] = useState(() => Date.now());
   const [ab, setAb] = useState<{ a: number | null; b: number | null }>({ a: null, b: null });
-  const [subtitles, setSubtitles] = useState<{ url: string; name: string } | null>(null);
+  const [subtitles, setSubtitles] = useState<PlayerState["subtitles"]>(null);
+  const subtitleCuesRef = useRef<SubtitleCue[]>([]);
+  const subtitleRequestRef = useRef(0);
   const subtitleUrlRef = useRef<string | null>(null);
   const [importing, setImporting] = useState<{ done: number; total: number; label?: string } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -1095,13 +1098,45 @@ export function Player() {
       }
     },
     loadSubtitles(file) {
-      void file.text().then((text) => {
-        const url = URL.createObjectURL(new Blob([srtToVtt(text)], { type: "text/vtt" }));
+      const request = ++subtitleRequestRef.current;
+      if (file.size > 4 * 1024 * 1024) return toast("Subtitle file is too large (maximum 4 MiB).");
+      void file.arrayBuffer().then((bytes) => {
+        if (request !== subtitleRequestRef.current) return;
+        const cues = parseSubtitles(decodeSubtitles(bytes));
+        const sync = { offsetMs: 0, scale: 1 };
+        const url = URL.createObjectURL(new Blob([serializeSubtitles(cues, sync, "vtt")], { type: "text/vtt" }));
+        if (subtitleUrlRef.current) URL.revokeObjectURL(subtitleUrlRef.current);
+        subtitleCuesRef.current = cues;
+        subtitleUrlRef.current = url;
+        setSubtitles({ url, name: file.name, sync });
+        toast(`Subtitles: ${file.name}`);
+      }).catch((error) => { if (request === subtitleRequestRef.current) toast(error.message || "Couldn't read that subtitle file"); });
+    },
+    setSubtitleSync(sync) {
+      if (!subtitles) return;
+      try {
+        sync = validateSync(sync);
+        const url = URL.createObjectURL(new Blob([serializeSubtitles(subtitleCuesRef.current, sync, "vtt")], { type: "text/vtt" }));
         if (subtitleUrlRef.current) URL.revokeObjectURL(subtitleUrlRef.current);
         subtitleUrlRef.current = url;
-        setSubtitles({ url, name: file.name });
-        toast(`Subtitles: ${file.name}`);
-      }).catch(() => toast("Couldn't read that subtitle file"));
+        setSubtitles({ ...subtitles, url, sync });
+      } catch (error) { toast((error as Error).message); }
+    },
+    exportSubtitles() {
+      if (!subtitles) return;
+      const url = URL.createObjectURL(new Blob([serializeSubtitles(subtitleCuesRef.current, subtitles.sync, "srt")], { type: "application/x-subrip" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = subtitles.name.replace(/\.[^.]+$/, "") + "-synced.srt";
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    },
+    clearSubtitles() {
+      subtitleRequestRef.current++;
+      if (subtitleUrlRef.current) URL.revokeObjectURL(subtitleUrlRef.current);
+      subtitleUrlRef.current = null;
+      subtitleCuesRef.current = [];
+      setSubtitles(null);
     },
     install() {
       if (!installEvent) return;
@@ -1483,6 +1518,8 @@ export function Player() {
     }
     counted.current = false;
     setAb({ a: null, b: null });
+    subtitleRequestRef.current++;
+    subtitleCuesRef.current = [];
     setSubtitles((old) => {
       if (old) URL.revokeObjectURL(old.url);
       subtitleUrlRef.current = null;
