@@ -46,12 +46,18 @@ import java.util.concurrent.Executors
 internal object StudioSaves {
     private val executor = Executors.newSingleThreadExecutor { Thread(it, "MUGEN-studio-save").apply { isDaemon = true } }
     fun save(context: android.content.Context, project: StudioProject, at: Long, result: (String?) -> Unit = {}) {
+        val app = context.applicationContext
         executor.execute {
-            val failure = runCatching { StudioProjectStore.save(context, project, at) }.exceptionOrNull()?.let { it.message ?: "Could not save the project." }
+            val failure = runCatching { StudioProjectStore.save(app, project, at) }.exceptionOrNull()?.let { it.message ?: "Could not save the project." }
             Handler(Looper.getMainLooper()).post { result(failure) }
         }
     }
     fun await() { executor.submit {}.get() }
+    /** Await queued checkpoints and propagate this write's failure to the switching UI. */
+    fun checkpoint(context: android.content.Context, project: StudioProject, at: Long) {
+        try { executor.submit { StudioProjectStore.save(context.applicationContext, project, at) }.get() }
+        catch (failure: java.util.concurrent.ExecutionException) { throw failure.cause ?: failure }
+    }
 }
 
 @UnstableApi
@@ -59,7 +65,7 @@ internal object StudioSaves {
 internal fun VideoStudioScreen(library: List<LibraryItem>, modifier: Modifier = Modifier,
     initialItem: LibraryItem? = null, initialPosition: Long = 0, onInitialConsumed: () -> Unit = {},
     initialProject: StudioProject? = null, persistProject: Boolean = true, onExit: () -> Unit = {},
-    onExportState: (Boolean, Boolean) -> Unit = { _, _ -> }) {
+    onExportState: (Boolean, Boolean) -> Unit = { _, _ -> }, onPendingExport: (Boolean) -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val preview = remember { StudioPreview(context, scope) }
@@ -73,6 +79,7 @@ internal fun VideoStudioScreen(library: List<LibraryItem>, modifier: Modifier = 
     var newImport by remember { mutableStateOf(false) }
     var rename by remember { mutableStateOf(false) }
     var importing by remember { mutableStateOf(false) }
+    var checkpointing by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var saveStatus by remember { mutableStateOf(if (persistProject) "Project saved automatically" else "Test preview") }
     var captions by remember { mutableStateOf(StudioCaptions(null, SubtitleSync(), null)) }
@@ -89,11 +96,34 @@ internal fun VideoStudioScreen(library: List<LibraryItem>, modifier: Modifier = 
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val export = rememberStudioExport(project, preview::pause)
     LaunchedEffect(export.busy, export.saving, savingSrt) { onExportState(export.busy, export.saving || savingSrt) }
-    DisposableEffect(Unit) { onDispose { onExportState(false, false) } }
-    val locked = importing || export.busy || export.saving || savingSrt || preparingSrt
+    LaunchedEffect(export.output, export.busy, export.saving) { onPendingExport(export.output?.isFile == true && !export.busy) }
+    DisposableEffect(Unit) { onDispose { onExportState(false, false); onPendingExport(false) } }
+    val locked = checkpointing || importing || export.busy || export.saving || savingSrt || preparingSrt
+    // A debounce is not a save: finish a checkpoint before replacing the only in-memory project.
+    fun checkpointThen(next: () -> Unit) {
+        val current = project
+        if (!persistProject || current == null) { next(); return }
+        if (checkpointing) return
+        preview.pause()
+        val at = preview.position
+        checkpointing = true; saveStatus = "Saving project…"
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) { StudioSaves.checkpoint(context.applicationContext, current, at) }
+                saveStatus = "Project saved automatically"; message = null
+                next()
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (failure: Exception) {
+                message = failure.message ?: "Could not save the project. Retry saving before switching projects."
+                saveStatus = "Project not saved · retry"
+            } finally { checkpointing = false }
+        }
+    }
     fun open(value: StudioProject, at: Long = 0) {
-        project = value; history = StudioHistory(value); selected = value.clips.first().id
-        preview.load(value, at); message = null; preparedSrt = null
+        checkpointThen {
+            project = value; history = StudioHistory(value); selected = value.clips.first().id
+            preview.load(value, at); message = null; preparedSrt = null
+        }
     }
     fun change(next: StudioProject) {
         if (locked) return
@@ -160,6 +190,7 @@ internal fun VideoStudioScreen(library: List<LibraryItem>, modifier: Modifier = 
     LaunchedEffect(project, preview.position / 5000) {
         val p = project ?: return@LaunchedEffect
         if (!persistProject) return@LaunchedEffect
+        saveStatus = "Saving project…"
         delay(500)
         StudioSaves.save(context, p, preview.position) { failure ->
             if (latestProject == p) { saveStatus = failure ?: "Project saved automatically"; if (failure != null) message = failure }
@@ -180,12 +211,12 @@ internal fun VideoStudioScreen(library: List<LibraryItem>, modifier: Modifier = 
         Surface(modifier, color = Color(0xFF10151C)) {
             Column(Modifier.fillMaxSize().padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = onExit) { Text("‹") }
+                    TextButton(enabled = !locked, onClick = { checkpointThen(onExit) }) { Text("‹ Back") }
                     Column(Modifier.weight(1f)) {
                         Text("MUGEN STUDIO", color = StudioAccent, fontSize = 11.sp, letterSpacing = 2.sp)
                         Text(project?.name ?: "Video editor", maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium)
                     }
-                    TextButton(enabled = !locked, onClick = { projectsOpen = true; preview.pause() }) { Text("Projects") }
+                    TextButton(enabled = !locked, onClick = { preview.pause(); checkpointThen { projectsOpen = true } }) { Text("Projects") }
                     TextButton(enabled = !locked, onClick = { newImport = project == null; mediaOpen = true; preview.pause() }) { Text("＋ Media") }
                 }
                 if (importing) LinearProgressIndicator(Modifier.fillMaxWidth())
@@ -219,6 +250,7 @@ internal fun VideoStudioScreen(library: List<LibraryItem>, modifier: Modifier = 
                         TextButton(enabled = !locked && history?.canUndo == true, onClick = { project = history!!.undo(); preview.pause(); preview.update(project!!); revision++; preparedSrt = null }) { Text("↶ Undo") }
                         TextButton(enabled = !locked && history?.canRedo == true, onClick = { project = history!!.redo(); preview.pause(); preview.update(project!!); revision++; preparedSrt = null }) { Text("↷ Redo") }
                         TextButton(enabled = !locked, onClick = { rename = true }) { Text("Rename") }
+                        TextButton(enabled = !locked && persistProject, onClick = { checkpointThen { message = null } }) { Text("Save now") }
                         Text(saveStatus, fontSize = 10.sp, modifier = Modifier.padding(top = 16.dp))
                     }
                     @Composable fun Viewer(modifier: Modifier) {
@@ -321,7 +353,7 @@ internal fun VideoStudioScreen(library: List<LibraryItem>, modifier: Modifier = 
                         onMove = { change(p.move(clip.id, it)) },
                         onDuplicate = { val i = p.clips.indexOf(clip); change(p.copy(clips = p.clips.take(i + 1) + clip.copy(id = UUID.randomUUID().toString()) + p.clips.drop(i + 1))) },
                         onDelete = { change(p.copy(clips = p.clips.filter { it.id != clip.id })) }, compact = compactHeight)
-                    if (export.busy || export.saving) Text(if (export.saving) "Saving MP4…" else "Rendering project · ${export.progress}%", color = StudioAccent)
+                    if (export.busy || export.saving) Text(if (export.saving) "Saving MP4…" else if (export.progressAvailable) "Rendering project · ${export.progress}%" else "Preparing video encoder…", color = StudioAccent)
                 }
             }
             reconnectFolder?.let { folder -> ReconnectFoldersDialog(listOf(folder), onRestored = {
@@ -386,7 +418,7 @@ internal fun StudioProjectsDialog(currentId: String?, onOpen: (StudioSavedProjec
                             Text(saved?.project?.name ?: "Unreadable project · ${id.take(8)}")
                             saved?.let { Text("${it.project.clips.size} clips · ${studioTime(it.project.duration)}", style = MaterialTheme.typography.bodySmall) }
                             Row {
-                                TextButton(enabled = saved != null, onClick = { saved?.let(onOpen) }) { Text("Abrir") }
+                                TextButton(enabled = saved != null, onClick = { saved?.let(onOpen) }) { Text("Open") }
                                 TextButton(enabled = id != currentId, onClick = { removing = id }) { Text("Delete") }
                             }
                         }

@@ -111,6 +111,53 @@ class StudioProjectTest {
         assertEquals(StudioSavedProject(end, 4000), StudioProjectStore.load(context, p.id))
         StudioProjectStore.delete(context, p.id)
     }
+    @Test fun explicitCheckpointWaitsForRecentEditAndPropagatesWriteFailures() {
+        val p = project()
+        StudioSaves.save(context, p, 123)
+        val edited = p.copy(name = "Latest unsaved edit")
+        StudioSaves.checkpoint(context, edited, 2345)
+        assertEquals(StudioSavedProject(edited, 2345), StudioProjectStore.load(context, p.id))
+        val target = File(context.filesDir, "video_studio/${p.id}.json")
+        target.writeText("broken")
+        File(target.path + ".recovery").writeText("also broken")
+        assertThrows(IOException::class.java) { StudioSaves.checkpoint(context, edited.copy(name = "Must remain in memory"), 3000) }
+        assertEquals("broken", target.readText())
+        StudioProjectStore.delete(context, p.id)
+    }
+    @Test fun savingReservesExactRenderAndBlocksSecondDestinationWhilePickerIsOpen() {
+        val p = project()
+        val rendered = File.createTempFile("studio-reservation", ".mp4", context.cacheDir).apply { writeBytes(byteArrayOf(1, 2, 3)) }
+        val state = StudioExportState().apply { snapshot = p; output = rendered }
+        try {
+            val reservation = state.reserveSave(p)
+            assertTrue(state.saving)
+            assertEquals(p, reservation.project)
+            assertEquals(rendered, reservation.file)
+            assertSame(reservation, state.pendingSave)
+            assertThrows(IllegalStateException::class.java) { state.reserveSave(p) }
+            assertSame(reservation, state.pendingSave)
+            assertTrue(rendered.exists())
+            // Canceling the file picker releases the reservation but preserves the render for retry.
+            state.pendingSave = null; state.saving = false
+            assertEquals(reservation, state.reserveSave(p))
+        } finally { rendered.delete() }
+    }
+    @Test fun saveRejectsStaleOrMissingRendersAndCancelInvalidatesLateCallbacks() {
+        val p = project()
+        val rendered = File.createTempFile("studio-stale", ".mp4", context.cacheDir).apply { writeBytes(byteArrayOf(1)) }
+        val state = StudioExportState().apply { snapshot = p; output = rendered }
+        try {
+            assertThrows(IllegalStateException::class.java) { state.reserveSave(p.copy(name = "Changed")) }
+            assertFalse(state.saving)
+            assertNull(state.pendingSave)
+            assertTrue(rendered.exists())
+            val revision = state.generation
+            state.cancel()
+            assertTrue(state.generation > revision)
+            assertFalse(rendered.exists())
+            assertThrows(IllegalStateException::class.java) { state.reserveSave(p) }
+        } finally { rendered.delete() }
+    }
     @Test fun montageSubtitlesApplyCalibrationTrimSpeedAndClipOrder() = runBlocking {
         val p = project()
         val srt = File(context.cacheDir, "studio-captions.srt").apply { writeText("1\n00:00:01,000 --> 00:00:03,000\nFirst\n\n2\n00:00:08,000 --> 00:00:09,000\nSecond\n") }

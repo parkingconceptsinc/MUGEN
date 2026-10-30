@@ -1,6 +1,6 @@
 # Android APK updates
 
-MUGEN APK checks the GitHub latest release from the native Settings screen. Releases must be tagged `android-vMAJOR.MINOR.PATCH` and include the signed APK asset. Both apps read their version from [`shared/release.json`](../shared/release.json); the proposed release is `0.14.0` (`versionCode 1400`).
+MUGEN APK checks the GitHub latest release from the native Settings screen. Releases must be tagged `android-vMAJOR.MINOR.PATCH` and include the signed APK asset. Both apps read their version from [`shared/release.json`](../shared/release.json); the proposed release is `0.15.0` (`versionCode 1500`).
 
 ## One-time signing setup
 
@@ -15,6 +15,6 @@ Never commit the keystore or passwords. Keep a secure backup. If an installed AP
 
 ## Publish a release
 
-After configuring secrets, push a tag such as `android-v0.14.0`. The tag must match the shared manifest. The workflow validates both apps, runs unit tests and lint, builds a signed release APK, attaches it to a GitHub Release, and then deploys the PWA from the same commit. The in-app updater detects the release, downloads the APK, and opens Android's installer. The user must approve installation; Android may also ask permission to install unknown apps.
+After configuring secrets, push a tag such as `android-v0.15.0`. The tag must match the shared manifest. The workflow validates both apps, runs unit tests and lint, builds a signed release APK, attaches it to a GitHub Release, and then deploys the PWA from the same commit. The in-app updater detects the release, downloads the APK, and opens Android's installer. The user must approve installation; Android may also ask permission to install unknown apps.
 
 Version codes are derived as `major * 10000 + minor * 100 + patch` and must increase monotonically. Do not publish a tag that would produce a version code lower than an already distributed build.

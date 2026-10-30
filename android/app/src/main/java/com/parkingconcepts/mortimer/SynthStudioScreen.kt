@@ -25,11 +25,11 @@ import kotlin.math.roundToInt
 import org.json.JSONArray
 import org.json.JSONObject
 
-@Composable internal fun SynthStudioPanel(effects:AudioEffects.Settings,onStartAudio:()->Unit,persistSettings:Boolean=true,quiet:Boolean=false){
+@Composable internal fun SynthStudioPanel(effects:AudioEffects.Settings,onStartAudio:()->Unit,persistSettings:Boolean=true,quiet:Boolean=false,waveExporter:WaveExportState?=null){
     val context=LocalContext.current;val c=LocalMortimerColors.current;val scope=rememberCoroutineScope();val lifecycle=LocalLifecycleOwner.current.lifecycle
     val synth=remember{SynthPreview(context,muted=quiet)};var s by remember{mutableStateOf(if(persistSettings)loadSynth(context) else SynthSettings())};var active by remember{mutableStateOf(false)};var step by remember{mutableIntStateOf(0)}
     var selectedNote by remember{mutableIntStateOf(60)};var useFx by remember{mutableStateOf(true)};var error by remember{mutableStateOf<String?>(null)}
-    var job by remember{mutableStateOf<Job?>(null)};var progress by remember{mutableFloatStateOf(0f)};var bars by remember{mutableIntStateOf(2)};val exporter=rememberWaveExporter()
+    var job by remember{mutableStateOf<Job?>(null)};var progress by remember{mutableFloatStateOf(0f)};var bars by remember{mutableIntStateOf(2)};val exporter=waveExporter?:rememberWaveExporter()
     LaunchedEffect(s,effects,useFx){synth.settings=s;synth.effects=if(useFx)effects else AudioEffects.Settings();if(persistSettings)saveSynth(context,s.copy(sequence=false))}
     LaunchedEffect(Unit){while(true){active=synth.active;step=synth.currentStep;synth.error?.let{error=it};delay(80)}}
     DisposableEffect(lifecycle){val observer=LifecycleEventObserver{_,event->if(event==Lifecycle.Event.ON_STOP){synth.stop();s=s.copy(sequence=false)}};lifecycle.addObserver(observer);onDispose{lifecycle.removeObserver(observer);synth.close();job?.cancel()}}
@@ -71,12 +71,13 @@ import org.json.JSONObject
         Row{listOf(1,2,4,8).forEach{n->TextButton(onClick={bars=n}){Text("$n bars${if(n==bars)" ✓" else ""}")}}}
         if(job?.isActive==true){LinearProgressIndicator(progress={progress},modifier=Modifier.fillMaxWidth());TextButton(onClick={job?.cancel()}){Text("Cancel render")}}
         else Button(enabled=!exporter.busy,onClick={synth.stop();s=s.copy(sequence=false);progress=0f;val settings=s;val renderBars=bars;val renderEffects=if(useFx)effects else AudioEffects.Settings();job=scope.launch{
-            try{val file=File.createTempFile("synth-render-",".wav",context.cacheDir);renderSynthWave(file,settings,renderEffects,renderBars){p->scope.launch{progress=p}};exporter.save(file,"MUGEN-synth-$renderBars-bars.wav");error=null}
-            catch(cancelled:CancellationException){error="Render cancelled.";throw cancelled}
-            catch(failure:Exception){error=failure.message?:"Synth render failed."}finally{job=null}
+            var file:File?=null
+            try{file=File.createTempFile("synth-render-",".wav",context.cacheDir);renderSynthWave(file!!,settings,renderEffects,renderBars){p->scope.launch{progress=p}};exporter.save(file!!,"MUGEN-synth-$renderBars-bars.wav");error=null}
+            catch(cancelled:CancellationException){file?.delete();error="Render cancelled.";throw cancelled}
+            catch(failure:Exception){file?.delete();error=failure.message?:"Synth render failed."}finally{job=null}
         }}){Text("Render sequence WAV")}
-        if(exporter.busy)LinearProgressIndicator(Modifier.fillMaxWidth())
-        (error?:exporter.error)?.let{Text(it,color=MaterialTheme.colorScheme.error)}
+        WaveExportStatus(exporter)
+        error?.let{Text(it,color=MaterialTheme.colorScheme.error)}
     }
 }
 private fun loadSynth(context:android.content.Context):SynthSettings=runCatching{

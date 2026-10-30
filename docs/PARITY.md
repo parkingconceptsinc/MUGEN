@@ -1,7 +1,7 @@
 # MUGEN: revisión de paridad PWA / APK
 
 Revisión de código sobre `3c10998b59b891ff2b7b2ed169595d908e4adb8a`.
-Esta matriz distingue implementación de validación: encontrar una función en el código no acredita su funcionamiento en todos los dispositivos. No se ha alcanzado paridad total.
+Esta matriz distingue implementación de validación: encontrar una función en el código no acredita su funcionamiento en todos los dispositivos. No se ha alcanzado paridad total. La ampliación de Studio y Audio Lab en 0.15.0 está descrita en [CREATIVE_WORKSPACES.md](CREATIVE_WORKSPACES.md).
 
 | Área | PWA | Android | Diferencias / siguiente trabajo |
 | --- | --- | --- | --- |
@@ -10,11 +10,11 @@ Esta matriz distingue implementación de validación: encontrar una función en 
 | Listas / cola | Crear, renombrar, quitar, reordenar, reproducir siguiente | Listas persistentes y cola reordenable | Probar orden, duplicados, borrado y recuperación en ambas. No comparten datos entre dispositivos. |
 | Reproducción | Audio/vídeo HTML, fallback de audio FFmpeg, Media Session | Media3, servicio de reproducción y Android Auto | Los códecs y la continuidad en segundo plano dependen del sistema. Probar Bluetooth, interrupciones y bloqueo. |
 | Herramientas de reproducción | Velocidad, tono, balance, boost, A–B y temporizador con desvanecimiento | Velocidad, A–B, temporizador en servicio y DSP | Igualar rangos y conservación del tono. Verificar temporizador en segundo plano. |
-| Ecualizador | 10 bandas, presets, preamplificador, balance y limitador | Audio Lab PCM, curvas, FFT, medidores y presets completos | Pendientes filtros, compresor, puerta y efectos avanzados en PWA. Los presets homónimos tienen curvas distintas. |
-| Voz / sintetizador | Ausentes | Grabación, afinación, transposición, sintetizador, secuenciador y WAV | Portar a Web Audio / AudioWorklet con límites de memoria, permisos y cancelación. |
+| Ecualizador | 10 bandas, presets, preamplificador, balance y limitador | Audio Lab PCM, curvas, FFT, medidores y presets completos | La PWA incorpora filtros, compresor, headroom, limitador, delay, reverb y render WAV. Gate, afinación y efectos de carácter siguen siendo nativos. Motores/presets históricos no equivalen muestra a muestra. |
+| Voz / sintetizador | Grabación local y render WAV; sin afinación/sinte | Grabación, afinación, transposición, sintetizador, secuenciador y WAV | Grabación con permiso explícito y render local añadidos. Falta portar afinación, transposición y sintetizador/secuenciador. |
 | Vídeo | Gestos, tamaño, brillo, PiP y pantalla completa | Reproductor nativo, pistas integradas y reanudación | Añadido fijar controles y ocultación a los cuatro segundos en PWA; falta validación táctil real. |
 | Subtítulos | SRT/VTT | SRT/VTT e integrados | Añadidos desfase, dos referencias, deriva, exportación SRT y límites compatibles en PWA. Pendiente persistencia por vídeo y selector de pistas integradas en PWA. |
-| Edición de vídeo | Ausente (FFmpeg solo se usa para decodificar audio) | Studio: varios clips, recorte, efectos, velocidad, deshacer, proyectos y MP4/SRT | Portar proyecto y línea de tiempo a PWA; definir esquema compartido y probar exportación real antes de declararlo disponible. |
+| Edición de vídeo | Studio con varios clips, trims, efectos, undo/redo, guardado y MP4 local | Studio: varios clips, recorte, efectos, velocidad, deshacer, proyectos y MP4/SRT | La PWA tiene proyecto y línea de tiempo propios; falta portabilidad del proyecto, subtítulos del montaje y herramientas avanzadas nativas. |
 | EPUB | epub.js, índice, temas, tipografía, progreso | Lector local, índice, temas, progreso, marcadores y búsqueda completa | Pendientes marcadores y búsqueda en PWA. Probar imágenes, UTF-16, capítulos no lineales y libros dañados. |
 | Texto / documentos | TXT, Markdown, archivos estructurados, HTML, RTF, DOCX, ODT | TXT integrado en lector; ver lectores nativos | Portar formatos adicionales a Android con límites de descompresión y archivos de prueba. |
 | Cómics | CBZ, CBR, PDF, modos paginado/doble/vertical, manga, zoom y progreso | CBZ/CBR/CB7/PDF, modos, zoom, progreso y marcadores | CB7 y marcadores pendientes en PWA; probar variantes RAR y consumo de memoria. |
@@ -25,7 +25,7 @@ Esta matriz distingue implementación de validación: encontrar una función en 
 
 ## Cambios de esta entrega
 
-- `shared/release.json` define versión y código Android; PWA, Gradle y etiquetas de publicación se comprueban contra él. Se propone `0.14.0`, superior a las dos versiones anteriores.
+- `shared/release.json` define versión y código Android; PWA, Gradle y etiquetas de publicación se comprueban contra él. Se propone `0.15.0`, superior a las dos versiones anteriores.
 - `validate.yml` compila y comprueba ambas apps desde el mismo commit. Pages espera a ambas. Las publicaciones `android-v*` comprueban la etiqueta, publican la APK firmada y después la PWA del mismo commit. Se mantienen los secretos de firma existentes. Los APK de validación son de depuración.
 - La caché PWA cambia con el contenido de cada build, instala el shell completo o rechaza la actualización y evita mezclar HTML nuevo con recursos antiguos. No intercepta API, archivos externos, multimedia ni peticiones Range. La actualización espera a que el usuario elija reiniciar.
 - Subtítulos PWA: UTF-8, UTF-16 y Windows-1252, validación, desfase, calibración con una/dos referencias, deriva, exportación SRT y cancelación de lecturas pendientes al cambiar de vídeo.

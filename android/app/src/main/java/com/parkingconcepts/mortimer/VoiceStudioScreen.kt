@@ -36,7 +36,7 @@ internal fun audioLabPreviewPlayer(context:Context,processor:ProAudioProcessor,a
     return ExoPlayer.Builder(context,factory).build().apply{setAudioAttributes(androidx.media3.common.AudioAttributes.DEFAULT,audioFocus);setHandleAudioBecomingNoisy(true)}
 }
 @androidx.annotation.OptIn(UnstableApi::class)
-@Composable internal fun VoiceStudioPanel(s:AudioEffects.Settings,onChange:(AudioEffects.Settings)->Unit,mix:AudioEffects.Settings,onStartAudio:()->Unit,initialTake:File?=null,quiet:Boolean=false){
+@Composable internal fun VoiceStudioPanel(s:AudioEffects.Settings,onChange:(AudioEffects.Settings)->Unit,mix:AudioEffects.Settings,onStartAudio:()->Unit,initialTake:File?=null,quiet:Boolean=false,waveExporter:WaveExportState?=null){
     val context=LocalContext.current;val c=LocalMortimerColors.current;val scope=rememberCoroutineScope();val lifecycle=LocalLifecycleOwner.current.lifecycle
     val capture=remember{VoiceCapture(context)};val processor=remember{ProAudioProcessor()};val player=remember{audioLabPreviewPlayer(context,processor,!quiet).apply{if(quiet)volume=0f}}
     var takes by remember{mutableStateOf(if(quiet)listOfNotNull(initialTake) else capture.takes())};var selected by remember{mutableStateOf(takes.firstOrNull())}
@@ -44,7 +44,7 @@ internal fun audioLabPreviewPlayer(context:Context,processor:ProAudioProcessor,a
     var error by remember{mutableStateOf<String?>(null)};var effectPreview by remember{mutableStateOf(true)};var playing by remember{mutableStateOf(false)}
     var position by remember{mutableLongStateOf(0)};var duration by remember{mutableLongStateOf(0)};var meters by remember{mutableStateOf(AudioMeters())}
     var renderJob by remember{mutableStateOf<Job?>(null)};var progress by remember{mutableFloatStateOf(0f)};var tail by remember{mutableStateOf(true)};var delete by remember{mutableStateOf(false)}
-    var showEffects by remember{mutableStateOf(false)};val exporter=rememberWaveExporter()
+    var showEffects by remember{mutableStateOf(false)};val exporter=waveExporter?:rememberWaveExporter()
     fun record(){try{player.pause();onStartAudio();capture.start();error=null}catch(failure:Exception){error=failure.message}}
     val permission=rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()){if(it)record() else error="Microphone access is needed to record. You can allow it in Android app settings."}
     fun preview(processed:Boolean){
@@ -69,7 +69,7 @@ internal fun audioLabPreviewPlayer(context:Context,processor:ProAudioProcessor,a
             Text("${audioNumber(seconds," s")} / 300 s",Modifier.padding(12.dp),color=c.text)
         }
         if(recording){LinearProgressIndicator(progress={peak.coerceIn(0f,1f)},modifier=Modifier.fillMaxWidth());Text("Original voice is being saved locally.",fontSize=12.sp,color=c.muted)}
-        takes.forEachIndexed{i,file->TextButton(onClick={player.pause();selected=file}){Text((if(selected==file)"● " else "")+"Take ${takes.size-i} · "+java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT,java.text.DateFormat.SHORT).format(java.util.Date(file.lastModified())))}}
+        takes.forEachIndexed{i,file->TextButton(enabled=renderJob?.isActive!=true&&!recording,onClick={player.pause();selected=file}){Text((if(selected==file)"● " else "")+"Take ${takes.size-i} · "+java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT,java.text.DateFormat.SHORT).format(java.util.Date(file.lastModified())))}}
         if(selected!=null){
             Row(Modifier.horizontalScroll(rememberScrollState())){
                 TextButton(onClick={preview(false)},enabled=!recording){Text("Play original")}
@@ -81,7 +81,7 @@ internal fun audioLabPreviewPlayer(context:Context,processor:ProAudioProcessor,a
             Text(if(effectPreview&&s.enabled&&meters.detectedHz>0)"Detected ${PitchScale.name(PitchScale.midi(meters.detectedHz.toDouble()).roundToInt())} · ${audioNumber(meters.detectedHz," Hz")} → ${audioNumber(meters.targetHz," Hz")}" else if(playing&&effectPreview)"No stable vocal note" else "Play effects to monitor detected pitch.",fontSize=12.sp,color=c.muted)
             Row(Modifier.horizontalScroll(rememberScrollState())){
                 TextButton(onClick={exporter.save(selected!!,"MUGEN-voice-original.wav")},enabled=!recording&&!exporter.busy){Text("Export original")}
-                TextButton(onClick={delete=true},enabled=!recording&&!exporter.busy){Text("Delete take")}
+                TextButton(onClick={delete=true},enabled=!recording&&!exporter.busy&&renderJob?.isActive!=true){Text("Delete take")}
             }
         }
     }
@@ -104,14 +104,15 @@ internal fun audioLabPreviewPlayer(context:Context,processor:ProAudioProcessor,a
         if(renderJob?.isActive==true){LinearProgressIndicator(progress={progress},modifier=Modifier.fillMaxWidth());TextButton(onClick={renderJob?.cancel()}){Text("Cancel render")}}
         else Button(enabled=selected!=null&&!recording&&s.enabled&&!exporter.busy,onClick={
             val source=selected!!;val settings=s;player.pause();progress=0f;renderJob=scope.launch{
-                try{val target=File.createTempFile("voice-render-",".wav",context.cacheDir);renderVoiceWave(source,target,settings,tail){value->scope.launch{progress=value}};exporter.save(target,"MUGEN-voice-processed.wav");error=null}
-                catch(cancelled:CancellationException){error="Render cancelled.";throw cancelled}
-                catch(failure:Exception){error=failure.message?:"Voice rendering failed."}
+                var target:File?=null
+                try{target=File.createTempFile("voice-render-",".wav",context.cacheDir);renderVoiceWave(source,target!!,settings,tail){value->scope.launch{progress=value}};exporter.save(target!!,"MUGEN-voice-processed.wav");error=null}
+                catch(cancelled:CancellationException){target?.delete();error="Render cancelled.";throw cancelled}
+                catch(failure:Exception){target?.delete();error=failure.message?:"Voice rendering failed."}
                 finally{renderJob=null}
             }
         }){Text("Render processed WAV")}
-        if(exporter.busy)LinearProgressIndicator(Modifier.fillMaxWidth())
-        (error?:exporter.error)?.let{Text(it,color=MaterialTheme.colorScheme.error)}
+        WaveExportStatus(exporter)
+        error?.let{Text(it,color=MaterialTheme.colorScheme.error)}
     }
     if(delete)AlertDialog(onDismissRequest={delete=false},title={Text("Delete this voice take?")},text={Text("Export it first if you want to keep a copy.")},confirmButton={TextButton(onClick={player.stop();selected?.delete();takes=capture.takes();selected=takes.firstOrNull();delete=false}){Text("Delete")}},dismissButton={TextButton(onClick={delete=false}){Text("Cancel")}})
 }

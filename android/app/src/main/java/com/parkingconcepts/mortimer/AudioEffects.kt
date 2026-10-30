@@ -69,6 +69,7 @@ object AudioEffects {
         }
         companion object {
             fun from(o: JSONObject): Settings {
+                require(!o.has("version") || o.opt("version") == 1 || o.opt("version") == 2) { "This audio preset was created by a newer version of MUGEN." }
                 fun f(k:String,d:Float)=o.optDouble(k,d.toDouble()).toFloat()
                 fun b(k:String,d:Boolean=false)=o.optBoolean(k,d)
                 return Settings(enabled=b("enabled"),preset=o.optString("preset","Flat").let { when(it){"Plano"->"Flat";"Personalizado"->"Custom";else->it} },
@@ -96,13 +97,68 @@ object AudioEffects {
     fun save(context:Context,s:Settings) { context.getSharedPreferences("mortimer_prefs",0).edit().putString("audio_effects",s.sanitized().json().toString()).apply() }
     fun loadVoice(context:Context):Settings=runCatching { context.getSharedPreferences("mortimer_prefs",0).getString("voice_effects",null)?.let { Settings.from(JSONObject(it)) }?:SCENES.getValue("Warm vocal").copy(tune=true,preset="Voice studio") }.getOrDefault(SCENES.getValue("Warm vocal"))
     fun saveVoice(context:Context,s:Settings){context.getSharedPreferences("mortimer_prefs",0).edit().putString("voice_effects",s.sanitized().json().toString()).apply()}
-    fun loadUserPresets(context:Context):Map<String,Settings> = runCatching {
+    fun loadUserPresets(context:Context):Map<String,Settings> = runCatching<Map<String,Settings>> {
         val prefs=context.getSharedPreferences("mortimer_prefs",0)
         val raw=prefs.getString("audio_lab_presets",null)
-        if(raw!=null){ val o=JSONObject(raw);o.keys().asSequence().take(32).associateWith { Settings.from(o.getJSONObject(it)) } }
-        else { val o=JSONObject(prefs.getString("eq_custom_presets","{}")?:"{}");o.keys().asSequence().take(32).associateWith { k->Settings(enabled=true,preset=k,bands=List(10){o.getJSONArray(k).optDouble(it,0.0).toFloat()}).sanitized() } }
+        val o=JSONObject(raw ?: prefs.getString("eq_custom_presets","{}") ?: "{}")
+        val recovered=linkedMapOf<String,Settings>()
+        // One malformed entry must not hide every valid saved preset.
+        o.keys().asSequence().take(128).forEach { key ->
+            if (recovered.size < 32 && key.isNotBlank() && key.length <= 48) runCatching {
+                val value = if(raw != null) Settings.from(o.getJSONObject(key))
+                else Settings(enabled=true,preset=key,bands=List(10){o.getJSONArray(key).optDouble(it,0.0).toFloat()}).sanitized()
+                recovered[key]=value
+            }
+        }
+        recovered
     }.getOrDefault(emptyMap())
-    fun saveUserPresets(context:Context,presets:Map<String,Settings>){ require(presets.size<=32);val o=JSONObject();presets.forEach{(k,v)->require(k.isNotBlank()&&k.length<=48);o.put(k,v.sanitized().json())};context.getSharedPreferences("mortimer_prefs",0).edit().putString("audio_lab_presets",o.toString()).apply() }
+    fun saveUserPresets(context:Context,presets:Map<String,Settings>){
+        val o=presetsJson(presets)
+        check(context.getSharedPreferences("mortimer_prefs",0).edit().putString("audio_lab_presets",o.toString()).commit()) { "Preset storage is full or unavailable. Try exporting your presets." }
+    }
+    private fun presetsJson(presets:Map<String,Settings>):JSONObject {
+        require(presets.size<=32) { "A maximum of 32 presets can be saved." }
+        return JSONObject().apply { presets.forEach { (k,v) ->
+            require(k.isNotBlank()&&k.length<=48) { "Preset names must contain 1–48 characters." }
+            put(k,v.sanitized().json())
+        } }
+    }
+    fun exportPresetBundle(presets:Map<String,Settings>):String = JSONObject()
+        .put("format","mugen-audio-lab").put("version",1).put("presets",presetsJson(presets)).toString(2)
+    fun importPresetBundle(text:String):Map<String,Settings> {
+        require(text.length<=256*1024) { "Preset file is too large (256 KiB maximum)." }
+        val bundle=JSONObject(text)
+        require(bundle.optString("format")=="mugen-audio-lab" && bundle.opt("version")==1) { "Choose a supported MUGEN Audio Lab preset file." }
+        val values=bundle.getJSONObject("presets")
+        require(values.length() in 1..32) { "The file must contain 1–32 complete presets." }
+        return values.keys().asSequence().associateWith { key ->
+            require(key.isNotBlank()&&key.length<=48) { "Invalid preset name in this file." }
+            val value=values.getJSONObject(key)
+            // Imported files use the shared v2 contract. Legacy on-device migration
+            // remains permissive in Settings.from, but malformed imports must not
+            // silently turn into a default sound.
+            val version=value.opt("version")
+            val bands=value.optJSONArray("bands")
+            require(version is Number && version.toDouble()==2.0 && value.opt("enabled") is Boolean && bands?.length()==10) {
+                "Preset «$key» needs settings version 2, an enabled flag and 10 EQ bands."
+            }
+            require((0 until 10).all { i -> bands!!.opt(i).let { it is Number && it.toDouble().isFinite() } }) {
+                "Preset «$key» contains an invalid EQ band."
+            }
+            Settings.from(value.put("version",2))
+        }
+    }
+    /** Merge imported presets atomically, preserving collisions under a distinct name. */
+    fun mergePresetBundle(existing:Map<String,Settings>,incoming:Map<String,Settings>):Map<String,Settings> {
+        val merged=existing.toMutableMap()
+        for((key,value) in incoming) {
+            var name=key;var copy=2
+            while(name in merged) { val suffix=" ($copy)";name=key.take(48-suffix.length)+suffix;copy++ }
+            merged[name]=value.copy(preset=name).sanitized()
+        }
+        require(merged.size<=32) { "Import would exceed 32 presets. Delete or export some presets first." }
+        return merged
+    }
     @OptIn(UnstableApi::class) val processor=ProAudioProcessor()
     @Volatile private var current=Settings()
     @OptIn(UnstableApi::class) val available get()=processor.configured

@@ -23,26 +23,27 @@ internal fun rememberStudioExport(project: StudioProject?, pausePreview: () -> U
     val scope = rememberCoroutineScope()
     val state = remember { StudioExportState() }
     val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("video/mp4")) { uri ->
-        val file = state.output
-        if (uri != null && file != null) {
-            state.saving = true
+        val reservation = state.pendingSave
+        if (uri != null && reservation != null) {
+            val file = reservation.file
             scope.launch {
                 try {
-                    require(uri.toString() !in state.snapshot?.clips.orEmpty().map { it.source.uri }) { "Choose a new file to preserve the originals." }
+                    require(uri.toString() !in reservation.project.clips.map { it.source.uri }) { "Choose a new file to preserve the originals." }
                     withContext(Dispatchers.IO) {
                         val job = currentCoroutineContext()
                         context.contentResolver.openOutputStream(uri, "w")?.use { out ->
                             file.inputStream().use { it.copyLimitedTo(out, Long.MAX_VALUE, { job.ensureActive() }) }
                         } ?: error("Could not open the destination.")
                     }
-                    state.message = "MP4 saved. Originals are preserved."; file.delete(); state.output = null
+                    state.message = "MP4 saved. Originals are preserved."; file.delete()
+                    if (state.output == file) state.output = null
                 } catch (failure: Exception) {
-                    withContext(NonCancellable + Dispatchers.IO) { if (uri.toString() !in state.snapshot?.clips.orEmpty().map { it.source.uri }) runCatching { context.contentResolver.delete(uri, null, null) } }
+                    withContext(NonCancellable + Dispatchers.IO) { if (uri.toString() !in reservation.project.clips.map { it.source.uri }) runCatching { context.contentResolver.delete(uri, null, null) } }
                     if (failure is CancellationException) throw failure
                     state.message = failure.message ?: "Could not save the MP4."
-                } finally { state.saving = false }
+                } finally { state.pendingSave = null; state.saving = false }
             }
-        }
+        } else { state.pendingSave = null; state.saving = false }
     }
     state.start = {
         val p = project
@@ -51,16 +52,19 @@ internal fun rememberStudioExport(project: StudioProject?, pausePreview: () -> U
             try {
                 p.validate(); state.output?.delete()
                 val target = File.createTempFile("studio_export_", ".mp4", context.cacheDir).apply { delete() }
-                state.output = target; state.snapshot = p; state.message = null; state.progress = 0
+                state.output = target; state.snapshot = p; state.message = null; state.progress = 0; state.progressAvailable = false
+                val request = ++state.generation
                 val engine = Transformer.Builder(context).setVideoMimeType(MimeTypes.VIDEO_H264).setAudioMimeType(MimeTypes.AUDIO_AAC)
                     .setEncoderFactory(DefaultEncoderFactory.Builder(context).setEnableFallback(true).build())
                     .addListener(object : Transformer.Listener {
                         override fun onCompleted(composition: Composition, exportResult: ExportResult) {
+                            if (request != state.generation) { target.delete(); return }
                             state.busy = false; state.transformer = null
                             if (target.length() == 0L) { target.delete(); state.output = null; state.message = "The encoder produced no video." }
                             else { state.progress = 100; state.message = "Render ready. Save MP4 to choose its destination." }
                         }
                         override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {
+                            if (request != state.generation) { target.delete(); return }
                             state.busy = false; state.transformer = null; target.delete(); state.output = null
                             state.message = "Error ${exportException.errorCodeName}. Try 720p or a shorter project."
                         }
@@ -70,26 +74,51 @@ internal fun rememberStudioExport(project: StudioProject?, pausePreview: () -> U
             } catch (failure: Exception) { state.cancel(); state.message = failure.message ?: "Could not export." }
         }
     }
-    state.save = { save.launch((state.snapshot?.name ?: "MUGEN") + "-edited.mp4") }
+    state.save = {
+        if (!state.busy && !state.saving) try {
+            val reservation = state.reserveSave(project)
+            save.launch(reservation.project.name + "-edited.mp4")
+        } catch (failure: Exception) {
+            state.pendingSave = null; state.saving = false
+            state.message = failure.message ?: "Could not open the save dialog. Your render is still available."
+        }
+    }
     DisposableEffect(state) { onDispose { state.cancel() } }
     LaunchedEffect(state.busy) {
         val progress = ProgressHolder()
-        while (state.busy) { if (state.transformer?.getProgress(progress) == Transformer.PROGRESS_STATE_AVAILABLE) state.progress = progress.progress; delay(250) }
+        while (state.busy) {
+            if (state.transformer?.getProgress(progress) == Transformer.PROGRESS_STATE_AVAILABLE) {
+                state.progressAvailable = true; state.progress = progress.progress.coerceIn(0, 100)
+            }
+            delay(250)
+        }
     }
     return state
 }
+internal data class StudioRenderReservation(val project: StudioProject, val file: File)
+
 @UnstableApi
 internal class StudioExportState {
     var busy by mutableStateOf(false)
     var saving by mutableStateOf(false)
     var progress by mutableIntStateOf(0)
+    var progressAvailable by mutableStateOf(false)
     var message by mutableStateOf<String?>(null)
     var output by mutableStateOf<File?>(null)
     var snapshot: StudioProject? = null
     var transformer: Transformer? = null
+    var generation = 0
+    var pendingSave: StudioRenderReservation? = null
+    fun reserveSave(project: StudioProject?): StudioRenderReservation {
+        check(!busy && !saving) { "An export is already in progress." }
+        val rendered = snapshot ?: error("Create MP4 before saving.")
+        check(rendered == project) { "The project changed. Create MP4 again before saving." }
+        val file = output?.takeIf { it.isFile && it.length() > 0 } ?: error("The rendered MP4 is unavailable. Create it again.")
+        return StudioRenderReservation(rendered, file).also { pendingSave = it; saving = true }
+    }
     var start: () -> Unit = {}
     var save: () -> Unit = {}
-    fun cancel() { transformer?.cancel(); transformer = null; busy = false; output?.delete(); output = null }
+    fun cancel() { generation++; transformer?.cancel(); transformer = null; busy = false; output?.delete(); output = null }
 }
 
 @UnstableApi
@@ -108,7 +137,12 @@ internal fun StudioExportPanel(project: StudioProject, state: StudioExportState,
             onClick = { onChange(project.copy(height = height)) }, label = { Text("${height}p") }) }
     }
     Button(enabled = !state.busy && !state.saving, onClick = state.start) { Text("Create MP4") }
-    if (state.busy) { LinearProgressIndicator(progress = { state.progress / 100f }, modifier = Modifier.fillMaxWidth()); Text("Rendering ${state.progress}%"); TextButton(onClick = { state.cancel(); state.message = "Export canceled." }) { Text("Cancel export") } }
+    if (state.busy) {
+        if (state.progressAvailable) LinearProgressIndicator(progress = { state.progress / 100f }, modifier = Modifier.fillMaxWidth())
+        else LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        Text(if (state.progressAvailable) "Rendering ${state.progress}%" else "Preparing encoder…")
+        TextButton(onClick = { state.cancel(); state.message = "Export canceled." }) { Text("Cancel export") }
+    }
     state.message?.let { Text(it) }
     if (state.output?.isFile == true && !state.busy) {
         if (state.snapshot != project) Text("The project changed. Create MP4 again to include the changes.")

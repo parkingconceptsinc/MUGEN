@@ -15,6 +15,26 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - name: Install browser test runtime
+        run: |
+          npm install --no-save --package-lock=false playwright
+          npx playwright install --with-deps chromium
+          command -v ffmpeg || { sudo apt-get update && sudo apt-get install -y ffmpeg; }
+      - name: Exercise Studio and Audio Lab in a real browser
+        env:
+          MUGEN_TEST_URL: http://127.0.0.1:4173/MUGEN/
+          MUGEN_ARTIFACT_DIR: /tmp/mugen-browser
+        run: |
+          npm run preview -- --host 127.0.0.1 > /tmp/mugen-preview.log 2>&1 &
+          node tests/browser-studio-audiolab.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: MUGEN-creative-browser-reports
+          path: |
+            /tmp/mugen-browser
+            /tmp/mugen-preview.log
+          if-no-files-found: ignore
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

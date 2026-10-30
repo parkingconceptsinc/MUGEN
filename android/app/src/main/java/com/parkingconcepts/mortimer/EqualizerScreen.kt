@@ -25,7 +25,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
-import kotlinx.coroutines.delay
+import kotlinx.coroutines.*
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.saveable.rememberSaveable
 import kotlin.math.*
 import org.json.JSONObject
 
@@ -33,10 +36,56 @@ internal fun audioNumber(value:Float,unit:String="",digits:Int=1)=java.lang.Stri
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 fun EqualizerSection(modifier:Modifier,player:Player?=null,persistSettings:Boolean=true,qaTake:java.io.File?=null){
-    val context=LocalContext.current;val c=LocalMortimerColors.current
+    val context=LocalContext.current;val c=LocalMortimerColors.current;val scope=rememberCoroutineScope()
     var s by remember{mutableStateOf(if(persistSettings)AudioEffects.load(context) else AudioEffects.Settings())};var voice by remember{mutableStateOf(if(persistSettings)AudioEffects.loadVoice(context) else AudioEffects.SCENES.getValue("Warm vocal").copy(tune=true))}
+    // Keep completed renders and picker callbacks alive while switching Audio Lab tabs.
+    val voiceExporter=rememberWaveExporter()
+    val synthExporter=rememberWaveExporter()
     var tab by remember{mutableStateOf("Mix")};var meters by remember{mutableStateOf(AudioMeters())}
     var custom by remember{mutableStateOf(if(persistSettings)AudioEffects.loadUserPresets(context) else emptyMap())};var naming by remember{mutableStateOf<String?>(null)}
+    var presetBusy by remember { mutableStateOf(false) }
+    var presetError by remember { mutableStateOf<String?>(null) }
+    var presetNotice by remember { mutableStateOf<String?>(null) }
+    var exportJson by rememberSaveable { mutableStateOf<String?>(null) }
+    fun storePresets(next:Map<String,AudioEffects.Settings>,saved:()->Unit={}) {
+        if(presetBusy)return
+        presetBusy=true;presetError=null;presetNotice=null
+        scope.launch {
+            try {
+                if(persistSettings)withContext(Dispatchers.IO){AudioEffects.saveUserPresets(context,next)}
+                custom=next;saved()
+            } catch(cancelled:CancellationException){throw cancelled}
+            catch(failure:Exception){presetError=failure.message?:"Could not save presets."}
+            finally{presetBusy=false}
+        }
+    }
+    val importPresets=rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()){uri->
+        if(uri==null)presetBusy=false else scope.launch {
+            try {
+                val incoming=withContext(Dispatchers.IO){
+                    val job=currentCoroutineContext()
+                    val text=context.contentResolver.openInputStream(uri)?.use{it.readBytesLimited(256*1024){job.ensureActive()}.toString(Charsets.UTF_8)}?:error("Could not read this preset file.")
+                    AudioEffects.importPresetBundle(text)
+                }
+                val merged=AudioEffects.mergePresetBundle(custom,incoming)
+                if(persistSettings)withContext(Dispatchers.IO){AudioEffects.saveUserPresets(context,merged)}
+                custom=merged;presetError=null;presetNotice="Imported ${incoming.size} presets. Existing names were preserved."
+            }catch(cancelled:CancellationException){throw cancelled}
+            catch(failure:Exception){presetError=failure.message?:"Could not import presets."}
+            finally{presetBusy=false}
+        }
+    }
+    val exportPresets=rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")){uri->
+        val snapshot=exportJson
+        if(uri==null||snapshot==null){presetBusy=false;exportJson=null} else scope.launch {
+            try {
+                withContext(Dispatchers.IO){context.contentResolver.openOutputStream(uri,"wt")?.use{it.write(snapshot.toByteArray(Charsets.UTF_8))}?:error("Could not open the destination.")}
+                presetError=null;presetNotice="Preset backup saved."
+            }catch(cancelled:CancellationException){throw cancelled}
+            catch(failure:Exception){presetError=failure.message?:"Could not export presets."}
+            finally{presetBusy=false;exportJson=null}
+        }
+    }
     var slotA by remember{mutableStateOf(s)};var slotB by remember{mutableStateOf(s)};var undo by remember{mutableStateOf<AudioEffects.Settings?>(null)}
     val latest by rememberUpdatedState(s);val latestVoice by rememberUpdatedState(voice)
     LaunchedEffect(s){if(persistSettings){AudioEffects.apply(s);delay(180);AudioEffects.save(context,s)}}
@@ -52,6 +101,8 @@ fun EqualizerSection(modifier:Modifier,player:Player?=null,persistSettings:Boole
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(6.dp)){
             listOf("Mix","Effects","Voice","Synth","Presets").forEach{label->Chip(label,tab==label){tab=label}}
         }
+        if(tab!="Voice"&&voiceExporter.pending?.isFile==true)TextButton(onClick={tab="Voice"}){Text(if(voiceExporter.busy)"Voice WAV is saving…" else "Voice WAV ready · review or save again")}
+        if(tab!="Synth"&&synthExporter.pending?.isFile==true)TextButton(onClick={tab="Synth"}){Text(if(synthExporter.busy)"Synth WAV is saving…" else "Synth WAV ready · review or save again")}
         Spacer(Modifier.height(10.dp))
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)){
             when(tab){
@@ -87,8 +138,8 @@ fun EqualizerSection(modifier:Modifier,player:Player?=null,persistSettings:Boole
                     Row(Modifier.horizontalScroll(rememberScrollState())){AudioEffects.PRESETS.forEach{(name,bands)->TextButton(onClick={s=s.copy(enabled=true,preset=name,bands=bands)}){Text(name)}}}
                 }
                 "Effects"->AudioEffectPanels(s,::change)
-                "Voice"->VoiceStudioPanel(voice,{voice=it.sanitized()},s,onStartAudio={player?.pause()},initialTake=qaTake,quiet=!persistSettings)
-                "Synth"->SynthStudioPanel(s,onStartAudio={player?.pause()},persistSettings=persistSettings,quiet=!persistSettings)
+                "Voice"->VoiceStudioPanel(voice,{voice=it.sanitized()},s,onStartAudio={player?.pause()},initialTake=qaTake,quiet=!persistSettings,waveExporter=voiceExporter)
+                "Synth"->SynthStudioPanel(s,onStartAudio={player?.pause()},persistSettings=persistSettings,quiet=!persistSettings,waveExporter=synthExporter)
                 "Presets"->{
                     AudioLabCard("Playback scenes"){
                         Row(Modifier.horizontalScroll(rememberScrollState())){listOf("Clean master","Lo-fi tape","Wide room","Dub echo","Night listening","Robot").forEach{name->TextButton(onClick={s=AudioEffects.SCENES.getValue(name)}){Text(name)}}}
@@ -98,10 +149,25 @@ fun EqualizerSection(modifier:Modifier,player:Player?=null,persistSettings:Boole
                     }
                     AudioLabCard("Your complete presets"){
                         Text("Presets store EQ, filters, dynamics, stereo, pitch and effects together.",fontSize=12.sp,color=c.muted)
-                        Row{TextButton(onClick={naming="Playback"}){Text("Save playback")};TextButton(onClick={naming="Voice"}){Text("Save voice")}}
+                        Row{TextButton(enabled=!presetBusy,onClick={naming="Playback"}){Text("Save playback")};TextButton(enabled=!presetBusy,onClick={naming="Voice"}){Text("Save voice")}}
+                        Row {
+                            TextButton(enabled=!presetBusy,onClick={
+                                presetBusy=true;presetError=null;presetNotice=null
+                                runCatching{importPresets.launch(arrayOf("application/json","text/plain"))}.onFailure{presetBusy=false;presetError="No document picker is available."}
+                            }){Text("Import presets")}
+                            TextButton(enabled=!presetBusy&&custom.isNotEmpty(),onClick={
+                                runCatching{AudioEffects.exportPresetBundle(custom)}.onSuccess{json->
+                                    exportJson=json;presetBusy=true;presetError=null;presetNotice=null
+                                    runCatching{exportPresets.launch("MUGEN-audio-presets.json")}.onFailure{presetBusy=false;exportJson=null;presetError="No document picker is available."}
+                                }.onFailure{presetError=it.message}
+                            }){Text("Export backup")}
+                        }
+                        if(presetBusy)LinearProgressIndicator(Modifier.fillMaxWidth())
+                        presetError?.let{Text(it,color=MaterialTheme.colorScheme.error)}
+                        presetNotice?.let{Text(it,color=c.muted)}
                         custom.forEach{(name,value)->
                             Text(name,color=c.text,fontWeight=FontWeight.SemiBold)
-                            Row{TextButton(onClick={s=value.copy(preset=name)}){Text("Playback")};TextButton(onClick={voice=value.copy(preset=name);tab="Voice"}){Text("Voice")};TextButton(onClick={custom=custom-name;if(persistSettings)AudioEffects.saveUserPresets(context,custom)}){Text("Delete")}}
+                            Row{TextButton(onClick={s=value.copy(preset=name)}){Text("Playback")};TextButton(onClick={voice=value.copy(preset=name);tab="Voice"}){Text("Voice")};TextButton(enabled=!presetBusy,onClick={storePresets(custom-name)}){Text("Delete")}}
                         }
                     }
                 }
@@ -110,8 +176,8 @@ fun EqualizerSection(modifier:Modifier,player:Player?=null,persistSettings:Boole
         }
     }
     naming?.let{destination->var name by remember{mutableStateOf("")};var error by remember{mutableStateOf<String?>(null)}
-        AlertDialog(onDismissRequest={naming=null},title={Text("Save $destination preset")},text={Column{OutlinedTextField(name,{name=it.take(48)},label={Text("Preset name")},singleLine=true);error?.let{Text(it,color=MaterialTheme.colorScheme.error)}}},confirmButton={TextButton(onClick={
-            val n=name.trim();if(n.isBlank())error="Enter a name." else if(n in custom)error="That name already exists. Choose another name." else if(custom.size>=32)error="Delete a preset before adding another (32 maximum)." else {custom=custom+(n to (if(destination=="Voice")voice else s).copy(preset=n));if(persistSettings)AudioEffects.saveUserPresets(context,custom);naming=null}
+        AlertDialog(onDismissRequest={naming=null},title={Text("Save $destination preset")},text={Column{OutlinedTextField(name,{name=it.take(48)},label={Text("Preset name")},singleLine=true);(error?:presetError)?.let{Text(it,color=MaterialTheme.colorScheme.error)}}},confirmButton={TextButton(enabled=!presetBusy,onClick={
+            val n=name.trim();if(n.isBlank())error="Enter a name." else if(n in custom)error="That name already exists. Choose another name." else if(custom.size>=32)error="Delete a preset before adding another (32 maximum)." else {storePresets(custom+(n to (if(destination=="Voice")voice else s).copy(preset=n))){naming=null}}
         }){Text("Save")}},dismissButton={TextButton(onClick={naming=null}){Text("Cancel")}})
     }
 }
