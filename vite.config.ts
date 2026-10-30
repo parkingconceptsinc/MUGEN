@@ -25,7 +25,7 @@ function offlinePrecache(): Plugin {
       const source = readFileSync(swPath, "utf8");
       const marker = "const BUILD_ASSETS = [];";
       if (!source.includes(marker)) throw new Error("Service worker precache marker is missing");
-      const hash = createHash("sha256");
+      const hash = createHash("sha256").update(source);
       for (const asset of ["index.html", ...assets]) {
         hash.update(asset).update("\0").update(readFileSync(resolve(outDir, asset)));
       }

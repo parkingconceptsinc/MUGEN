@@ -43,6 +43,10 @@ export const NowPlaying = memo(function NowPlaying({ active }: { active: boolean
   const nextTrack = trackMap.get(queue[qIndex + 1] ?? (p.repeat === "all" ? queue[0] : "") ?? "");
   const favorite = !!current && favorites.has(current.id);
 
+  useEffect(() => () => {
+    for (const timer of [tapTimer, flashTimer, hideTimer, indicatorTimer]) window.clearTimeout(timer.current);
+  }, []);
+
   const poke = useCallback(() => {
     setChrome(true);
     window.clearTimeout(hideTimer.current);

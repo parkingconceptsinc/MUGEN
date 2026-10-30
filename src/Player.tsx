@@ -163,6 +163,7 @@ export function Player() {
   }, [theme]);
 
   useEffect(() => () => {
+    subtitleRequestRef.current++;
     if (subtitleUrlRef.current) URL.revokeObjectURL(subtitleUrlRef.current);
     subtitleUrlRef.current = null;
   }, []);
