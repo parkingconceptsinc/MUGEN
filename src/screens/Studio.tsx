@@ -267,8 +267,17 @@ export function Studio({ active = true }: { active?: boolean }) {
   </section>;
 }
 function NumberField({ label, value, min, max, step, onChange }: { label: string; value: number; min: number; max: number; step: number; onChange: (value: number) => void }) {
-  const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(Math.round(value * 1000) / 1000)), [value]);
-  const apply = () => { const parsed = Number(draft); if (draft.trim() && Number.isFinite(parsed) && parsed >= min && parsed <= max) onChange(parsed); else setDraft(String(Math.round(value * 1000) / 1000)); };
-  return <label className="studioField">{label}<input type="number" aria-label={label} min={min} max={max} step={step} value={draft} onChange={e => setDraft(e.target.value)} onBlur={apply} onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); apply(); e.currentTarget.blur(); } }} /></label>;
+  const formatted = String(Math.round(value * 1000) / 1000);
+  const [draft, setDraft] = useState(formatted);
+  const [editing, setEditing] = useState(false);
+  const apply = () => {
+    setEditing(false);
+    const parsed = Number(draft);
+    if (draft.trim() && Number.isFinite(parsed) && parsed >= min && parsed <= max) onChange(parsed);
+  };
+  // Outside an edit, render the project value directly. Mirroring it through a
+  // passive effect makes undo/redo briefly display a stale local draft.
+  return <label className="studioField">{label}<input type="number" aria-label={label} min={min} max={max} step={step} value={editing ? draft : formatted}
+    onFocus={() => { setDraft(formatted); setEditing(true); }} onChange={e => setDraft(e.target.value)} onBlur={apply}
+    onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); e.currentTarget.blur(); } }} /></label>;
 }

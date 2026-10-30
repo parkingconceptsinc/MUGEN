@@ -45,6 +45,12 @@ async function fillNumber(label, value) {
   await input.blur();
 }
 async function assertNumber(label, expected) {
+  // React may commit a parent edit before its controlled input has painted.
+  // Poll the exact value; timeout still fails instead of accepting stale state.
+  await page.waitForFunction(({ label, expected }) => {
+    const input = Array.from(document.querySelectorAll('input')).find((element) => element.getAttribute('aria-label') === label);
+    return input && Math.abs(Number(input.value) - expected) < 0.0001;
+  }, { label, expected }, { timeout: 5000 });
   const actual = Number(await page.getByLabel(label, { exact: true }).inputValue());
   assert.ok(Math.abs(actual - expected) < 0.0001, `${label}: expected ${expected}, got ${actual}`);
 }
@@ -68,6 +74,7 @@ try {
     await fillNumber('Out point (seconds)', 1.5);
     await fillNumber('In point (seconds)', 0.25);
     await assertNumber('In point (seconds)', 0.25);
+    await page.getByRole('button', { name: /Select clip 1:.*mugen-fixture/ }).getByText('00:01.25 · 1×', { exact: true }).waitFor();
     await page.getByRole('button', { name: 'Undo', exact: true }).click();
     await assertNumber('In point (seconds)', 0);
     await page.getByRole('button', { name: 'Redo', exact: true }).click();
@@ -125,6 +132,7 @@ try {
     const duration = Number(media.format.duration);
     assert.ok(duration >= 1.7 && duration <= 2.15, `Expected edited duration ~1.875s, got ${duration}`);
     await fillNumber('Volume', 0.7);
+    await page.getByRole('link', { name: 'Download MP4', exact: true }).waitFor({ state: 'detached' });
     assert.equal(await page.getByRole('link', { name: 'Download MP4', exact: true }).count(), 0, 'An edited project must not offer a stale export');
     await page.getByRole('button', { name: 'Undo', exact: true }).click();
     await page.getByRole('link', { name: 'Download MP4', exact: true }).waitFor();

@@ -17,7 +17,9 @@ export function AppUpdate() {
     if (!("serviceWorker" in navigator) || !import.meta.env.PROD) return;
     let disposed = false;
     let registration: ServiceWorkerRegistration | undefined;
-    const inspect = () => { if (!disposed && registration?.waiting) setWaiting(registration.waiting); };
+    const inspect = () => {
+      if (!disposed) setWaiting(navigator.serviceWorker.controller ? registration?.waiting ?? null : null);
+    };
     const onUpdate = () => {
       const worker = registration?.installing;
       worker?.addEventListener("statechange", inspect);
@@ -29,9 +31,10 @@ export function AppUpdate() {
       r.addEventListener("updatefound", onUpdate);
       void r.update().catch(() => {});
     }).catch(() => {});
+    navigator.serviceWorker.addEventListener("controllerchange", inspect);
     const check = () => { if (document.visibilityState === "visible") void registration?.update().catch(() => {}); };
     document.addEventListener("visibilitychange", check);
-    return () => { disposed = true; registration?.removeEventListener("updatefound", onUpdate); document.removeEventListener("visibilitychange", check); };
+    return () => { disposed = true; navigator.serviceWorker.removeEventListener("controllerchange", inspect); registration?.removeEventListener("updatefound", onUpdate); document.removeEventListener("visibilitychange", check); };
   }, []);
   if (!waiting) return null;
   return <aside className="appUpdate" role="status"><span>A new MUGEN version is ready. Restart when your work is saved.</span>
