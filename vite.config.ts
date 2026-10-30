@@ -39,6 +39,6 @@ function offlinePrecache(): Plugin {
 export default defineConfig({
   base: "/MUGEN/",
   define: { __APP_VERSION__: JSON.stringify(release.version) },
-  plugins: [react(), offlinePrecache()],
+  plugins: [react(), { name: "mugen-release", transformIndexHtml: (html) => html.replace("__MUGEN_VERSION__", release.version) }, offlinePrecache()],
   build: { manifest: true },
 });
