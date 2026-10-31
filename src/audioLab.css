@@ -1,0 +1,37 @@
+.audioLabScreen { max-width: 1440px; margin: 0 auto; }
+.audioLabGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.labPanel { min-width: 0; padding: clamp(16px, 2.5vw, 24px); margin: 0 0 18px; background: var(--panel, #17171f); border: 1px solid var(--line, #ffffff18); border-radius: 20px; }
+.audioLabGrid .labPanel { margin-bottom: 0; }
+.labHeader { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-bottom: 16px; flex-wrap: wrap; }
+.labHeader h2 { font-size: 17px; margin: 0; }
+.labMeterPanel { grid-column: 1 / -1; }
+.audioLabSpectrum { height: 136px; display: flex; gap: 3px; align-items: end; padding: 14px 12px 0; border-radius: 12px; background: linear-gradient(180deg, var(--accent-soft, #ff2d3a08), #0002); overflow: hidden; }
+.audioLabSpectrum i { display: block; flex: 1; min-width: 1px; border-radius: 3px 3px 0 0; background: linear-gradient(0deg, var(--accent), var(--text, white)); transition: height .09s linear; opacity: .85; }
+.audioLabMeter { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; padding-top: 16px; font-variant-numeric: tabular-nums; }
+.audioLabMeter span { color: var(--muted); font-size: 12px; }
+.audioLabMeter b { display: block; font-family: ui-monospace, monospace; font-size: clamp(16px, 2.4vw, 24px); color: var(--text); padding-top: 4px; }
+.audioLabMeter .labClip b { color: #ff5656; }
+.labToggle { display: flex; align-items: center; justify-content: space-between; gap: 14px; margin: 18px 0 12px; }
+.labToggle small { display: block; font-size: 11px; color: var(--muted); margin-top: 4px; }
+.labSlider { display: block; margin: 14px 0 20px; }
+.labSlider > span { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; margin-bottom: 10px; }
+.labSlider output { color: var(--accent); font-family: ui-monospace, monospace; white-space: nowrap; }
+.labPresetSave { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin: 18px 0; }
+.labPresetSave label { flex: 1; min-width: 180px; font-size: 12px; color: var(--muted); }
+.labPresetSave input { display: block; width: 100%; margin-top: 6px; padding: 12px; border-radius: 10px; color: var(--text); background: var(--bg); border: 1px solid var(--line, #ffffff24); }
+.labPresetList { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 10px; }
+.labPresetList li { display: flex; align-items: center; border: 1px solid var(--line, #ffffff18); border-radius: 12px; padding: 3px; }
+.labAudition { display: grid; gap: 10px; margin: 18px 0; }
+.labAudition label { font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.labAudition audio { display: block; width: 100%; }
+.labAudition > button { justify-self: start; }
+.labNotice { border-left: 3px solid var(--accent); padding: 14px 16px; border-radius: 8px; background: var(--panel); font-size: 13px; overflow-wrap: anywhere; }
+.audioLabEqualizer > .screen { position: static; inset: auto; height: auto; overflow: visible; padding: 0; }
+.audioLabEqualizer .screenHeader { position: static; }
+.audioLabWorkstation .buttonRow, .labPresets .buttonRow { flex-wrap: wrap; }
+.audioLabScreen button:focus-visible, .audioLabScreen input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (max-width: 720px) { .audioLabGrid { grid-template-columns: 1fr; } .audioLabMeter { grid-template-columns: repeat(2, 1fr); } .audioLabSpectrum { height: 112px; gap: 2px; } .labPresetSave > .btn { width: 100%; } }
+@media (prefers-reduced-motion: reduce) { .audioLabSpectrum i { transition: none; } }
+
+.labWorkspaceTabs { display: flex; gap: 8px; padding: 8px 0 18px; }
+.labWorkspaceTabs [role=tab] { min-width: 88px; min-height: 44px; }

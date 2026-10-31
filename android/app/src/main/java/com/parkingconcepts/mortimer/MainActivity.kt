@@ -389,9 +389,10 @@ private fun MortimerApp(
     var section by rememberSaveable { mutableStateOf("home") }
     var editorProcessing by remember { mutableStateOf(false) }
     var editorSaving by remember { mutableStateOf(false) }
+    var editorHasRender by remember { mutableStateOf(false) }
     var leaveEditorFor by remember { mutableStateOf<String?>(null) }
     fun navigate(target: String) {
-        if (section == "editor" && target != "editor" && (editorProcessing || editorSaving)) leaveEditorFor = target
+        if (section == "editor" && target != "editor" && (editorProcessing || editorSaving || editorHasRender)) leaveEditorFor = target
         else section = target
     }
     var editorItem by rememberSaveable { mutableStateOf<LibraryItem?>(null) }
@@ -543,7 +544,7 @@ private fun MortimerApp(
                     "videos" -> VideosSection(library, content, onAddFiles = { addFiles("videos") }, onAddFolder = { addFolder("videos") }, onScanDevice = { deviceScanOpen = true },
                         onPlay = { item -> playVideo(item) },
                         onRemove = { item -> Covers.forget(context, item.uri); commit { list -> list.filter { it.uri != item.uri } } })
-                    "editor" -> VideoStudioScreen(library, content, editorItem, editorPosition, onInitialConsumed = { editorItem = null }, onExit = { navigate("videos") }, onExportState = { busy, saving -> editorProcessing = busy; editorSaving = saving })
+                    "editor" -> VideoStudioScreen(library, content, editorItem, editorPosition, onInitialConsumed = { editorItem = null }, onExit = { navigate("videos") }, onExportState = { busy, saving -> editorProcessing = busy; editorSaving = saving }, onPendingExport = { editorHasRender = it })
                     "books", "comics" -> ShelfSection(
                         kind = targetSection, library = library, modifier = content,
                         onAddFiles = { addFiles(targetSection) }, onAddFolder = { addFolder(targetSection) }, onScanDevice = { deviceScanOpen = true },
@@ -599,8 +600,8 @@ private fun MortimerApp(
     }
 
     leaveEditorFor?.let { target -> AlertDialog(onDismissRequest = { leaveEditorFor = null },
-        title = { Text(if (editorSaving) "Saving MP4" else "Cancel export and leave?") },
-        text = { Text(if (editorSaving) "Wait until the file finishes saving." else "Your project is preserved. The current MP4 render will be canceled.") },
+        title = { Text(when { editorSaving -> "Saving MP4"; editorHasRender -> "Discard unsaved MP4 and leave?"; else -> "Cancel export and leave?" }) },
+        text = { Text(when { editorSaving -> "Wait until the file finishes saving."; editorHasRender -> "The rendered MP4 has not been saved. Leaving discards this render; your project and original videos are preserved."; else -> "Your project is preserved. The current MP4 render will be canceled." }) },
         confirmButton = { TextButton(enabled = !editorSaving, onClick = { leaveEditorFor = null; section = target }) { Text("Leave") } },
         dismissButton = { TextButton(onClick = { leaveEditorFor = null }) { Text("Stay in Editor") } }) }
     if (deviceScanOpen) DeviceScanDialog(library, onImport = { items ->

@@ -6,7 +6,7 @@ import type { VideoFit } from "../types";
 import { ACCENTS, formatSize } from "../util";
 import { usePref } from "../prefs";
 
-const APP_VERSION = "0.5.24";
+const APP_VERSION = __APP_VERSION__;
 
 const SHORTCUTS: Array<[string, string]> = [
   ["Space / K", "Play / pause"], ["← / J", "Skip back"], ["→ / L", "Skip forward"], ["↑ / ↓", "Volume"],

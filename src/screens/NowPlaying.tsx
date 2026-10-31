@@ -1,3 +1,4 @@
+import { SubtitleSettings } from "./SubtitleSettings";
 import { memo, useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import {
   Captions, ChevronDown, Disc3, EllipsisVertical, Film, Gauge, Heart, ListMusic, Maximize, Minimize, Music2, Pause, PictureInPicture2, Play,
@@ -23,8 +24,9 @@ type Gesture = {
 export const NowPlaying = memo(function NowPlaying({ active }: { active: boolean }) {
   const p = usePlayer();
   const { current, playing, actions, videoRef, favorites, queue, qIndex, trackMap } = p;
-  const [sheet, setSheet] = useState<null | "speed" | "sleep">(null);
+  const [sheet, setSheet] = useState<null | "speed" | "sleep" | "subtitles">(null);
   const [flash, setFlash] = useState<{ text: string; side: "left" | "right" | "center"; key: number } | null>(null);
+  const [pinned, setPinned] = useState(false);
   const [chrome, setChrome] = useState(true);
   const [indicator, setIndicator] = useState<{ icon: LucideIcon; text: string } | null>(null);
   const [brightness, setBrightness] = useState(1);
@@ -41,11 +43,15 @@ export const NowPlaying = memo(function NowPlaying({ active }: { active: boolean
   const nextTrack = trackMap.get(queue[qIndex + 1] ?? (p.repeat === "all" ? queue[0] : "") ?? "");
   const favorite = !!current && favorites.has(current.id);
 
+  useEffect(() => () => {
+    for (const timer of [tapTimer, flashTimer, hideTimer, indicatorTimer]) window.clearTimeout(timer.current);
+  }, []);
+
   const poke = useCallback(() => {
     setChrome(true);
     window.clearTimeout(hideTimer.current);
-    hideTimer.current = window.setTimeout(() => setChrome(false), 3200);
-  }, []);
+    hideTimer.current = window.setTimeout(() => { if (playing && !pinned) setChrome(false); }, 4000);
+  }, [playing, pinned]);
 
   useEffect(() => {
     if (playing && isVideo && active) poke();
@@ -124,7 +130,7 @@ export const NowPlaying = memo(function NowPlaying({ active }: { active: boolean
       if (g.pointerType === "mouse") {
         actions.togglePlay();
         showFlash(playing ? "Paused" : "Play", "center");
-      } else if (chrome && playing) {
+      } else if (chrome && playing && !pinned) {
         window.clearTimeout(hideTimer.current);
         setChrome(false);
       } else poke();
@@ -207,7 +213,7 @@ export const NowPlaying = memo(function NowPlaying({ active }: { active: boolean
           onPointerCancel={() => { gesture.current = null; setIndicator(null); }}>
           <video ref={videoRef} playsInline preload="auto" className={`fit-${p.videoFit}`}
             style={{ "--cue": `${p.subtitleSize}%`, filter: brightness !== 1 ? `brightness(${brightness})` : undefined } as CSSProperties}>
-            {p.subtitles && <track kind="subtitles" src={p.subtitles.url} label={p.subtitles.name} default />}
+            {p.subtitles && <track key={p.subtitles.url} kind="subtitles" src={p.subtitles.url} label={p.subtitles.name} default />}
           </video>
           {isVideo && (
             <div className={"vpChrome" + (chrome ? "" : " hidden")}>
@@ -217,7 +223,7 @@ export const NowPlaying = memo(function NowPlaying({ active }: { active: boolean
                   <b>{current?.title}</b>
                   <small>{p.queueSource || "Videos"}{queue.length > 1 ? ` · ${qIndex + 1} of ${queue.length}` : ""}</small>
                 </div>
-                <button className={"iconBtn" + (p.subtitles ? " on" : "")} aria-label="Load subtitles" title="Subtitles (.srt / .vtt)" onClick={() => subtitleInput.current?.click()}><Captions size={22} /></button>
+                <button className={"iconBtn" + (p.subtitles ? " on" : "")} aria-label="Load subtitles" title="Subtitles (.srt / .vtt)" onClick={() => setSheet("subtitles")}><Captions size={22} /></button>
                 <button className="iconBtn" aria-label="Video options" onClick={openTrackMenu}><EllipsisVertical size={22} /></button>
               </div>
               <div className="vpCenter">
@@ -229,10 +235,11 @@ export const NowPlaying = memo(function NowPlaying({ active }: { active: boolean
                 <button className="iconBtn big" aria-label={`Forward ${p.skipSeconds} seconds`} onClick={(e) => { e.stopPropagation(); actions.seekBy(p.skipSeconds); poke(); }}><RotateCw size={26} /></button>
                 <button className="iconBtn big" aria-label="Next" onClick={(e) => { e.stopPropagation(); actions.next(); poke(); }}><SkipForward size={28} fill="currentColor" /></button>
               </div>
-              <div className="vpBottom" onPointerDown={poke}>
+              <div className="vpBottom" onPointerDown={() => window.clearTimeout(hideTimer.current)} onPointerUp={poke}>
                 <SeekBar />
                 <div className="vpTools">
                   <ToolButton icon={Gauge} label={`${p.speed}×`} on={p.speed !== 1} onClick={() => setSheet("speed")} />
+                  <ToolButton icon={Captions} label={pinned ? "Unpin controls" : "Pin controls"} on={pinned} onClick={() => setPinned(!pinned)} />
                   <ToolButton icon={Scaling} label={FIT_LABEL[p.videoFit]} onClick={() => actions.setVideoFit(NEXT_FIT[p.videoFit])} />
                   <ToolButton icon={p.repeat === "one" ? Repeat1 : Repeat} label={p.repeat === "one" ? "Loop" : p.repeat === "all" ? "All" : "Repeat"} on={p.repeat !== "off"} onClick={actions.cycleRepeat} />
                   <ToolButton icon={Repeat} label={abLabel} on={p.ab.a != null} onClick={actions.cycleAB} />
@@ -336,6 +343,8 @@ export const NowPlaying = memo(function NowPlaying({ active }: { active: boolean
         if (file) actions.loadSubtitles(file);
         e.currentTarget.value = "";
       }} />
+
+      {sheet === "subtitles" && <Sheet title="Subtitles" onClose={() => setSheet(null)}><SubtitleSettings key={p.subtitles?.name ?? "empty"} onLoad={() => subtitleInput.current?.click()} /></Sheet>}
 
       {sheet === "speed" && (
         <Sheet title="Playback speed" subtitle={`${p.speed}×`} onClose={() => setSheet(null)}>

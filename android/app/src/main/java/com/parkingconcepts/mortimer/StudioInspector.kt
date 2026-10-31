@@ -94,7 +94,7 @@ internal fun StudioImagePanel(clip: StudioClip, enabled: Boolean, onEdit: (Video
     HorizontalDivider()
     Text("Color correction", style = MaterialTheme.typography.titleMedium)
     StudioAdjustment("Brightness", e.brightness, -1f..1f, enabled) { onEdit(e.copy(brightness = it)) }
-    StudioAdjustment("Contrast", e.contrast, -0.9f..0.9f, enabled) { onEdit(e.copy(contrast = it)) }
+    StudioAdjustment("Contrast", e.contrast, -1f..0.9f, enabled) { onEdit(e.copy(contrast = it)) }
     StudioAdjustment("Saturation", e.saturation, -100f..100f, enabled) { onEdit(e.copy(saturation = it)) }
     TextButton(enabled = enabled, onClick = { onEdit(e.copy(rotation = 0, flip = false, brightness = 0f, contrast = 0f, saturation = 0f)) }) { Text("Reset image") }
 }

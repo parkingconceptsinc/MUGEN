@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type InputHTMLAttributes } from "react";
+import { sanitizeAudioLabEq } from "./audioLabModel";
+import { decodeSubtitles, parseSubtitles, serializeSubtitles, validateSync, type SubtitleCue } from "./subtitles";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type InputHTMLAttributes } from "react";
 import { BookOpen, Clapperboard, Disc3, Download, FilePlus, FolderOpen, Library as LibraryIcon, ListMusic, Settings as SettingsIcon, SlidersHorizontal, type LucideIcon, Images } from "lucide-react";
-import { applyAudio, attachElement, EQ_PRESETS, initEngine, resumeEngine } from "./audioEngine";
+import { applyAudio, attachElement, connectAudioLabNode, EQ_PRESETS, getAudioLabSettings, initEngine, resumeEngine, subscribeAudioLab } from "./audioEngine";
 import { decodeAudioTrack, type DecodedAudio } from "./codecAudioDecoder";
 import { PlayerContext, ProgressContext, type Actions, type MenuTarget, type PlayerState, type SleepState } from "./context";
 import { clearLibrary as clearStoredLibrary, deleteComics, deleteTracks, loadComics, loadLibrary, patchComic, patchTrack, saveComicsFast, saveLibraryFast, type StoredComic, type StoredLibraryItem } from "./library";
@@ -8,13 +10,14 @@ import { comicFormatOf, defaultShelf, isComicFile, isTextFormat, makeThumbnail, 
 import { META_VERSION, readItem, readTags, type Incoming } from "./metadata";
 import { readPref, usePref, writePref } from "./prefs";
 import type { Comic, ComicProgress, EqSettings, Playlist, ReaderSettings, RepeatMode, Route, Screen, SongSort, Track, VideoFit } from "./types";
-import { ACCENTS, compareText, formatTime, shuffled, srtToVtt, supported, toTrack, trackKey } from "./util";
+import { ACCENTS, compareText, formatTime, shuffled, supported, toTrack, trackKey } from "./util";
 import { captureVideoFrame } from "./thumbnails";
 import { MiniPlayer, TrackMenu } from "./components";
 import { Library } from "./screens/Library";
 import { NowPlaying } from "./screens/NowPlaying";
 import { Queue } from "./screens/Queue";
-import { Equalizer } from "./screens/Equalizer";
+const Studio = lazy(() => import("./screens/Studio").then((m) => ({ default: m.Studio })));
+const AudioLab = lazy(() => import("./screens/AudioLab").then((m) => ({ default: m.AudioLab })));
 import { Settings } from "./screens/Settings";
 import { Videos } from "./screens/Videos";
 import { Comics } from "./screens/Comics";
@@ -33,7 +36,8 @@ const NAV: Array<[Screen, string, string, LucideIcon, boolean]> = [
   ["photos", "Photos", "Photos", Images, true],
   ["player", "Now Playing", "Playing", Disc3, true],
   ["queue", "Queue", "Queue", ListMusic, false],
-  ["eq", "Equalizer", "EQ", SlidersHorizontal, false],
+  ["studio", "Studio", "Studio", Clapperboard, true],
+  ["eq", "Audio Lab", "Audio Lab", SlidersHorizontal, true],
   ["settings", "Settings", "Settings", SettingsIcon, true],
 ];
 
@@ -46,7 +50,7 @@ type DirectoryEntry = { kind: "file" | "directory"; name: string; getFile?: () =
 type DirectoryHandleLike = { name: string; values: () => AsyncIterable<DirectoryEntry> };
 
 const MEDIA_EVENTS = ["play", "pause", "timeupdate", "loadedmetadata", "durationchange", "ended", "error"] as const;
-type CodecAudioState = DecodedAudio & { id: string; source: AudioBufferSourceNode | null; gain: GainNode; startedAt: number; offset: number };
+type CodecAudioState = DecodedAudio & { id: string; source: AudioBufferSourceNode | null; gain: GainNode; disconnectLab: () => void; startedAt: number; offset: number };
 
 const metadataQueue: Array<() => Promise<void>> = [];
 let mediaImportQueue: Promise<void> = Promise.resolve();
@@ -86,6 +90,8 @@ export function Player() {
   const errorStreak = useRef(0);
   const pushedHistory = useRef(0);
   const engineStarted = useRef(false);
+  const [labEnabled, setLabEnabled] = useState(() => getAudioLabSettings().enabled);
+  useEffect(() => subscribeAudioLab(() => setLabEnabled(getAudioLabSettings().enabled)), []);
   const toastTimer = useRef<number | undefined>(undefined);
   const thumbBusy = useRef(false);
   const comicBusy = useRef(false);
@@ -110,8 +116,12 @@ export function Player() {
   const [muted, setMuted] = useState(false);
   const [speed, setSpeed] = usePref("speed", 1);
   const [preservePitch, setPreservePitch] = usePref("preservePitch", true);
-  const [eq, setEq] = usePref<EqSettings>("eq", { enabled: false, preset: "Flat", bands: EQ_PRESETS.Flat, preamp: 0 });
-  const [customPresets, setCustomPresets] = usePref<Record<string, number[]>>("customPresets", {});
+  const [storedEq, setStoredEq] = usePref<EqSettings>("eq", { enabled: false, preset: "Flat", bands: EQ_PRESETS.Flat, preamp: 0 });
+  const cleanEq = (value: EqSettings): EqSettings => ({ ...sanitizeAudioLabEq(value), preset: typeof value?.preset === "string" ? value.preset.slice(0, 64) : "Flat" });
+  const eq = useMemo(() => cleanEq(storedEq), [storedEq]);
+  const setEq: Actions["setEq"] = (update) => setStoredEq(previous => cleanEq(update(cleanEq(previous))));
+  const [storedPresets, setCustomPresets] = usePref<Record<string, number[]>>("customPresets", {});
+  const customPresets = useMemo(() => Object.fromEntries(Object.entries(storedPresets).filter(([, bands]) => Array.isArray(bands) && bands.length === 10 && bands.every(n => typeof n === "number" && Number.isFinite(n))).map(([name, bands]) => [name, bands.map(n => Math.max(-12, Math.min(12, n)))])), [storedPresets]);
   const [balance, setBalance] = usePref("balance", 0);
   const [boost, setBoost] = usePref("boost", 1);
   const [skipSeconds, setSkipSeconds] = usePref("skipSeconds", 10);
@@ -133,7 +143,25 @@ export function Player() {
   const [plays, setPlays] = usePref<Record<string, number>>("plays", {});
   const [lastPlayed, setLastPlayed] = usePref<Record<string, number>>("lastPlayed", {});
   const [playlists, setPlaylists] = usePref<Playlist[]>("playlists", []);
+  const [studioVisited, setStudioVisited] = useState(false);
+  const [labVisited, setLabVisited] = useState(false);
   const [screen, setScreen] = useState<Screen>("library");
+  useEffect(() => {
+    if (screen === "studio") setStudioVisited(true);
+    if (screen === "eq") setLabVisited(true);
+  }, [screen]);
+  useEffect(() => {
+    const revealActiveTab = () => {
+      const bar = document.querySelector<HTMLElement>(".tabbar");
+      const activeTab = bar?.querySelector<HTMLElement>("button.active");
+      if (bar && activeTab && bar.clientWidth > 0 && bar.scrollWidth > bar.clientWidth) {
+        activeTab.scrollIntoView({ block: "nearest", inline: "center" });
+      }
+    };
+    revealActiveTab();
+    window.addEventListener("resize", revealActiveTab);
+    return () => window.removeEventListener("resize", revealActiveTab);
+  }, [screen]);
   const [routes, setRoutes] = useState<Route[]>([{ view: "home" }]);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -141,7 +169,9 @@ export function Player() {
   const [sleep, setSleepState] = useState<SleepState>({ endsAt: null, endOfTrack: false });
   const [now, setNow] = useState(() => Date.now());
   const [ab, setAb] = useState<{ a: number | null; b: number | null }>({ a: null, b: null });
-  const [subtitles, setSubtitles] = useState<{ url: string; name: string } | null>(null);
+  const [subtitles, setSubtitles] = useState<PlayerState["subtitles"]>(null);
+  const subtitleCuesRef = useRef<SubtitleCue[]>([]);
+  const subtitleRequestRef = useRef(0);
   const subtitleUrlRef = useRef<string | null>(null);
   const [importing, setImporting] = useState<{ done: number; total: number; label?: string } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -160,6 +190,7 @@ export function Player() {
   }, [theme]);
 
   useEffect(() => () => {
+    subtitleRequestRef.current++;
     if (subtitleUrlRef.current) URL.revokeObjectURL(subtitleUrlRef.current);
     subtitleUrlRef.current = null;
   }, []);
@@ -207,6 +238,7 @@ export function Player() {
     if (!state) return;
     try { state.source?.stop(); } catch {}
     state.source?.disconnect();
+    state.disconnectLab();
     state.gain.disconnect();
     void state.context.close().catch(() => {});
   }
@@ -300,9 +332,9 @@ export function Player() {
       }
       const gain = decoded.context.createGain();
       gain.gain.value = playbackLiveRef.current.muted ? 0 : Math.max(0, Math.min(1, playbackLiveRef.current.volume * playbackLiveRef.current.sleepFade));
-      gain.connect(decoded.context.destination);
+      const disconnectLab = connectAudioLabNode(gain);
       const initialOffset = Number.isFinite(el.currentTime) ? el.currentTime : 0;
-      codecAudioRef.current = { ...decoded, id: item.id, source: null, gain, startedAt: decoded.context.currentTime, offset: initialOffset };
+      codecAudioRef.current = { ...decoded, id: item.id, source: null, gain, disconnectLab, startedAt: decoded.context.currentTime, offset: initialOffset };
       el.muted = true;
       // Keep the original file. FFmpeg decodes the audio in memory only;
       // no replacement/transcoded media file is created.
@@ -1095,13 +1127,45 @@ export function Player() {
       }
     },
     loadSubtitles(file) {
-      void file.text().then((text) => {
-        const url = URL.createObjectURL(new Blob([srtToVtt(text)], { type: "text/vtt" }));
+      const request = ++subtitleRequestRef.current;
+      if (file.size > 4 * 1024 * 1024) return toast("Subtitle file is too large (maximum 4 MiB).");
+      void file.arrayBuffer().then((bytes) => {
+        if (request !== subtitleRequestRef.current) return;
+        const cues = parseSubtitles(decodeSubtitles(bytes));
+        const sync = { offsetMs: 0, scale: 1 };
+        const url = URL.createObjectURL(new Blob([serializeSubtitles(cues, sync, "vtt")], { type: "text/vtt" }));
+        if (subtitleUrlRef.current) URL.revokeObjectURL(subtitleUrlRef.current);
+        subtitleCuesRef.current = cues;
+        subtitleUrlRef.current = url;
+        setSubtitles({ url, name: file.name, sync });
+        toast(`Subtitles: ${file.name}`);
+      }).catch((error) => { if (request === subtitleRequestRef.current) toast(error.message || "Couldn't read that subtitle file"); });
+    },
+    setSubtitleSync(sync) {
+      if (!subtitles) return;
+      try {
+        sync = validateSync(sync);
+        const url = URL.createObjectURL(new Blob([serializeSubtitles(subtitleCuesRef.current, sync, "vtt")], { type: "text/vtt" }));
         if (subtitleUrlRef.current) URL.revokeObjectURL(subtitleUrlRef.current);
         subtitleUrlRef.current = url;
-        setSubtitles({ url, name: file.name });
-        toast(`Subtitles: ${file.name}`);
-      }).catch(() => toast("Couldn't read that subtitle file"));
+        setSubtitles({ ...subtitles, url, sync });
+      } catch (error) { toast((error as Error).message); }
+    },
+    exportSubtitles() {
+      if (!subtitles) return;
+      const url = URL.createObjectURL(new Blob([serializeSubtitles(subtitleCuesRef.current, subtitles.sync, "srt")], { type: "application/x-subrip" }));
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = subtitles.name.replace(/\.[^.]+$/, "") + "-synced.srt";
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    },
+    clearSubtitles() {
+      subtitleRequestRef.current++;
+      if (subtitleUrlRef.current) URL.revokeObjectURL(subtitleUrlRef.current);
+      subtitleUrlRef.current = null;
+      subtitleCuesRef.current = [];
+      setSubtitles(null);
     },
     install() {
       if (!installEvent) return;
@@ -1483,6 +1547,8 @@ export function Player() {
     }
     counted.current = false;
     setAb({ a: null, b: null });
+    subtitleRequestRef.current++;
+    subtitleCuesRef.current = [];
     setSubtitles((old) => {
       if (old) URL.revokeObjectURL(old.url);
       subtitleUrlRef.current = null;
@@ -1537,7 +1603,7 @@ export function Player() {
   }, [volume, muted, sleepFade]);
 
   useEffect(() => {
-    const needed = eq.enabled || balance !== 0 || boost !== 1;
+    const needed = labEnabled || eq.enabled || balance !== 0 || boost !== 1;
     if (!needed && !engineStarted.current) return;
     if (!engineStarted.current) {
       if (!initEngine()) return;
@@ -1546,7 +1612,7 @@ export function Player() {
       attachElement(videoRef.current);
     }
     applyAudio({ enabled: eq.enabled, bands: eq.bands, preamp: eq.preamp, balance, boost });
-  }, [eq, balance, boost]);
+  }, [eq, balance, boost, labEnabled]);
 
   useEffect(() => {
     if (screen === "player" || thumbBusy.current) return;
@@ -1762,6 +1828,7 @@ export function Player() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
+      if (screen === "studio" || screen === "eq") return;
       if (event.ctrlKey || event.metaKey || event.altKey) return;
       if (target?.closest("input, textarea, select, [contenteditable]")) return;
       // Space/Enter on a focused control must activate that control, not toggle playback.
@@ -1797,7 +1864,7 @@ export function Player() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [actions]);
+  }, [actions, screen]);
 
   const state: PlayerState = useMemo(() => ({
     loaded, tracks, trackMap, queue, qIndex, queueSource, current, playing, shuffle, repeat, volume, muted, speed, preservePitch,
@@ -1849,7 +1916,7 @@ export function Player() {
             </div>
             <nav>
               {NAV.map(([id, label, , Icon]) => (
-                <button key={id} className={screen === id ? "active" : ""} onClick={() => actions.goTo(id)}>
+                <button key={id} className={screen === id ? "active" : ""} aria-current={screen === id ? "page" : undefined} onClick={() => actions.goTo(id)}>
                   <Icon size={19} /><span>{label}</span>
                   {id === "queue" && queue.length > 0 && <em>{queue.length}</em>}
                 </button>
@@ -1870,7 +1937,12 @@ export function Player() {
             {screen === "comics" && <Comics shelfOverride="comics" />}
             {screen === "photos" && <Photos />}
             {screen === "queue" && <Queue />}
-            {screen === "eq" && <Equalizer />}
+            {(studioVisited || screen === "studio") && <div className="workspaceMount" hidden={screen !== "studio"}>
+              <Suspense fallback={<section className="screen" role="status">Loading Studio…</section>}><Studio active={screen === "studio"} /></Suspense>
+            </div>}
+            {(labVisited || screen === "eq") && <div className="workspaceMount" hidden={screen !== "eq"}>
+              <Suspense fallback={<section className="screen" role="status">Loading Audio Lab…</section>}><AudioLab active={screen === "eq"} /></Suspense>
+            </div>}
             {screen === "settings" && <Settings theme={theme} onThemeChange={setTheme} />}
           </main>
 
@@ -1878,7 +1950,7 @@ export function Player() {
 
           <nav className="tabbar">
             {NAV.filter((n) => n[4]).map(([id, , short, Icon]) => (
-              <button key={id} className={screen === id ? "active" : ""} onClick={() => actions.goTo(id)}>
+              <button key={id} className={screen === id ? "active" : ""} aria-current={screen === id ? "page" : undefined} onClick={() => actions.goTo(id)}>
                 <Icon size={21} /><span>{short}</span>
                 {id === "queue" && queue.length > 0 && <em>{queue.length > 99 ? "99+" : queue.length}</em>}
               </button>
