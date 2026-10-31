@@ -150,6 +150,18 @@ export function Player() {
     if (screen === "studio") setStudioVisited(true);
     if (screen === "eq") setLabVisited(true);
   }, [screen]);
+  useEffect(() => {
+    const revealActiveTab = () => {
+      const bar = document.querySelector<HTMLElement>(".tabbar");
+      const activeTab = bar?.querySelector<HTMLElement>("button.active");
+      if (bar && activeTab && bar.clientWidth > 0 && bar.scrollWidth > bar.clientWidth) {
+        activeTab.scrollIntoView({ block: "nearest", inline: "center" });
+      }
+    };
+    revealActiveTab();
+    window.addEventListener("resize", revealActiveTab);
+    return () => window.removeEventListener("resize", revealActiveTab);
+  }, [screen]);
   const [routes, setRoutes] = useState<Route[]>([{ view: "home" }]);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -1904,7 +1916,7 @@ export function Player() {
             </div>
             <nav>
               {NAV.map(([id, label, , Icon]) => (
-                <button key={id} className={screen === id ? "active" : ""} onClick={() => actions.goTo(id)}>
+                <button key={id} className={screen === id ? "active" : ""} aria-current={screen === id ? "page" : undefined} onClick={() => actions.goTo(id)}>
                   <Icon size={19} /><span>{label}</span>
                   {id === "queue" && queue.length > 0 && <em>{queue.length}</em>}
                 </button>
@@ -1938,7 +1950,7 @@ export function Player() {
 
           <nav className="tabbar">
             {NAV.filter((n) => n[4]).map(([id, , short, Icon]) => (
-              <button key={id} className={screen === id ? "active" : ""} onClick={() => actions.goTo(id)}>
+              <button key={id} className={screen === id ? "active" : ""} aria-current={screen === id ? "page" : undefined} onClick={() => actions.goTo(id)}>
                 <Icon size={21} /><span>{short}</span>
                 {id === "queue" && queue.length > 0 && <em>{queue.length > 99 ? "99+" : queue.length}</em>}
               </button>

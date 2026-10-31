@@ -60,7 +60,7 @@ async function navigate(name) {
   await page.getByRole('button', { name, exact: true }).first().click();
 }
 async function fillNumber(label, value) {
-  const input = page.getByLabel(label, { exact: true });
+  const input = page.getByRole('spinbutton', { name: label, exact: true });
   await input.fill(String(value));
   await input.blur();
 }
@@ -68,10 +68,10 @@ async function assertNumber(label, expected) {
   // React may commit a parent edit before its controlled input has painted.
   // Poll the exact value; timeout still fails instead of accepting stale state.
   await page.waitForFunction(({ label, expected }) => {
-    const input = Array.from(document.querySelectorAll('input')).find((element) => element.getAttribute('aria-label') === label);
+    const input = Array.from(document.querySelectorAll('input[type=number]')).find((element) => element.getAttribute('aria-label') === label);
     return input && Math.abs(Number(input.value) - expected) < 0.0001;
   }, { label, expected }, { timeout: 5000 });
-  const actual = Number(await page.getByLabel(label, { exact: true }).inputValue());
+  const actual = Number(await page.getByRole('spinbutton', { name: label, exact: true }).inputValue());
   assert.ok(Math.abs(actual - expected) < 0.0001, `${label}: expected ${expected}, got ${actual}`);
 }
 async function saveDownload(download, filename) {
