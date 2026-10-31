@@ -24,16 +24,36 @@ page.setDefaultTimeout(20_000);
 page.setDefaultNavigationTimeout(90_000);
 const pageErrors = [];
 const results = [];
+const consoleMessages = [];
+const failedRequests = [];
+const failedResponses = [];
+page.on('console', (message) => {
+  if (consoleMessages.length < 300) consoleMessages.push({ type: message.type(), text: message.text().slice(0, 4000) });
+});
+page.on('requestfailed', (request) => {
+  if (failedRequests.length < 100) failedRequests.push({ url: request.url(), error: request.failure()?.errorText });
+});
+page.on('response', (response) => {
+  if (response.status() >= 400 && failedResponses.length < 100) failedResponses.push({ url: response.url(), status: response.status() });
+});
 page.on('pageerror', (error) => pageErrors.push(error.stack || error.message));
 page.on('dialog', (dialog) => void dialog.accept());
 const screenshot = (name) => page.screenshot({ path: join(artifacts, name + '.png'), fullPage: true });
 async function run(name, action) {
   const started = Date.now();
-  try { await action(); results.push({ name, status: 'passed', elapsedMs: Date.now() - started }); }
+  try { await action(); results.push({ name, status: 'passed', elapsedMs: Date.now() - started }); return true; }
   catch (error) {
     results.push({ name, status: 'failed', elapsedMs: Date.now() - started, error: error.stack || String(error) });
     await screenshot('failure-' + results.length).catch(() => {});
-    throw error;
+    await writeFile(join(artifacts, 'failure-' + results.length + '-body.txt'), await page.locator('body').innerText().catch(() => '<body unavailable>'));
+    await page.setViewportSize({ width: 1365, height: 900 }).catch(() => {});
+    const cancel = page.getByRole('button', { name: 'Cancel export', exact: true });
+    if (await cancel.isVisible().catch(() => false)) {
+      await cancel.click().catch(() => {});
+      await cancel.waitFor({ state: 'detached', timeout: 10000 }).catch(() => {});
+    }
+    // Keep independent Audio Lab coverage even if Studio delivery fails.
+    return false;
   }
 }
 async function navigate(name) {
@@ -103,7 +123,6 @@ try {
     const duration = await preview.evaluate((video) => video.duration);
     assert.ok(duration >= 1.9 && duration <= 2.1, `Restored source duration: ${duration}`);
   });
-  // Export assertions are filled against the module's public controls below.
   await run('Studio assembles a playable two-clip MP4 with trim and speed changes', async () => {
     await page.getByRole('button', { name: 'Duplicate clip', exact: true }).click();
     await page.getByRole('button', { name: /Select clip 2:.*mugen-fixture/ }).click();
@@ -120,7 +139,15 @@ try {
     });
     await screenshot('studio-desktop');
     await page.getByRole('button', { name: 'Export MP4', exact: true }).click();
-    await page.getByRole('link', { name: 'Download MP4', exact: true }).waitFor({ timeout: 180_000 });
+    const completion = await page.waitForFunction(() => {
+      if (document.querySelector('.studioExportPanel a[download]')) return { kind: 'ready' };
+      const button = Array.from(document.querySelectorAll('.studioExportPanel button')).find((element) => element.textContent?.trim() === 'Export MP4');
+      const notice = document.querySelector('.studioNotice')?.textContent?.trim();
+      if (button && !button.disabled && notice) return { kind: 'error', message: notice };
+      return false;
+    }, undefined, { timeout: 180_000 });
+    const exportState = await completion.jsonValue(); await completion.dispose();
+    assert.equal(exportState.kind, 'ready', `Studio export failed: ${exportState.message || 'unknown error'}`);
     const downloadPromise = page.waitForEvent('download', { timeout: 20_000 });
     await page.getByRole('link', { name: 'Download MP4', exact: true }).click();
     const download = await downloadPromise;
@@ -185,7 +212,15 @@ try {
       input.dispatchEvent(new Event('change', { bubbles: true }));
     });
     await page.getByRole('button', { name: 'Render processed WAV', exact: true }).click();
-    await page.getByLabel('Rendered audio preview', { exact: true }).waitFor({ timeout: 90_000 });
+    const completion = await page.waitForFunction(() => {
+      if (document.querySelector('audio[aria-label="Rendered audio preview"]')) return { kind: 'ready' };
+      const button = Array.from(document.querySelectorAll('.audioLabWorkstation button')).find((element) => element.textContent?.trim() === 'Render processed WAV');
+      const notice = document.querySelector('.labNotice')?.textContent?.trim();
+      if (button && !button.disabled && notice && !notice.startsWith('Rendering ')) return { kind: 'error', message: notice };
+      return false;
+    }, undefined, { timeout: 90_000 });
+    const renderState = await completion.jsonValue(); await completion.dispose();
+    assert.equal(renderState.kind, 'ready', `Audio Lab rendering failed: ${renderState.message || 'unknown error'}`);
     const downloadPromise = page.waitForEvent('download', { timeout: 20_000 });
     await page.getByRole('button', { name: 'Download processed WAV', exact: true }).click();
     const path = await saveDownload(await downloadPromise, 'audiolab-processed.wav');
@@ -210,9 +245,12 @@ try {
     const size = await page.evaluate(() => ({ width: document.documentElement.scrollWidth, viewport: window.innerWidth }));
     assert.ok(size.width <= size.viewport + 1, `Audio Lab page overflows: ${size.width} > ${size.viewport}`);
   });
-  assert.deepEqual(pageErrors, [], 'Browser must not produce uncaught exceptions');
+  if (pageErrors.length) results.push({ name: 'No uncaught browser exceptions', status: 'failed', error: pageErrors.join('\n') });
+  const failures = results.filter((result) => result.status === 'failed');
+  assert.equal(failures.length, 0, failures.map((failure) => `${failure.name}: ${failure.error}`).join('\n\n'));
 } finally {
-  await writeFile(join(artifacts, 'results.json'), JSON.stringify({ baseURL, results, pageErrors }, null, 2));
+  await writeFile(join(artifacts, 'results.json'), JSON.stringify({ baseURL, results, pageErrors, consoleMessages, failedRequests, failedResponses }, null, 2));
+  await writeFile(join(artifacts, 'final-body.txt'), await page.locator('body').innerText().catch(() => '<body unavailable>'));
   await context.close();
   await browser.close();
 }

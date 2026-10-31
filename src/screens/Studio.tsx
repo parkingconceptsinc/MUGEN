@@ -48,6 +48,7 @@ export function Studio({ active = true }: { active?: boolean }) {
   const [blocked, setBlocked] = useState(false);
   const [saveState, setSaveState] = useState<"saved" | "saving" | "unsaved">("saved");
   const [notice, setNotice] = useState("");
+  const [exportError, setExportError] = useState("");
   const [importing, setImporting] = useState(false);
   const [exporting, setExporting] = useState<{ progress: number; label: string } | null>(null);
   const [result, setResult] = useState<{ url: string; fingerprint: string } | null>(null);
@@ -80,7 +81,7 @@ export function Studio({ active = true }: { active?: boolean }) {
   };
   const commit = (next: StudioProject) => {
     try {
-      const value = history.current.commit(next); liveProject.current = value; setProject(value); setSaveState("saving"); setNotice("");
+      const value = history.current.commit(next); liveProject.current = value; setProject(value); setSaveState("saving"); setNotice(""); setExportError("");
       if (!value.clips.some(c => c.id === selectedId)) setSelectedId(value.clips[0]?.id ?? null);
     } catch (error) { setNotice(errorText(error)); }
   };
@@ -183,7 +184,7 @@ export function Studio({ active = true }: { active?: boolean }) {
     const snapshot = validateProject(project);
     const fingerprint = projectFingerprint(snapshot);
     const controller = new AbortController(); exportController.current = controller;
-    setExporting({ progress: 0, label: "Preparing export engine…" }); setNotice("");
+    setExporting({ progress: 0, label: "Preparing export engine…" }); setNotice(""); setExportError("");
     try {
       await saveNow();
       const { exportStudio } = await import("../studioExport");
@@ -192,7 +193,12 @@ export function Studio({ active = true }: { active?: boolean }) {
       if (resultRef.current) URL.revokeObjectURL(resultRef.current);
       const url = URL.createObjectURL(blob); resultRef.current = url; setResult({ url, fingerprint });
       setNotice("Export complete. Download the MP4 copy; your original files are unchanged.");
-    } catch (error) { if (mounted.current) setNotice(controller.signal.aborted ? "Export cancelled. Your project and original files are preserved." : errorText(error)); }
+    } catch (error) {
+      if (mounted.current) {
+        const message = controller.signal.aborted ? "Export cancelled. Your project and original files are preserved." : errorText(error);
+        setExportError(message);
+      }
+    }
     finally { exportController.current = null; if (mounted.current) setExporting(null); }
   }
   async function startNew() {
@@ -263,6 +269,7 @@ export function Studio({ active = true }: { active?: boolean }) {
         {staleExport && <p className="hint">The project changed after the last export. Export again to download the updated cut.</p>}
       </div>
     </>}
+    {exportError && <div className="studioNotice studioExportError" role="alert">{exportError}</div>}
     {exporting && <div className="studioExportProgress" role="status"><div><b>{exporting.label}</b><span>{Math.round(exporting.progress * 100)}%</span></div><progress max={1} value={exporting.progress} aria-label="Studio export progress" /><button className="btn" onClick={() => exportController.current?.abort()}>Cancel export</button><p className="hint">Keep this tab open. Exporting uses this device and can take several minutes.</p></div>}
   </section>;
 }

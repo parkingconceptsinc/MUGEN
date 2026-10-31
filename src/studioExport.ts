@@ -2,7 +2,7 @@ import { FFmpeg } from "@ffmpeg/ffmpeg";
 import coreURL from "@ffmpeg/core?url";
 import wasmURL from "@ffmpeg/core/wasm?url";
 import { validateProject, type StudioProject } from "./studioModel";
-import { buildClipCommand, canvasFor, checkExportBudget, concatManifest, STUDIO_EXPORT_LIMITS } from "./studioExportPlan";
+import { buildClipCommand, canvasFor, checkExportBudget, concatManifest, parseProbeOutput, type StudioProbe, STUDIO_EXPORT_LIMITS } from "./studioExportPlan";
 
 let exporting = false;
 const cancelled = () => new DOMException("Export cancelled. Your project is unchanged.", "AbortError");
@@ -25,6 +25,7 @@ export async function exportStudio(project: StudioProject, media: Map<string, Bl
   let progressValue = 0;
   let lastLog = "";
   const totalDuration = snapshot.clips.reduce((sum, c) => sum + (c.out - c.in) / c.speed, 0);
+  const diagnostics = () => lastLog.split("\n").map(line => line.trim()).filter(line => /^(?:Error\b|Invalid\b|Unknown\b|Unrecognized\b|Could not\b|No such\b|Unable\b|At least\b|Conversion failed\b|\[[^\]]+\].*(?:error|failed|invalid|unknown|unable|not found))/i.test(line)).slice(-8).join("\n");
   const report = (value: number, label: string) => { progressValue = Math.max(progressValue, Math.min(1, value)); onProgress(progressValue, label); };
   const abort = () => { try { engine.terminate(); } catch {} };
   signal.addEventListener("abort", abort, { once: true });
@@ -51,17 +52,17 @@ export async function exportStudio(project: StudioProject, media: Map<string, Bl
       throw new Error(memory ? "The browser ran out of export memory. Choose 720p or split the project into shorter parts." : `${stage} failed. The video may contain an unsupported codec or damaged stream. Try a standard H.264 MP4 source.`);
     }
   };
-  const probe = async (input: string): Promise<{ streams: Array<{ codec_type?: string }>; format?: { size?: string } }> => {
+  const probe = async (input: string): Promise<StudioProbe> => {
     checkAbort(signal);
+    // Do not let a failed invocation accidentally reuse an earlier JSON report.
+    await engine.deleteFile("probe.json").catch(() => {});
     const code = await engine.ffprobe(["-v", "error", "-show_entries", "stream=codec_type:format=size", "-of", "json", input, "-o", "probe.json"]);
     checkAbort(signal);
-    if (code !== 0) throw new Error("Could not inspect this video. Its container or codec may not be supported by browser export.");
+    if (code !== 0 && code !== -1) throw new Error("Could not inspect this video. Its container or codec may not be supported by browser export.");
     const result = await engine.readFile("probe.json");
     const text = typeof result === "string" ? result : new TextDecoder().decode(result);
     await engine.deleteFile("probe.json");
-    const value: unknown = JSON.parse(text);
-    if (!value || typeof value !== "object" || !Array.isArray((value as { streams?: unknown }).streams)) throw new Error("The video returned invalid stream information.");
-    return value as { streams: Array<{ codec_type?: string }>; format?: { size?: string } };
+    return parseProbeOutput(code, text);
   };
   try {
     report(0, stage);
@@ -85,15 +86,18 @@ export async function exportStudio(project: StudioProject, media: Map<string, Bl
       await engine.writeFile(input, bytes);
       let streams = knownStreams.get(clip.sourceId);
       if (!streams) {
+        stage = `Inspecting clip ${i + 1} streams`;
         const metadata = await probe(input);
         streams = { audio: metadata.streams.some((s) => s.codec_type === "audio"), video: metadata.streams.some((s) => s.codec_type === "video") };
         knownStreams.set(clip.sourceId, streams);
       }
       if (!streams.video) throw new Error("A project source has no video stream. Replace it with a video file.");
+      stage = `Rendering clip ${i + 1} of ${snapshot.clips.length}`;
       currentDuration = (clip.out - clip.in) / clip.speed;
       await exec(buildClipCommand(clip, canvas, streams.audio, input, output));
       await engine.deleteFile(input);
       currentDuration = 0;
+      stage = `Checking rendered clip ${i + 1}`;
       const metadata = await probe(output);
       const size = Number(metadata.format?.size);
       if (!Number.isFinite(size) || size <= 0) throw new Error("A rendered clip is empty. Check its trim range and original file.");
@@ -105,9 +109,11 @@ export async function exportStudio(project: StudioProject, media: Map<string, Bl
     report(0.96, stage);
     await engine.writeFile("clips.txt", new TextEncoder().encode(concatManifest(snapshot.clips.length)));
     await exec(["-hide_banner", "-y", "-f", "concat", "-safe", "1", "-i", "clips.txt", "-c", "copy", "-movflags", "+faststart", "MUGEN-export.mp4"]);
+    stage = "Checking final MP4";
     const finalMetadata = await probe("MUGEN-export.mp4");
     const finalSize = Number(finalMetadata.format?.size);
     if (!Number.isFinite(finalSize) || finalSize <= 0 || finalSize > STUDIO_EXPORT_LIMITS.outputBytes) throw new Error("The exported MP4 is empty or too large for browser memory. Try a shorter project.");
+    stage = "Reading final MP4";
     const output = await engine.readFile("MUGEN-export.mp4");
     checkAbort(signal);
     if (typeof output === "string" || !output.byteLength) throw new Error("The export did not produce a valid MP4.");
@@ -118,8 +124,11 @@ export async function exportStudio(project: StudioProject, media: Map<string, Bl
     return blob;
   } catch (error) {
     if (signal.aborted) throw cancelled();
-    if (error instanceof Error && /memory|out of bounds|allocation/i.test(error.message)) throw new Error("The browser ran out of export memory. Choose 720p or split the project into shorter parts.");
-    throw error instanceof Error ? error : new Error("Video export failed. Your saved project is unchanged.");
+    const detail = (error instanceof Error ? error.message : typeof error === "string" ? error : "The export engine returned an unexpected error.").slice(0, 400);
+    // Only engine error lines are included; metadata, media titles and paths are omitted.
+    console.error("MUGEN Studio export failed", { stage, error: detail, engineErrors: diagnostics() });
+    if (/memory|out of bounds|allocation/i.test(detail)) throw new Error("The browser ran out of export memory. Choose 720p or split the project into shorter parts.");
+    throw new Error(`${stage}: ${detail}. Your saved project is unchanged.`);
   } finally {
     signal.removeEventListener("abort", abort);
     try { engine.terminate(); } catch {}

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { audioTempoFilters, buildClipCommand, canvasFor, checkExportBudget, clipVideoFilters, concatManifest, STUDIO_EXPORT_LIMITS } from '../src/studioExportPlan.ts';
+import { audioTempoFilters, buildClipCommand, canvasFor, checkExportBudget, clipVideoFilters, concatManifest, parseProbeOutput, STUDIO_EXPORT_LIMITS } from '../src/studioExportPlan.ts';
 const source = { id: 's1', name: 'Original.mov', duration: 10, width: 1920, height: 1080, size: 16, type: 'video/quicktime' };
 const clip = { id: 'c1', sourceId: 's1', in: 1, out: 9, speed: 1, volume: 1, mute: false, rotation: 0, flip: false, brightness: 0, contrast: 1, saturation: 1 };
 const project = { version: 1, id: 'p1', name: 'My edit', clips: [clip], sources: [source], aspect: 'source', height: 720, updatedAt: 0 };
@@ -61,4 +61,15 @@ test('export budget deduplicates shared source files and rejects missing/corrupt
   assert.throws(() => checkExportBudget({ ...project, sources: [{ ...source, size: huge.size }] }, new Map([['s1', huge]])), /384 MiB/);
   assert.throws(() => checkExportBudget({ ...project, sources: [{ ...source, duration: 2000 }], clips: [{ ...clip, in: 0, out: 2000 }] }, media), /30 minutes/);
   assert.throws(() => checkExportBudget({ ...project, clips: [{ ...clip, out: 11 }] }, media), /past/);
+});
+
+test('WASM ffprobe success sentinel is accepted only with a complete fresh report', () => {
+  const valid = JSON.stringify({ streams: [{ codec_type: 'video' }, { codec_type: 'audio' }], format: { size: '123456' } });
+  for (const code of [0, -1]) assert.deepEqual(parseProbeOutput(code, valid), { streams: [{ codec_type: 'video' }, { codec_type: 'audio' }], format: { size: '123456' } });
+  for (const code of [1, 2, -2, NaN]) assert.throws(() => parseProbeOutput(code, valid));
+  for (const code of [0, -1]) {
+    for (const text of ['', '{', '{}', '{"streams":[]}', '{"streams":[{"codec_type":"video"}]}', '{"streams":[{}],"format":{"size":"4"}}', '{"streams":[{"codec_type":"video"}],"format":{"size":"NaN"}}', '{"streams":[{"codec_type":"video"}],"format":{"size":"0"}}', '{"streams":[{"codec_type":"video"}],"format":{"size":"1e9"}}', '{"streams":[{"codec_type":"video"}],"format":{"size":"99999999999999999999999"}}']) {
+      assert.throws(() => parseProbeOutput(code, text), `Must reject invalid code=${code} report=${text}`);
+    }
+  }
 });

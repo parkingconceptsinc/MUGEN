@@ -86,3 +86,23 @@ export function checkExportBudget(project: StudioProject, media: Map<string, Blo
   if (bytes > STUDIO_EXPORT_LIMITS.sourceBytes) throw new Error("Browser export supports up to 384 MiB of source video. Split the project or import smaller files.");
   canvasFor(project);
 }
+
+export type StudioProbe = { streams: Array<{ codec_type: string }>; format: { size: string } };
+/**
+ * @ffmpeg/core 0.12.10 leaves its shared status at -1 after a successful
+ * ffprobe C return. Accept that sentinel only with a fresh, complete report;
+ * real error statuses and partial/malformed JSON remain failures.
+ */
+export function parseProbeOutput(code: number, outputJSON: string): StudioProbe {
+  if (code !== 0 && code !== -1) throw new Error("Could not inspect this video. Its container or codec may not be supported by browser export.");
+  let value: unknown;
+  try { value = JSON.parse(outputJSON); }
+  catch { throw new Error("The video returned invalid stream information."); }
+  if (!value || typeof value !== "object") throw new Error("The video returned invalid stream information.");
+  const report = value as { streams?: unknown; format?: unknown };
+  if (!Array.isArray(report.streams) || !report.streams.length || !report.streams.every((stream): stream is { codec_type: string } => !!stream && typeof stream === "object" && typeof stream.codec_type === "string" && stream.codec_type.length > 0 && stream.codec_type.length <= 64)) throw new Error("The video returned invalid stream information.");
+  if (!report.format || typeof report.format !== "object") throw new Error("The video returned invalid file information.");
+  const size = (report.format as { size?: unknown }).size;
+  if (typeof size !== "string" || !/^\d+$/.test(size) || !Number.isSafeInteger(Number(size)) || Number(size) <= 0) throw new Error("The video returned invalid file information.");
+  return { streams: report.streams.map(stream => ({ codec_type: stream.codec_type })), format: { size } };
+}
