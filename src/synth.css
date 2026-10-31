@@ -1,0 +1,25 @@
+.synthStudio { position: relative; min-width: 0; }
+.synthStudio .labHeader h3 { margin: 0; font-size: 16px; }
+.synthToolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin: 14px 0; }
+.synthToolbar > label { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); }
+.synthStudio select { color: var(--text); background: var(--bg); border: 1px solid var(--line,#ffffff24); border-radius: 8px; padding: 9px; min-width: 64px; }
+.synthKeyboard { display: flex; gap: 4px; padding: 12px; background: #090b10; border-radius: 14px; overflow-x: auto; touch-action: none; }
+.synthKey { background: #eeece3; color: #17202e; border: 1px solid #d9d8d1; flex: 1 0 38px; min-width: 38px; min-height: 130px; border-radius: 0 0 8px 8px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 10px; padding: 12px 4px; touch-action: none; user-select: none; -webkit-user-select: none; }
+.synthKey.black { background: #222936; color: #f4f5f8; border-color: #4c5460; min-height: 94px; max-height: 94px; }
+.synthKey.pressed { background: var(--accent); color: #fff; border-color: var(--accent); box-shadow: 0 0 14px color-mix(in srgb,var(--accent),transparent 60%); }
+.synthKey b { font-size: 11px; }.synthKey small { opacity: .65; font-size: 10px; }
+.synthGrid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
+.synthSlider { display: block; margin: 16px 0 20px; }
+.synthSlider > span { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 10px; font-size: 13px; }
+.synthSlider output { color: var(--accent); font-family: ui-monospace,monospace; white-space: nowrap; }
+.synthSteps { display: grid; grid-template-columns: repeat(8,minmax(0,1fr)); gap: 8px; }
+.synthStep { display: grid; gap: 6px; padding: 5px; border: 1px solid transparent; border-radius: 10px; min-width: 0; }
+.synthStep.current { border-color: var(--accent); background: var(--accent-soft,#ff2d3a12); }
+.synthStep > button { flex-direction: column; gap: 6px; min-height: 66px; justify-content: center; padding: 8px 4px; }
+.synthStep small { font-size: 10px; opacity: .65; }.synthStep b { font-size: 12px; }
+.synthStep select { width: 100%; min-width: 0; padding: 8px 2px; font-size: 10px; }
+.synthProgress { display: block; width: 100%; height: 9px; accent-color: var(--accent); margin: 15px 0; }
+.synthRender audio { display: block; width: 100%; }
+.synthStudio :is(button,input,select,[tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+@media (max-width: 850px) { .synthSteps { grid-template-columns: repeat(4,minmax(0,1fr)); } }
+@media (max-width: 650px) { .synthGrid { grid-template-columns: 1fr; }.synthKeyboard { gap: 3px; padding: 8px; }.synthKey { min-height: 115px; }.synthKey.black { min-height: 83px; max-height: 83px; }.synthToolbar .btn { white-space: normal; } }

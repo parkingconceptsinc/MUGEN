@@ -16,21 +16,12 @@ export async function createMediaFixtures(directory) {
   const audio = join(directory, 'mugen-fixture.wav');
   const rate = 48_000;
   const frames = rate * 2;
-  const wav = Buffer.alloc(44 + frames * 2);
-  wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
-  wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
-  wav.writeUInt32LE(rate, 24); wav.writeUInt32LE(rate * 2, 28);
-  wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36);
-  wav.writeUInt32LE(frames * 2, 40);
-  for (let i = 0; i < frames; i++) {
-    // Two tones exercise filters as well as dynamics; below clipping on input.
-    const t = i / rate;
-    const fade = Math.min(1, i / 480, (frames - i - 1) / 480);
-    const sample = (0.42 * Math.sin(2 * Math.PI * 440 * t) + 0.26 * Math.sin(2 * Math.PI * 6000 * t)) * fade;
-    wav.writeInt16LE(Math.round(sample * 32767), 44 + i * 2);
-  }
+  const wav = syntheticPcmWav({ frequencies: [440, 6000], amplitudes: [0.42, 0.26] });
   await writeFile(audio, wav);
-  return { video, audio, originalWav: wav, frames, rate };
+  const voice = join(directory, 'mugen-detuned-voice.wav');
+  const voiceWav = syntheticPcmWav({ frequencies: [430], amplitudes: [0.5] });
+  await writeFile(voice, voiceWav);
+  return { video, audio, voice, voiceWav, originalWav: wav, frames, rate };
 }
 
 export function probeMedia(path) {
@@ -68,4 +59,65 @@ export function readPcmWav(bytes) {
     peak = Math.max(peak, Math.abs(value));
   }
   return { ...fmt, frames, duration: frames / fmt.rate, rms: Math.sqrt(energy / (pcm.length / 2)), peak, pcm };
+}
+
+/** Deterministic PCM16 signal fixture independent of the app's DSP implementation. */
+export function syntheticPcmWav({ frequencies = [440], amplitudes = [0.5], duration = 2, rate = 48000 } = {}) {
+  if (frequencies.length !== amplitudes.length || duration <= 0 || frequencies.some((frequency) => frequency <= 0 || frequency >= rate / 2)) throw Error('Invalid synthetic signal');
+  const frames = Math.round(rate * duration);
+  const wav = Buffer.alloc(44 + frames * 2);
+  wav.write('RIFF', 0); wav.writeUInt32LE(wav.length - 8, 4); wav.write('WAVEfmt ', 8);
+  wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(rate, 24); wav.writeUInt32LE(rate * 2, 28);
+  wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36);
+  wav.writeUInt32LE(frames * 2, 40);
+  for (let i = 0; i < frames; i++) {
+    const time = i / rate;
+    const fade = Math.min(1, i / (rate * 0.01), (frames - i - 1) / (rate * 0.01));
+    const sample = frequencies.reduce((sum, frequency, index) => sum + amplitudes[index] * Math.sin(2 * Math.PI * frequency * time), 0) * fade;
+    wav.writeInt16LE(Math.round(Math.max(-1, Math.min(1, sample)) * 32767), 44 + i * 2);
+  }
+  return wav;
+}
+export function monoPcmSegment(wav, startSeconds, endSeconds) {
+  const start = Math.max(0, Math.floor(startSeconds * wav.rate));
+  const end = Math.min(wav.frames, Math.floor(endSeconds * wav.rate));
+  if (end <= start) throw Error('Empty sound analysis segment');
+  const samples = new Float64Array(end - start);
+  for (let frame = start; frame < end; frame++) {
+    let sum = 0;
+    for (let channel = 0; channel < wav.channels; channel++) sum += wav.pcm.readInt16LE((frame * wav.channels + channel) * 2) / 32768;
+    samples[frame - start] = sum / wav.channels;
+  }
+  return samples;
+}
+export function segmentRms(wav, startSeconds, endSeconds) {
+  const samples = monoPcmSegment(wav, startSeconds, endSeconds);
+  return Math.sqrt(samples.reduce((sum, value) => sum + value * value, 0) / samples.length);
+}
+/** Normalized autocorrelation with a parabolic sub-sample peak; no app model code. */
+export function estimateTone(wav, targetHz, startSeconds = 0.4, endSeconds = 1.4) {
+  const samples = monoPcmSegment(wav, startSeconds, endSeconds);
+  const minLag = Math.max(2, Math.floor(wav.rate / (targetHz * 1.2)));
+  const maxLag = Math.ceil(wav.rate / (targetHz * 0.8));
+  const count = samples.length - maxLag - 1;
+  if (count < maxLag * 3) throw Error('Sound segment is too short for pitch analysis');
+  const scores = new Map();
+  let bestLag = minLag; let bestScore = -Infinity;
+  for (let lag = minLag; lag <= maxLag; lag++) {
+    let covariance = 0; let leftEnergy = 0; let rightEnergy = 0;
+    for (let index = 0; index < count; index++) {
+      const left = samples[index]; const right = samples[index + lag];
+      covariance += left * right; leftEnergy += left * left; rightEnergy += right * right;
+    }
+    const score = leftEnergy && rightEnergy ? covariance / Math.sqrt(leftEnergy * rightEnergy) : -1;
+    scores.set(lag, score);
+    if (score > bestScore) { bestScore = score; bestLag = lag; }
+  }
+  if (bestScore < 0.5) throw Error(`No stable periodic tone found (confidence ${bestScore})`);
+  const before = scores.get(bestLag - 1) ?? bestScore; const after = scores.get(bestLag + 1) ?? bestScore;
+  const denominator = before - 2 * bestScore + after;
+  const correction = denominator ? Math.max(-0.5, Math.min(0.5, 0.5 * (before - after) / denominator)) : 0;
+  const frequency = wav.rate / (bestLag + correction);
+  return { frequency, centsFromTarget: 1200 * Math.log2(frequency / targetHz), confidence: bestScore };
 }

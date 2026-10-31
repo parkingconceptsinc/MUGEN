@@ -402,15 +402,75 @@ internal fun StudioProjectsDialog(currentId: String?, onOpen: (StudioSavedProjec
     var error by remember { mutableStateOf<String?>(null) }
     var removing by remember { mutableStateOf<String?>(null) }
     var refresh by remember { mutableIntStateOf(0) }
+    var transferBusy by remember { mutableStateOf(false) }
+    var transferJob by remember { mutableStateOf<Job?>(null) }
+    var transferNotice by remember { mutableStateOf<String?>(null) }
+    var transferProject by remember { mutableStateOf<StudioProject?>(null) }
+    val importBundle = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) transferBusy = false else {
+            transferJob = scope.launch {
+                var archive: java.io.File? = null
+                try {
+                    transferBusy = true; error = null; transferNotice = "Checking project and media…"
+                    val result = withContext(Dispatchers.IO) {
+                        StudioSaves.await()
+                        val job = currentCoroutineContext()
+                        archive = java.io.File.createTempFile("studio-import-", ".zip", context.cacheDir)
+                        context.contentResolver.openInputStream(uri)?.use { input -> archive!!.outputStream().use { out -> input.copyLimitedTo(out, STUDIO_BUNDLE_ARCHIVE_LIMIT, { job.ensureActive() }) } }
+                            ?: error("Could not read the selected project bundle.")
+                        StudioBundleTransfer.importFile(context, archive!!, { job.ensureActive() })
+                    }
+                    transferNotice = "Imported «${result.project.name}». Choose Open to continue editing."; refresh++
+                } catch (cancelled: CancellationException) { transferNotice = "Import canceled. Existing projects are preserved."; throw cancelled }
+                catch (failure: Exception) { error = failure.message ?: "Could not import this project bundle."; transferNotice = null }
+                finally { archive?.delete(); transferBusy = false; transferJob = null }
+            }
+        }
+    }
+    val exportBundle = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
+        val snapshot = transferProject
+        if (uri == null || snapshot == null) { transferBusy = false; transferProject = null } else {
+            transferJob = scope.launch {
+                var archive: java.io.File? = null
+                try {
+                    transferBusy = true; error = null; transferNotice = "Packing original media and edits…"
+                    require(uri.toString() !in snapshot.clips.map { it.source.uri }) { "Choose a new file to preserve the originals." }
+                    withContext(Dispatchers.IO) {
+                        val job = currentCoroutineContext()
+                        archive = java.io.File.createTempFile("studio-bundle-", ".zip", context.cacheDir)
+                        StudioBundleTransfer.exportFile(context, snapshot, archive!!, { job.ensureActive() })
+                        context.contentResolver.openOutputStream(uri, "wt")?.use { output -> archive!!.inputStream().use { input -> input.copyLimitedTo(output, STUDIO_BUNDLE_ARCHIVE_LIMIT, { job.ensureActive() }) } }
+                            ?: error("Could not open the destination.")
+                    }
+                    transferNotice = "Portable project saved with its original media. Open it in MUGEN PWA or Android."
+                } catch (failure: Exception) {
+                    withContext(NonCancellable + Dispatchers.IO) { if (uri.toString() !in snapshot.clips.map { it.source.uri }) runCatching { context.contentResolver.delete(uri, null, null) } }
+                    if (failure is CancellationException) { transferNotice = "Export canceled. Original media and project are preserved."; throw failure }
+                    error = failure.message ?: "Could not export this project bundle."; transferNotice = null
+                } finally { archive?.delete(); transferBusy = false; transferProject = null; transferJob = null }
+            }
+        }
+    }
     LaunchedEffect(refresh) {
         try { entries = withContext(Dispatchers.IO) { StudioSaves.await(); StudioProjectStore.list(context).map { it to runCatching { StudioProjectStore.load(context, it) }.getOrNull() } } }
         catch (failure: Exception) { if (failure is CancellationException) throw failure; error = failure.message }
     }
-    Dialog(onDismissRequest = onClose) {
+    Dialog(onDismissRequest = { if (!transferBusy) onClose() }) {
         Surface(shape = RoundedCornerShape(16.dp)) {
             Column(Modifier.fillMaxWidth().heightIn(max = 600.dp).padding(18.dp)) {
                 Text("Video projects", style = MaterialTheme.typography.titleLarge)
-                Button(onClick = onNew) { Text("New project") }
+                Row(Modifier.horizontalScroll(rememberScrollState())) {
+                    Button(enabled = !transferBusy, onClick = onNew) { Text("New project") }
+                    TextButton(enabled = !transferBusy, onClick = {
+                        transferBusy = true; error = null; transferNotice = null
+                        runCatching { importBundle.launch(arrayOf("application/zip", "application/octet-stream", "application/x-zip-compressed")) }
+                            .onFailure { transferBusy = false; error = "No document picker is available." }
+                    }) { Text("Import project ZIP") }
+                }
+                Text("Portable projects include media and edits: up to 32 clips, 30 minutes and 384 MiB. Unsupported settings are reported before export.", style = MaterialTheme.typography.bodySmall)
+                if (transferBusy) LinearProgressIndicator(Modifier.fillMaxWidth())
+                transferNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                if (transferJob?.isActive == true) TextButton(onClick = { transferJob?.cancel() }) { Text("Cancel transfer") }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
                 LazyColumn(Modifier.weight(1f, false)) {
                     items(entries, key = { it.first }) { (id, saved) ->
@@ -418,13 +478,18 @@ internal fun StudioProjectsDialog(currentId: String?, onOpen: (StudioSavedProjec
                             Text(saved?.project?.name ?: "Unreadable project · ${id.take(8)}")
                             saved?.let { Text("${it.project.clips.size} clips · ${studioTime(it.project.duration)}", style = MaterialTheme.typography.bodySmall) }
                             Row {
-                                TextButton(enabled = saved != null, onClick = { saved?.let(onOpen) }) { Text("Open") }
-                                TextButton(enabled = id != currentId, onClick = { removing = id }) { Text("Delete") }
+                                TextButton(enabled = saved != null && !transferBusy, onClick = { saved?.let(onOpen) }) { Text("Open") }
+                                TextButton(enabled = saved != null && !transferBusy, onClick = {
+                                    transferProject = saved!!.project; transferBusy = true; error = null; transferNotice = null
+                                    runCatching { exportBundle.launch(saved.project.name + ".mugenstudio") }
+                                        .onFailure { transferBusy = false; transferProject = null; error = "No document picker is available." }
+                                }) { Text("Export ZIP") }
+                                TextButton(enabled = id != currentId && !transferBusy, onClick = { removing = id }) { Text("Delete") }
                             }
                         }
                     }
                 }
-                TextButton(onClick = onClose) { Text("Close") }
+                TextButton(enabled = !transferBusy, onClick = onClose) { Text("Close") }
             }
         }
     }

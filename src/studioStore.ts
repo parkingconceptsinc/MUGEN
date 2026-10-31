@@ -85,3 +85,22 @@ export function resetStudio(): Promise<void> {
   writes = work.catch(() => {});
   return work;
 }
+
+/** Replace the entire workspace atomically; a failed import retains both old snapshots and media. */
+export function replaceStudio(project: StudioProject, media: Map<string, Blob>): Promise<void> {
+  const snapshot = validateProject(project); const files = new Map(media);
+  for (const source of snapshot.sources) {
+    const blob = files.get(source.id);
+    if (!blob || blob.size !== source.size) return Promise.reject(new Error('Imported project media is incomplete. Your previous workspace is unchanged.'));
+  }
+  const work = writes.then(async () => {
+    const db = await openStore(); const tx = db.transaction(['state', 'media'], 'readwrite'); const done = transactionDone(tx);
+    try {
+      tx.objectStore('state').clear(); tx.objectStore('media').clear();
+      tx.objectStore('state').put(snapshot, 'current'); tx.objectStore('state').put(snapshot, 'backup');
+      for (const source of snapshot.sources) tx.objectStore('media').put(files.get(source.id)!, source.id);
+      await done;
+    } catch (error) { try { tx.abort(); } catch {} await done.catch(() => {}); throw error; }
+  });
+  writes = work.catch(() => {}); return work;
+}

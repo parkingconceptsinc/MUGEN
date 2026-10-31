@@ -48,10 +48,12 @@ internal object StudioProjectStore {
         return load(context, id)
     }
     @Synchronized fun delete(context: Context, id: String) {
+        val removed = runCatching { load(context, id).project }.getOrNull()
         val target = file(context, id)
         listOf(target, File(target.path + ".bak"), File(target.path + ".new"), File(target.path + ".recovery"), File(target.path + ".recovery.bak"), File(target.path + ".recovery.new"))
             .forEach { if (it.exists() && !it.delete()) throw IOException("Could not delete the project.") }
         val prefs = context.getSharedPreferences("video_studio", Context.MODE_PRIVATE)
         if (prefs.getString("last", null) == id) prefs.edit().remove("last").apply()
+        removed?.let { StudioBundleTransfer.releaseOwnedMedia(context, it) }
     }
 }

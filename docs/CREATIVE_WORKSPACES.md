@@ -1,4 +1,4 @@
-# Studio y Audio Lab — versión 0.15.0
+# Studio y Audio Lab — versión 0.16.0
 
 Estas herramientas trabajan sobre copias o referencias locales. Una exportación crea un archivo nuevo: no reemplaza el original ni publica contenido.
 
@@ -12,7 +12,9 @@ El proyecto y los vídeos importados se guardan juntos en IndexedDB. **Save proj
 
 La edición del navegador tiene límites explícitos: 32 fuentes/clips, 384 MiB de medios por proyecto y hasta 30 minutos de montaje. Estos límites evitan trabajos sin control, pero no garantizan que todos los dispositivos dispongan de memoria suficiente. Emplea fuentes más cortas o 720p si el navegador rechaza un render. El procesamiento es local y puede ser más lento que el tiempo real. Los formatos importables para vista previa dependen del decodificador del navegador; MP4 H.264/AAC es la opción de mayor compatibilidad.
 
-La PWA no tiene todavía todas las funciones de Studio Android: el proyecto nativo, los subtítulos del montaje y algunas herramientas de línea de tiempo tienen un alcance diferente. No se deben intercambiar los archivos de proyecto entre plataformas.
+**Export project package** crea un `.mugenstudio` con los medios y ajustes compartidos. **Import project package** comprueba formato, integridad y vídeo antes de pedir la sustitución del espacio actual; un fallo de guardado conserva el espacio anterior. Android ofrece Import project ZIP / Export ZIP en Projects y crea un proyecto nuevo al importar, sin sustituir los existentes.
+
+El paquete usa el formato neutral descrito en [PORTABLE_FORMATS.md](PORTABLE_FORMATS.md). No admite todos los ajustes nativos: Android pide elegir 720p/1080p, eliminar asignaciones externas de subtítulos y reducir contraste fuera del rango compartido antes de exportar; tampoco importa boosts de clip superiores al 100%. Los subtítulos se guardan aparte como SRT. Las funciones no representables se rechazan con una explicación, sin descartarlas silenciosamente.
 
 ## Audio Lab en la PWA
 
@@ -24,7 +26,9 @@ El banco de trabajo permite abrir un archivo de audio, escuchar el original, ren
 
 Los presets se exportan con el formato `mugen-audio-lab`, versión 1, y ajustes internos versión 2. Las dos apps pueden intercambiar el subconjunto de efectos que comparten. La PWA avisa si un preset de Android incluye efectos que todavía no interpreta; los motores nativo y Web Audio no producen muestras idénticas. Conserva el preset original cuando hagas una conversión parcial.
 
-La PWA admite grabación de micrófono con permiso del navegador, parada al salir del módulo y guardado de la toma original. Las tomas son locales y de sesión: guarda el original antes de cerrar. La afinación de voz y el sintetizador avanzado siguen siendo funciones específicas de Android.
+La PWA admite grabación de micrófono con permiso del navegador, parada al salir del módulo y guardado de la toma original. Las tomas son locales y de sesión: guarda el original antes de cerrar. La pestaña **Voice** permite importar una toma o copiar el audio del banco de trabajo, afinar una voz monofónica por tonalidad/escala, ajustar cantidad/retune y transponer hasta una octava. Procesa copias en un worker y exporta WAV manteniendo la duración, con comparación original/procesado. Su límite es 60 segundos / 32 MiB; la detección puede fallar con ruido, acordes o voces superpuestas y el cambio de tono no conserva formantes. No es separación de fuentes ni afinación de micrófono en tiempo real. Los efectos de Mix no se aplican automáticamente al WAV afinado.
+
+La pestaña **Synth** añade dos osciladores, cuatro formas de onda, ADSR, filtro, detune, vibrato, teclado y secuenciador de 16 pasos. El sonido directo y el WAV usan el mismo motor Web Audio, con parada al salir y al perder foco, exportación de 1–8 compases y bloqueo de renders desactualizados. El sintetizador se escucha seco: los efectos de Mix no se aplican. Import synth patch / Export synth patch intercambian parámetros con Android; importar una configuración nunca inicia la reproducción. Los motores de síntesis de las plataformas no producen muestras idénticas.
 
 ## Mejoras de robustez en Android
 

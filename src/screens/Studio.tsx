@@ -1,9 +1,10 @@
+import { exportPortableStudio, importPortableStudio } from "../studioPortable";
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { Clapperboard, Download, FilePlus, RotateCcw, RotateCw, Save, Scissors, Trash2, Upload } from "lucide-react";
 import { ScreenHeader } from "../components";
 import { usePlayer } from "../context";
 import { clipDuration, emptyProject, locateProject, moveClip, newClip, projectDuration, projectFingerprint, replaceClip, splitClip, STUDIO_LIMITS, StudioHistory, validateProject, type StudioClip, type StudioProject, type StudioSource } from "../studioModel";
-import { resetStudio, restoreStudio, saveStudio } from "../studioStore";
+import { replaceStudio, resetStudio, restoreStudio, saveStudio } from "../studioStore";
 import "../studio.css";
 
 const stamp = (time: number) => `${Math.floor(time / 60).toString().padStart(2, "0")}:${(time % 60).toFixed(2).padStart(5, "0")}`;
@@ -43,6 +44,7 @@ export function Studio({ active = true }: { active?: boolean }) {
   const exportController = useRef<AbortController | null>(null);
   const mounted = useRef(true);
   const requestVersion = useRef(0);
+  const [sourceRevision, setSourceRevision] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [blocked, setBlocked] = useState(false);
@@ -50,6 +52,10 @@ export function Studio({ active = true }: { active?: boolean }) {
   const [notice, setNotice] = useState("");
   const [exportError, setExportError] = useState("");
   const [importing, setImporting] = useState(false);
+  const [portable, setPortable] = useState<{progress:number;label:string;committing?:boolean}|null>(null);
+  const packageInput = useRef<HTMLInputElement|null>(null);
+  const portableController = useRef<AbortController|null>(null);
+  const portableUrl = useRef<string|null>(null);
   const [exporting, setExporting] = useState<{ progress: number; label: string } | null>(null);
   const [result, setResult] = useState<{ url: string; fingerprint: string } | null>(null);
   const resultRef = useRef<string | null>(null);
@@ -63,7 +69,7 @@ export function Studio({ active = true }: { active?: boolean }) {
   const source = project.sources.find(s => s.id === clip?.sourceId);
   const duration = projectDuration(project);
   const offset = project.clips.slice(0, Math.max(0, clipIndex)).reduce((sum, c) => sum + clipDuration(c), 0);
-  const busy = importing || exporting != null;
+  const busy = importing || exporting != null || portable != null;
   const firstClip = project.clips[0];
   const firstSource = project.sources.find(s => s.id === firstClip?.sourceId);
   const sourceCanvasRatio = firstSource ? (firstClip.rotation % 180 ? firstSource.height / firstSource.width : firstSource.width / firstSource.height) : 16 / 9;
@@ -91,16 +97,16 @@ export function Studio({ active = true }: { active?: boolean }) {
       const saved = await restoreStudio();
       if (!mounted.current) return;
       const value = saved.project ?? emptyProject();
-      releaseUrls(); media.current = saved.media;
+      releaseUrls(); media.current = saved.media; setSourceRevision(n=>n+1);
       history.current = new StudioHistory(value); liveProject.current = value; setProject(value); setSelectedId(value.clips[0]?.id ?? null); setSaveState("saved");
       if (saved.recovered) setNotice("Recovered the previous complete project from the backup. Review it and save when ready.");
     } catch (error) { if (mounted.current) { setBlocked(true); setNotice(errorText(error)); } }
     finally { if (mounted.current) setLoaded(true); }
   }, [releaseUrls]);
-  useEffect(() => { mounted.current = true; void load(); return () => { mounted.current = false; requestVersion.current++; importController.current?.abort(); exportController.current?.abort(); releaseUrls(); if (resultRef.current) URL.revokeObjectURL(resultRef.current); }; }, [load, releaseUrls]);
+  useEffect(() => { mounted.current = true; void load(); return () => { mounted.current = false; requestVersion.current++; importController.current?.abort(); exportController.current?.abort(); portableController.current?.abort(); if (portableUrl.current) URL.revokeObjectURL(portableUrl.current); releaseUrls(); if (resultRef.current) URL.revokeObjectURL(resultRef.current); }; }, [load, releaseUrls]);
 
   useEffect(() => {
-    if (!loaded || blocked || saveState === "saved") return;
+    if (!loaded || blocked || portable || saveState === "saved") return;
     const snapshot = project;
     const files = new Map(media.current);
     const save = () => saveStudio(snapshot, files).then(() => {
@@ -108,7 +114,7 @@ export function Studio({ active = true }: { active?: boolean }) {
     }).catch(error => { if (mounted.current) { setSaveState("unsaved"); setNotice(errorText(error)); } });
     const timeout = window.setTimeout(() => void save(), 650);
     return () => { window.clearTimeout(timeout); };
-  }, [project, loaded, blocked]);
+  }, [project, loaded, blocked, portable != null]);
   useEffect(() => {
     const warn = (event: BeforeUnloadEvent) => { if (busy || saveState !== "saved") { event.preventDefault(); event.returnValue = ""; } };
     window.addEventListener("beforeunload", warn);
@@ -140,7 +146,7 @@ export function Studio({ active = true }: { active?: boolean }) {
       if (playingIntent.current) void video.play().catch(() => { playingIntent.current = false; setPlaying(false); }); };
     video.addEventListener("loadedmetadata", ready, { once: true });
     return () => { video.removeEventListener("loadedmetadata", ready); video.pause(); };
-  }, [clip?.id, clip?.sourceId]);
+  }, [clip?.id, clip?.sourceId, sourceRevision]);
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !clip) return;
@@ -201,6 +207,42 @@ export function Studio({ active = true }: { active?: boolean }) {
     }
     finally { exportController.current = null; if (mounted.current) setExporting(null); }
   }
+  async function exportPackage() {
+    if (busy || portableController.current || blocked || !project.clips.length) return;
+    const controller = new AbortController(); portableController.current = controller;
+    setPortable({progress:0,label:"Preparing project package…"}); setNotice("");
+    try {
+      const blob = await exportPortableStudio(project, new Map(media.current), {signal:controller.signal,onProgress:(progress,label)=>{ if(mounted.current)setPortable({progress,label}); }});
+      if (!mounted.current || controller.signal.aborted) return;
+      if (portableUrl.current) URL.revokeObjectURL(portableUrl.current);
+      const url=URL.createObjectURL(blob);portableUrl.current=url;
+      const link=document.createElement("a");link.href=url;link.download=(project.name.replace(/[^a-z0-9_.-]/gi,"_")||"MUGEN")+".mugenstudio";link.click();
+      setNotice("Portable project exported with its media. Open it in MUGEN Android or the PWA.");
+    } catch(error) { if(mounted.current)setNotice(controller.signal.aborted?"Package export cancelled.":errorText(error)); }
+    finally { portableController.current=null;if(mounted.current)setPortable(null); }
+  }
+  async function importPackage(file:File) {
+    if (busy || portableController.current) return;
+    const controller=new AbortController();portableController.current=controller;
+    setPortable({progress:0,label:"Checking project package…"});setNotice("");
+    try {
+      const incoming=await importPortableStudio(file,{signal:controller.signal,onProgress:(progress,label)=>{if(mounted.current)setPortable({progress,label});}});
+      for(const source of incoming.project.sources) {
+        const info=await readVideo(new File([incoming.media.get(source.id)!],source.name,{type:source.type}),controller.signal);
+        if(Math.abs(info.duration-source.duration)>.1||info.width!==source.width||info.height!==source.height)throw new Error("The package video does not match its declared metadata. Your existing workspace is unchanged.");
+      }
+      controller.signal.throwIfAborted();
+      if(!window.confirm(`Replace the saved Studio workspace with “${incoming.project.name}” (${incoming.project.clips.length} clips)? Download any current export first. Your original files and media library are unchanged.`))return;
+      setPortable({progress:1,label:"Saving imported project…",committing:true});videoRef.current?.pause();playingIntent.current=false;setPlaying(false);
+      await replaceStudio(incoming.project,incoming.media);
+      if(!mounted.current)return;
+      releaseUrls();media.current=incoming.media;setSourceRevision(n=>n+1);history.current=new StudioHistory(incoming.project);liveProject.current=incoming.project;
+      setProject(incoming.project);setSelectedId(incoming.project.clips[0]?.id??null);setPlayhead(0);setSaveState("saved");setBlocked(false);
+      if(resultRef.current)URL.revokeObjectURL(resultRef.current);resultRef.current=null;setResult(null);
+      setNotice("Portable project imported and saved on this device. Originals are preserved.");
+    } catch(error) {if(mounted.current)setNotice(controller.signal.aborted?"Package import cancelled. Your previous workspace is unchanged.":errorText(error));}
+    finally {portableController.current=null;if(mounted.current)setPortable(null);}
+  }
   async function startNew() {
     if (busy || (!blocked && project.sources.length && !window.confirm("Start a new Studio project? This removes the saved Studio workspace and its imported copies. Download any export you want to keep first. Your original files and media library are unchanged.")) || (blocked && !window.confirm("Remove the unreadable Studio workspace and start a new project? Your original files and media library are unchanged."))) return;
     try {
@@ -217,6 +259,9 @@ export function Studio({ active = true }: { active?: boolean }) {
       <button className="btn small" onClick={() => void startNew()} disabled={busy || !loaded}><Trash2 size={16} /> New project</button>
     </ScreenHeader>
     <input ref={input} type="file" accept="video/*,.mkv,.mov,.avi,.m4v" multiple hidden aria-label="Import Studio videos" onChange={e => { const files = Array.from(e.target.files ?? []); e.currentTarget.value = ""; void importFiles(files); }} />
+    <input ref={packageInput} type="file" hidden accept=".mugenstudio,.zip,application/zip" aria-label="Import Studio project package" onChange={e=>{const file=e.target.files?.[0];e.currentTarget.value="";if(file)void importPackage(file);}} />
+    <div className="buttonRow"><button className="btn small" disabled={busy||!loaded} onClick={()=>packageInput.current?.click()}>Import project package</button><button className="btn small" disabled={busy||blocked||!project.clips.length} onClick={()=>void exportPackage()}>Export project package</button></div>
+    {portable&&<div className="studioNotice" role="status">{portable.label}<progress max={1} value={portable.progress} aria-label="Project package progress"/><button className="btn small" disabled={portable.committing} onClick={()=>portableController.current?.abort()}>Cancel package operation</button></div>}
     <div className="studioToolbar">
       <label className="studioProjectName"><span>PROJECT</span><input aria-label="Project name" maxLength={80} value={project.name} disabled={busy || blocked || !loaded} onChange={e => { const name = e.target.value; if (name.trim()) commit({ ...project, name, updatedAt: Date.now() }); }} /></label>
       <div className="buttonRow">

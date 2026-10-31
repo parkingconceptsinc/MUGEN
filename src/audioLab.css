@@ -32,3 +32,6 @@
 .audioLabScreen button:focus-visible, .audioLabScreen input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 @media (max-width: 720px) { .audioLabGrid { grid-template-columns: 1fr; } .audioLabMeter { grid-template-columns: repeat(2, 1fr); } .audioLabSpectrum { height: 112px; gap: 2px; } .labPresetSave > .btn { width: 100%; } }
 @media (prefers-reduced-motion: reduce) { .audioLabSpectrum i { transition: none; } }
+
+.labWorkspaceTabs { display: flex; gap: 8px; padding: 8px 0 18px; }
+.labWorkspaceTabs [role=tab] { min-width: 88px; min-height: 44px; }

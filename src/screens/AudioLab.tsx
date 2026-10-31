@@ -3,6 +3,8 @@ import { Download, FolderOpen, Mic, Pause, RotateCcw, Save, Square, Trash2, Uplo
 import { usePlayer } from '../context';
 import { ScreenHeader, Toggle } from '../components';
 import { Equalizer } from './Equalizer';
+import { SynthStudio } from './SynthStudio';
+import { VoiceTuning } from './VoiceTuning';
 import { decodeAudioLabFile, getAudioLabBypass, getAudioLabSettings, initEngine, attachElement, readAudioLabMeters, renderAudioLabWav, resumeEngine, setAudioLabBypass, setAudioLabSettings, subscribeAudioLab } from '../audioEngine';
 import { DEFAULT_AUDIO_LAB, DEFAULT_AUDIO_LAB_EQ, audioLabHeadroomDb, importAudioLabPresetFile, mergeAudioLabPresets, parseAudioLabPresets, sanitizeAudioLab, serializeAudioLabPresets, type AudioLabPreset, type AudioLabSettings } from '../audioLabModel';
 import '../audioLab.css';
@@ -24,6 +26,8 @@ function saveBlob(blob: Blob, name: string) {
 
 export function AudioLab({ active = true }: { active?: boolean }) {
   const p = usePlayer(); const { actions } = p;
+  const [workspace, setWorkspace] = useState<'mix' | 'voice' | 'synth'>('mix');
+  const mixActive = active && workspace === 'mix';
   const settings = useSyncExternalStore(subscribeAudioLab, getAudioLabSettings);
   const bypass = useSyncExternalStore(subscribeAudioLab, getAudioLabBypass);
   const [presets, setPresets] = useState<AudioLabPreset[]>(loadPresets);
@@ -41,7 +45,7 @@ export function AudioLab({ active = true }: { active?: boolean }) {
   const [peakHold, setPeakHold] = useState(-90);
   const sourceInput = useRef<HTMLInputElement>(null); const presetInput = useRef<HTMLInputElement>(null);
   const originalAudio = useRef<HTMLAudioElement>(null); const renderedAudio = useRef<HTMLAudioElement>(null);
-  const job = useRef<AbortController | null>(null); const generation = useRef(0); const activeRef = useRef(active); activeRef.current = active;
+  const job = useRef<AbortController | null>(null); const generation = useRef(0); const activeRef = useRef(mixActive); activeRef.current = mixActive;
   const recorder = useRef<MediaRecorder | null>(null); const stream = useRef<MediaStream | null>(null); const mounted = useRef(true);
   const latestPlayState = useRef(p.playing); latestPlayState.current = p.playing;
   const eq = { enabled: p.eq.enabled, bands: p.eq.bands, preamp: p.eq.preamp, balance: p.balance, boost: p.boost };
@@ -62,15 +66,15 @@ export function AudioLab({ active = true }: { active?: boolean }) {
   useEffect(() => () => { if (liveUrl) URL.revokeObjectURL(liveUrl); }, [liveUrl]);
   useEffect(() => () => { if (output) URL.revokeObjectURL(output.url); }, [output]);
   useEffect(() => {
-    if (!active) { originalAudio.current?.pause(); renderedAudio.current?.pause(); if (recorder.current?.state === 'recording') recorder.current.stop(); }
-    if (!active) return;
+    if (!mixActive) { originalAudio.current?.pause(); renderedAudio.current?.pause(); if (recorder.current?.state === 'recording') recorder.current.stop(); }
+    if (!mixActive) return;
     let frame = 0; let last = 0;
     const tick = (time: number) => {
       if (time - last >= 100) { const values = readAudioLabMeters(); setMeters(values); setPeakHold(hold => Math.max(hold, values.peakDb)); last = time; }
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick); return () => cancelAnimationFrame(frame);
-  }, [active]);
+  }, [mixActive]);
   useEffect(() => {
     if (!recording) return;
     const start = Date.now(); const timer = window.setInterval(() => { const seconds = Math.floor((Date.now() - start) / 1000); setRecordSeconds(seconds); if (seconds >= 300 && recorder.current?.state === 'recording') recorder.current.stop(); }, 250);
@@ -150,6 +154,10 @@ export function AudioLab({ active = true }: { active?: boolean }) {
     <ScreenHeader title="Audio Lab" subtitle="Shape, compare and render local audio">
       <button className={'btn small' + (bypass ? ' primary' : '')} aria-pressed={bypass} onClick={() => setAudioLabBypass(!bypass)}>{bypass ? 'A · Original' : 'B · Processed'}</button>
     </ScreenHeader>
+    <div className="labWorkspaceTabs" role="tablist" aria-label="Audio Lab workspace">
+      {(['mix', 'voice', 'synth'] as const).map(mode => <button key={mode} role="tab" aria-selected={workspace === mode} className={"chip" + (workspace === mode ? " on" : "")} onClick={() => setWorkspace(mode)}>{mode === 'mix' ? 'Mix' : mode === 'voice' ? 'Voice' : 'Synth'}</button>)}
+    </div>
+    <div hidden={workspace !== 'mix'}>
     <div className="audioLabGrid">
       <div className="labPanel labMeterPanel">
         <div className="labHeader"><h2>Monitor</h2><button className="link" onClick={() => setPeakHold(-90)}>Reset peak</button></div>
@@ -213,6 +221,9 @@ export function AudioLab({ active = true }: { active?: boolean }) {
     </div>
     {notice && <p className="labNotice" role="status">{notice}</p>}
     <div className="audioLabEqualizer"><Equalizer /></div>
+    </div>
+    <div hidden={workspace !== 'voice'}><VoiceTuning active={active && workspace === 'voice'} sourceFile={file} sourceBuffer={buffer} onStartAudio={() => { originalAudio.current?.pause(); renderedAudio.current?.pause(); if (latestPlayState.current) actions.togglePlay(); }} /></div>
+    <div hidden={workspace !== 'synth'}><SynthStudio active={active && workspace === 'synth'} onStartAudio={() => { originalAudio.current?.pause(); renderedAudio.current?.pause(); if (latestPlayState.current) actions.togglePlay(); }} /></div>
   </section>;
 }
 function LabToggle({ label, checked, onChange, hint }: { label: string; checked: boolean; onChange: (value: boolean) => void; hint?: string }) {

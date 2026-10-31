@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
-import { createMediaFixtures, probeMedia, readPcmWav } from './browser/media-fixtures.mjs';
+import { createHash } from 'node:crypto';
+import { createMediaFixtures, probeMedia, readPcmWav, estimateTone, segmentRms } from './browser/media-fixtures.mjs';
 
 let playwright;
 try { playwright = await import('playwright'); }
@@ -24,6 +25,7 @@ page.setDefaultTimeout(20_000);
 page.setDefaultNavigationTimeout(90_000);
 const pageErrors = [];
 const results = [];
+const soundMetrics = {};
 const consoleMessages = [];
 const failedRequests = [];
 const failedResponses = [];
@@ -198,6 +200,30 @@ try {
       await save();
     }
   });
+  await run('Portable Studio packages restore editing state and original media after replacing the workspace', async () => {
+    await navigate('Studio');
+    const originalName=await page.getByLabel('Project name',{exact:true}).inputValue();
+    const downloads=page.waitForEvent('download',{timeout:30_000});
+    await page.getByRole('button',{name:'Export project package',exact:true}).click();
+    const portable=await saveDownload(await downloads,'roundtrip.mugenstudio');
+    await page.getByRole('button',{name:'New project',exact:true}).click();
+    await page.getByRole('button',{name:/Select clip 1:/}).waitFor({state:'detached'});
+    await page.getByLabel('Import Studio project package',{exact:true}).setInputFiles(portable);
+    await page.getByText('Portable project imported and saved on this device. Originals are preserved.',{exact:true}).waitFor();
+    assert.equal(await page.getByLabel('Project name',{exact:true}).inputValue(),originalName);
+    await page.getByRole('button',{name:/Select clip 2:/}).waitFor();
+    const preview=page.getByLabel('Studio preview',{exact:true});
+    await preview.evaluate(video=>new Promise((resolve,reject)=>{if(video.readyState>=1)return resolve();video.addEventListener('loadedmetadata',resolve,{once:true});video.addEventListener('error',()=>reject(Error('Portable video failed')),{once:true});}));
+    assert.ok((await preview.evaluate(v=>v.duration))>1.9);
+    // Import the same IDs over themselves: the preview must reload, not retain a revoked URL.
+    const previousUrl=await preview.evaluate(v=>v.currentSrc);
+    await page.getByLabel('Import Studio project package',{exact:true}).setInputFiles(portable);
+    await page.waitForFunction(previous=>{const v=document.querySelector('video[aria-label="Studio preview"]');return v&&v.currentSrc!==previous&&v.readyState>=1&&v.videoWidth>0;},previousUrl);
+    await page.reload({waitUntil:'networkidle'});await navigate('Studio');
+    await page.getByRole('button',{name:/Select clip 2:/}).waitFor();
+    assert.equal(await page.getByLabel('Project name',{exact:true}).inputValue(),originalName);
+    await screenshot('studio-portable-roundtrip');
+  });
   await run('Audio Lab renders actual processed PCM WAV and preserves the source', async () => {
     await navigate('Audio Lab');
     await page.getByLabel('Audio Lab audio file', { exact: true }).setInputFiles(fixtures.audio);
@@ -233,6 +259,7 @@ try {
     assert.ok(output.rms < source.rms * 0.9, `High-pass filter must alter the signal: input RMS ${source.rms}, output RMS ${output.rms}`);
     assert.ok(output.peak <= 1, '16-bit output must remain bounded');
     assert.deepEqual(await readFile(fixtures.audio), fixtures.originalWav, 'Rendering must preserve the original source');
+    soundMetrics.processing = { inputRms: source.rms, outputRms: output.rms, outputPeak: output.peak, inputDuration: source.duration, outputDuration: output.duration, sampleRate: output.rate };
     await screenshot('audiolab-desktop');
   });
   await run('Audio Lab settings persist after reload and fit a phone viewport', async () => {
@@ -245,11 +272,96 @@ try {
     const size = await page.evaluate(() => ({ width: document.documentElement.scrollWidth, viewport: window.innerWidth }));
     assert.ok(size.width <= size.viewport + 1, `Audio Lab page overflows: ${size.width} > ${size.viewport}`);
   });
+  await page.setViewportSize({ width: 1365, height: 900 });
+  await run('Synth Studio renders a pitched sine sequence with rests into an actual WAV', async () => {
+    await navigate('Audio Lab');
+    await page.getByRole('tab', { name: 'Synth', exact: true }).click();
+    const synth = page.locator('[aria-label="Synth Studio"]');
+    await synth.waitFor();
+    const reference = JSON.parse(await readFile(new URL('../shared/fixtures/synth-patch.json', import.meta.url), 'utf8'));
+    const patch = { ...reference, settings: { ...reference.settings,
+      wave: 0, octave: 4, attack: 0.002, decay: 0.01, sustain: 1, release: 0.01,
+      cutoff: 20000, resonance: 0.707, detuneCents: 0, blend: 0, vibratoHz: 5, vibratoDepth: 0,
+      volume: 0.35, bpm: 120, sequence: false, steps: [69, ...Array(15).fill(-1)],
+    } };
+    await synth.getByLabel('Synth patch file', { exact: true }).setInputFiles({ name: 'qa-sine.mugensynth.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(patch)) });
+    await page.waitForFunction(() => document.querySelector('[aria-label="Step 1 note"]')?.value === '69');
+    await synth.getByLabel('Render bars', { exact: true }).selectOption('1');
+    await synth.getByRole('button', { name: 'Render synth WAV', exact: true }).click();
+    await synth.getByLabel('Rendered synth preview', { exact: true }).waitFor({ timeout: 90_000 });
+    const downloadPromise = page.waitForEvent('download', { timeout: 20_000 });
+    await synth.getByRole('button', { name: 'Download synth WAV', exact: true }).click();
+    const path = await saveDownload(await downloadPromise, 'synth-sine-a4.wav');
+    const output = readPcmWav(await readFile(path));
+    const tone = estimateTone(output, 440, 0.02, 0.07);
+    const restRms = segmentRms(output, 0.25, 1.8);
+    soundMetrics.synth = { ...tone, targetHz: 440, duration: output.duration, rms: output.rms, peak: output.peak, restRms, sampleRate: output.rate };
+    assert.equal(output.rate, 48000);
+    assert.ok(Math.abs(output.duration - 2.03) <= 0.01, `Expected one bar and release tail ~2.03s, got ${output.duration}`);
+    assert.ok(output.peak > 0.01 && output.peak <= 0.99, `Synth output must be audible and bounded: peak ${output.peak}`);
+    assert.ok(Math.abs(tone.centsFromTarget) <= 10, `Synth A4 is off pitch by ${tone.centsFromTarget} cents`);
+    assert.ok(tone.confidence > 0.95, `Sine segment is not stable: ${tone.confidence}`);
+    assert.ok(restRms < 0.0001, `Rest steps must stay silent after the release: RMS ${restRms}`);
+    await screenshot('synth-desktop');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await screenshot('synth-mobile');
+    const size = await page.evaluate(() => ({ width: document.documentElement.scrollWidth, viewport: window.innerWidth }));
+    assert.ok(size.width <= size.viewport + 1, `Synth page overflows: ${size.width} > ${size.viewport}`);
+    await page.setViewportSize({ width: 1365, height: 900 });
+  });
+  await run('Voice tuning moves a detuned synthetic voice to its target without changing duration', async () => {
+    await navigate('Audio Lab');
+    await page.getByRole('tab', { name: 'Voice', exact: true }).click();
+    const voice = page.locator('[aria-label="Voice tuning"]');
+    await voice.waitFor();
+    await voice.getByLabel('Voice tuning audio file', { exact: true }).setInputFiles(fixtures.voice);
+    const tuning = voice.getByRole('switch', { name: 'Correct voice pitch', exact: true });
+    if (await tuning.getAttribute('aria-checked') !== 'true') await tuning.click();
+    await voice.getByLabel('Voice key', { exact: true }).selectOption('9');
+    await voice.getByLabel('Voice scale', { exact: true }).selectOption('0');
+    for (const [label, value] of [['Correction amount', 1], ['Retune speed', 30], ['Transpose voice', 0]]) {
+      await voice.getByRole('slider', { name: label, exact: true }).evaluate((input, value) => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, String(value));
+        input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true }));
+      }, value);
+    }
+    await voice.getByRole('button', { name: 'Render tuned WAV', exact: true }).click();
+    const completion = await page.waitForFunction(() => {
+      const region = document.querySelector('[aria-label="Voice tuning"]');
+      if (region?.querySelector('audio[aria-label="Tuned voice preview"]')) return { kind: 'ready' };
+      const button = Array.from(region?.querySelectorAll('button') || []).find((element) => element.textContent?.trim() === 'Render tuned WAV');
+      const notice = region?.querySelector('.voiceNotice')?.textContent?.trim();
+      if (button && !button.disabled && notice && !notice.startsWith('Rendering ')) return { kind: 'error', message: notice };
+      return false;
+    }, undefined, { timeout: 90_000 });
+    const state = await completion.jsonValue(); await completion.dispose();
+    assert.equal(state.kind, 'ready', `Voice tuning failed: ${state.message || 'unknown error'}`);
+    const downloadPromise = page.waitForEvent('download', { timeout: 20_000 });
+    await voice.getByRole('button', { name: 'Download tuned WAV', exact: true }).click();
+    const path = await saveDownload(await downloadPromise, 'voice-tuned-a4.wav');
+    const input = readPcmWav(fixtures.voiceWav);
+    const output = readPcmWav(await readFile(path));
+    const sourceTone = estimateTone(input, 440);
+    const tunedTone = estimateTone(output, 440);
+    soundMetrics.voiceTuning = { targetHz: 440, source: sourceTone, tuned: tunedTone, sourceDuration: input.duration, outputDuration: output.duration, outputRms: output.rms, outputPeak: output.peak, sampleRate: output.rate };
+    assert.ok(Math.abs(output.duration - input.duration) <= 0.01, `Tuning must preserve duration: ${input.duration} → ${output.duration}`);
+    assert.ok(output.rms > 0.01 && output.peak <= 1, 'Tuned signal must remain audible and bounded');
+    assert.ok(Math.abs(tunedTone.centsFromTarget) <= 20, `Expected A4 after correction, off by ${tunedTone.centsFromTarget} cents`);
+    assert.ok(Math.abs(tunedTone.centsFromTarget) < Math.abs(sourceTone.centsFromTarget) * 0.7, 'Correction must materially improve the detuned source');
+    assert.deepEqual(await readFile(fixtures.voice), fixtures.voiceWav, 'Tuning must preserve the original file');
+    await screenshot('voice-tuning-desktop');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await screenshot('voice-tuning-mobile');
+    const size = await page.evaluate(() => ({ width: document.documentElement.scrollWidth, viewport: window.innerWidth }));
+    assert.ok(size.width <= size.viewport + 1, `Voice tuning page overflows: ${size.width} > ${size.viewport}`);
+    await page.setViewportSize({ width: 1365, height: 900 });
+  });
   if (pageErrors.length) results.push({ name: 'No uncaught browser exceptions', status: 'failed', error: pageErrors.join('\n') });
   const failures = results.filter((result) => result.status === 'failed');
   assert.equal(failures.length, 0, failures.map((failure) => `${failure.name}: ${failure.error}`).join('\n\n'));
 } finally {
-  await writeFile(join(artifacts, 'results.json'), JSON.stringify({ baseURL, results, pageErrors, consoleMessages, failedRequests, failedResponses }, null, 2));
+  await writeFile(join(artifacts, 'results.json'), JSON.stringify({ baseURL, results, soundMetrics, pageErrors, consoleMessages, failedRequests, failedResponses }, null, 2));
+  await writeFile(join(artifacts, 'sound-metrics.json'), JSON.stringify(soundMetrics, null, 2));
   await writeFile(join(artifacts, 'final-body.txt'), await page.locator('body').innerText().catch(() => '<body unavailable>'));
   await context.close();
   await browser.close();

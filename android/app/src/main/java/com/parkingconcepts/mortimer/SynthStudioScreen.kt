@@ -1,5 +1,8 @@
 package com.parkingconcepts.mortimer
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
@@ -30,12 +33,46 @@ import org.json.JSONObject
     val synth=remember{SynthPreview(context,muted=quiet)};var s by remember{mutableStateOf(if(persistSettings)loadSynth(context) else SynthSettings())};var active by remember{mutableStateOf(false)};var step by remember{mutableIntStateOf(0)}
     var selectedNote by remember{mutableIntStateOf(60)};var useFx by remember{mutableStateOf(true)};var error by remember{mutableStateOf<String?>(null)}
     var job by remember{mutableStateOf<Job?>(null)};var progress by remember{mutableFloatStateOf(0f)};var bars by remember{mutableIntStateOf(2)};val exporter=waveExporter?:rememberWaveExporter()
+    var patchBusy by remember { mutableStateOf(false) }
+    var patchJson by rememberSaveable { mutableStateOf<String?>(null) }
+    var patchNotice by remember { mutableStateOf<String?>(null) }
+    val importPatch = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) patchBusy = false else scope.launch {
+            try {
+                val value = withContext(Dispatchers.IO) {
+                    val job = currentCoroutineContext()
+                    val text = context.contentResolver.openInputStream(uri)?.use { it.readBytesLimited(SynthPatch.MAX_BYTES) { job.ensureActive() }.toString(Charsets.UTF_8) }
+                        ?: error("Could not read the synth patch.")
+                    SynthPatch.parse(text)
+                }
+                synth.stop(); s = value; error = null; patchNotice = "Synth patch imported. Playback is stopped; effects are configured separately."
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (failure: Exception) { error = failure.message ?: "Could not import synth patch." }
+            finally { patchBusy = false }
+        }
+    }
+    val exportPatch = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        val snapshot = patchJson
+        if (uri == null || snapshot == null) { patchBusy = false; patchJson = null } else scope.launch {
+            try {
+                withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(uri, "wt")?.use { it.write(snapshot.toByteArray(Charsets.UTF_8)) } ?: error("Could not open patch destination.") }
+                patchNotice = "Synth patch saved. Open it in Android or the MUGEN PWA."
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (failure: Exception) { error = failure.message ?: "Could not save synth patch." }
+            finally { patchBusy = false; patchJson = null }
+        }
+    }
     LaunchedEffect(s,effects,useFx){synth.settings=s;synth.effects=if(useFx)effects else AudioEffects.Settings();if(persistSettings)saveSynth(context,s.copy(sequence=false))}
     LaunchedEffect(Unit){while(true){active=synth.active;step=synth.currentStep;synth.error?.let{error=it};delay(80)}}
     DisposableEffect(lifecycle){val observer=LifecycleEventObserver{_,event->if(event==Lifecycle.Event.ON_STOP){synth.stop();s=s.copy(sequence=false)}};lifecycle.addObserver(observer);onDispose{lifecycle.removeObserver(observer);synth.close();job?.cancel()}}
     fun start(){if(!synth.active){onStartAudio();synth.settings=s;synth.effects=if(useFx)effects else AudioEffects.Settings();synth.start()}}
     AudioLabCard("Polyphonic synth"){
         Text("8 voices · two oscillators · envelope · resonant filter",fontSize=12.sp,color=c.muted)
+        Row(Modifier.horizontalScroll(rememberScrollState())) {
+            TextButton(enabled = !patchBusy && job?.isActive != true, onClick = { patchBusy = true; patchNotice = null; importPatch.launch(arrayOf("application/json", "application/octet-stream")) }) { Text("Import synth patch") }
+            TextButton(enabled = !patchBusy, onClick = { patchJson = SynthPatch.export(s); patchBusy = true; exportPatch.launch("MUGEN-synth-patch.json") }) { Text("Export synth patch") }
+        }
+        patchNotice?.let { Text(it, fontSize = 12.sp, color = c.muted) }
         Row(Modifier.horizontalScroll(rememberScrollState())){listOf("Sine","Saw","Square","Triangle").forEachIndexed{i,wave->Chip(wave,s.wave==i){s=s.copy(wave=i)}}}
         Row(Modifier.horizontalScroll(rememberScrollState())){TextButton(onClick={s=s.copy(octave=(s.octave-1).coerceAtLeast(2))}){Text("Octave −")};Text("${s.octave}",Modifier.padding(12.dp),color=c.text);TextButton(onClick={s=s.copy(octave=(s.octave+1).coerceAtMost(6))}){Text("Octave +")};TextButton(onClick={s=s.copy(sequence=false);synth.stop()}){Text("Stop all")}}
         Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),horizontalArrangement=Arrangement.spacedBy(3.dp)){

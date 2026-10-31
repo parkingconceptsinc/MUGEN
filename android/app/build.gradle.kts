@@ -59,6 +59,7 @@ android {
         buildConfig = true
     }
     testOptions { unitTests.isIncludeAndroidResources = true }
+    sourceSets.getByName("test").resources.srcDir("../../shared/fixtures")
 }
 
 dependencies {
