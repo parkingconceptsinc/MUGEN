@@ -1,14 +1,22 @@
-name: Publish Android APK
+name: Publish MUGEN APK and PWA
 
 on:
   push:
-    tags:
-      - "android-v*"
+    branches: [main]
+    tags: ["android-v*"]
+    paths:
+      - "shared/release.json"
+      - ".github/workflows/android-release.yml"
+  workflow_dispatch:
 
 permissions:
   contents: write
   pages: write
   id-token: write
+
+concurrency:
+  group: mugen-android-release
+  cancel-in-progress: false
 
 jobs:
   validate:
@@ -18,6 +26,51 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Validate shared version and release source
+        id: version
+        run: |
+          node scripts/check-release.mjs
+          node --input-type=module <<'NODE'
+          import { readFileSync, appendFileSync } from 'node:fs';
+          const release = JSON.parse(readFileSync('shared/release.json', 'utf8'));
+          const tag = `android-v${release.version}`;
+          const ref = process.env.GITHUB_REF;
+          if (ref !== 'refs/heads/main' && ref !== `refs/tags/${tag}`) {
+            throw new Error('Publish only from main or the tag matching shared/release.json.');
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `name=${release.version}\ncode=${release.androidVersionCode}\ntag=${tag}\n`);
+          NODE
+      - name: Preserve existing release tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          node --input-type=module <<'NODE'
+          const base = `${process.env.GITHUB_API_URL}/repos/${process.env.GITHUB_REPOSITORY}`;
+          async function get(path, allowMissing = false) {
+            const response = await fetch(base + path, { signal: AbortSignal.timeout(30_000), headers: {
+              Authorization: `Bearer ${process.env.GH_TOKEN}`,
+              Accept: 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28'
+            }});
+            if (response.status === 404 && allowMissing) return null;
+            if (!response.ok) throw new Error(`Release tag lookup failed: HTTP ${response.status}`);
+            return response.json();
+          }
+          const ref = await get(`/git/ref/tags/${encodeURIComponent(process.env.RELEASE_TAG)}`, true);
+          if (ref) {
+            let target = ref.object;
+            for (let depth = 0; target.type === 'tag' && depth < 8; depth++) {
+              target = (await get(`/git/tags/${target.sha}`)).object;
+            }
+            if (target.type !== 'commit' || target.sha !== process.env.GITHUB_SHA) {
+              throw new Error('This version already tags a different commit. Increment shared/release.json; published tags are never moved.');
+            }
+          }
+          NODE
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -42,23 +95,6 @@ jobs:
           echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/mortimer-release.jks" >> "$GITHUB_ENV"
           keytool -list -keystore "$RUNNER_TEMP/mortimer-release.jks" -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" >/dev/null
           echo "Release keystore and alias validated."
-      - name: Derive Android version from tag
-        id: version
-        shell: bash
-        run: |
-          version="${GITHUB_REF_NAME#android-v}"
-          if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
-            echo "::error::Tag must look like android-v0.9.1"
-            exit 1
-          fi
-          IFS=. read -r major minor patch <<< "$version"
-          if (( major > 20 || minor > 99 || patch > 99 )); then
-            echo "::error::Version is outside the supported Android version-code range."
-            exit 1
-          fi
-          code=$((major * 10000 + minor * 100 + patch))
-          echo "name=$version" >> "$GITHUB_OUTPUT"
-          echo "code=$code" >> "$GITHUB_OUTPUT"
       - name: Test and build signed APK
         working-directory: android
         env:
@@ -77,14 +113,23 @@ jobs:
           "$apksigner_path" verify --verbose --print-certs "$apk"
           cp "$apk" "$RUNNER_TEMP/MUGEN.apk"
           sha256sum "$RUNNER_TEMP/MUGEN.apk" | awk '{ print $1 "  MUGEN.apk" }' > "$RUNNER_TEMP/MUGEN.apk.sha256"
-      - name: Publish APK release
+      - name: Publish signed APK and immutable version tag
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          target_commitish: ${{ github.sha }}
           name: MUGEN APK v${{ steps.version.outputs.name }}
+          draft: false
+          prerelease: false
+          make_latest: true
+          fail_on_unmatched_files: true
           generate_release_notes: true
           files: |
             ${{ runner.temp }}/MUGEN.apk
             ${{ runner.temp }}/MUGEN.apk.sha256
+      - name: Remove temporary signing file
+        if: always()
+        run: rm -f "$RUNNER_TEMP/mortimer-release.jks"
 
   deploy-pwa:
     needs: [validate, release]
