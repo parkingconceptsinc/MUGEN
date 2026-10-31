@@ -15,6 +15,8 @@ Never commit the keystore or passwords. Keep a secure backup. If an installed AP
 
 ## Publish a release
 
-After configuring secrets, push a tag such as `android-v0.16.0`. The tag must match the shared manifest. The workflow validates both apps, runs unit tests and lint, builds a signed release APK, attaches it to a GitHub Release, and then deploys the PWA from the same commit. The in-app updater detects the release, downloads the APK, and opens Android's installer. The user must approve installation; Android may also ask permission to install unknown apps.
+After configuring secrets, merging a change to `shared/release.json` (or the release workflow) into `main` publishes that version automatically. The Actions workflow can also be run manually from `main`, or triggered by pushing the matching tag such as `android-v0.16.0`. The tag must match the shared manifest. The workflow validates both apps, runs unit tests and lint, builds a signed release APK, attaches it to a GitHub Release, and then deploys the PWA from the same commit. The in-app updater detects the release, downloads the APK, and opens Android's installer. The user must approve installation; Android may also ask permission to install unknown apps.
 
 Version codes are derived as `major * 10000 + minor * 100 + patch` and must increase monotonically. Do not publish a tag that would produce a version code lower than an already distributed build.
+
+The release workflow reads the shared version, validates both apps, and creates the version tag on its exact tested commit when publishing the signed APK. Existing tags are never moved: if a version already points elsewhere, bump the shared version. A missing signing secret stops publication before any release is created. The PWA is deployed from the same workflow after the signed APK is published.
