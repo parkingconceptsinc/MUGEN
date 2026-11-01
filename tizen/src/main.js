@@ -16,6 +16,7 @@ const state = {
   current: null,
   playing: false,
   scanBusy: false,
+  scanCount: 0,
   message: "Connect a USB drive, then choose Scan USB.",
 };
 
@@ -79,7 +80,14 @@ async function scanDirectory(directory, storageLabel, depth, results) {
       if (!entry.name.startsWith(".")) await scanDirectory(entry, storageLabel, depth + 1, results);
     } else if (MEDIA_EXTENSIONS.test(entry.name)) {
       const path = entry.fullPath || (entry.toURI && entry.toURI()) || entry.path;
-      if (path) results.push({ id: storageLabel + ":" + path, path, name: entry.name, storageLabel, video: isVideo(entry.name) });
+      if (path) {
+        results.push({ id: storageLabel + ":" + path, path, name: entry.name, storageLabel, video: isVideo(entry.name) });
+        state.scanCount++;
+        if (state.scanCount % 50 === 0) {
+          updateScanStatus();
+          await new Promise((resolve) => window.setTimeout(resolve, 0));
+        }
+      }
       if (results.length >= 15000) break;
     }
   }
@@ -88,6 +96,7 @@ async function scanDirectory(directory, storageLabel, depth, results) {
 async function scanUsb() {
   if (state.scanBusy) return;
   state.scanBusy = true;
+  state.scanCount = 0;
   state.message = "Looking for connected USB drives…";
   render();
   try {
@@ -97,6 +106,8 @@ async function scanUsb() {
       state.message = "No mounted USB drive found. Check the connection and try again.";
       return;
     }
+    state.message = "Scanning " + mounted.length + " USB drive" + (mounted.length === 1 ? "…" : "s…");
+    render();
     const found = [];
     for (const storage of mounted) {
       const root = await resolveStorage(storage.label);
@@ -144,6 +155,7 @@ function navigate(view) {
 function play(item) {
   if (!item) return;
   state.current = item;
+  state.message = "Opening " + item.name + "…";
   state.view = "player";
   state.active = 0;
   render();
@@ -157,6 +169,7 @@ function play(item) {
         try {
           webapis.avplay.play();
           state.playing = true;
+          state.message = "Playback started. Press BACK to return to your library.";
           paintPlayerStatus();
         } catch (error) {
           state.message = "Playback could not start: " + (error.message || error);
@@ -190,6 +203,13 @@ function closePlayer() {
 function paintPlayerStatus() {
   const status = document.querySelector("#player-status");
   if (status) status.textContent = state.playing ? "PLAYING" : "READY";
+  const message = document.querySelector(".playback-message");
+  if (message) message.textContent = state.message;
+}
+
+function updateScanStatus() {
+  const status = document.querySelector("#scan-status");
+  if (status) status.textContent = state.scanBusy ? "Scanning USB media… " + state.scanCount + " files found" : state.message;
 }
 
 function itemCard(item, index) {
@@ -198,7 +218,7 @@ function itemCard(item, index) {
 
 function render() {
   if (state.view === "player") {
-    app.innerHTML = `<main class="player-view"><div class="player-stage"><div class="equalizer">${Array.from({ length: 24 }, (_, i) => `<i style="height:${12 + (i % 7) * 9}%"></i>`).join("")}</div><span id="player-status" class="pill">${state.playing ? "PLAYING" : "READY"}</span></div><section class="player-meta"><p class="eyebrow">NOW PLAYING</p><h1>${escapeHtml(state.current ? state.current.name : "MUGEN")}</h1><p>${escapeHtml(state.current ? state.current.storageLabel : "USB DRIVE")}</p><div class="player-actions"><button data-focusable="true" data-action="toggle">${state.playing ? "Pause" : "Resume"}</button><button data-focusable="true" data-action="back">Back to library</button></div><p class="hint">Press BACK to return to your library.</p></section></main>`;
+    app.innerHTML = `<main class="player-view"><div class="player-stage"><div class="equalizer">${Array.from({ length: 24 }, (_, i) => `<i style="height:${12 + (i % 7) * 9}%"></i>`).join("")}</div><span id="player-status" class="pill">${state.playing ? "PLAYING" : "READY"}</span></div><section class="player-meta"><p class="eyebrow">NOW PLAYING</p><h1>${escapeHtml(state.current ? state.current.name : "MUGEN")}</h1><p>${escapeHtml(state.current ? state.current.storageLabel : "USB DRIVE")}</p><div class="player-actions"><button data-focusable="true" data-action="toggle">${state.playing ? "Pause" : "Resume"}</button><button data-focusable="true" data-action="back">Back to library</button></div><p class="playback-message">${escapeHtml(state.message)}</p><p class="hint">Press BACK to return to your library.</p></section></main>`;
     paintFocus();
     return;
   }
@@ -209,7 +229,7 @@ function render() {
   const pageStart = state.page * PAGE_SIZE;
   const rows = isList ? state.filtered.slice(pageStart, pageStart + PAGE_SIZE).map((item, index) => itemCard(item, pageStart + index)).join("") : "";
   const title = isList ? sections.find(([view]) => view === state.view)[1] : "Your sound. Your screen.";
-  app.innerHTML = `<main class="tv-shell"><aside class="rail"><div class="brand"><span class="brand-mark">M</span><span>MUGEN<small>MEDIA CENTER</small></span></div><nav>${sections.map(([view, label]) => `<button class="nav-item ${state.view === view ? "current" : ""}" data-focusable="true" data-view="${view}"><span>${view === "library" ? "▦" : view === "music" ? "♫" : "▶"}</span>${label}</button>`).join("")}<button class="nav-item" data-focusable="true" data-action="scan"><span>＋</span>Scan USB</button></nav><div class="rail-bottom"><span class="online-dot"></span>LOCAL LIBRARY<br/><small>VERSION ${VERSION}</small></div></aside><section class="content"><header class="topline"><div><p class="eyebrow">YOUR MEDIA · ${escapeHtml(state.storage || "READY FOR USB")}</p><h1>${title}</h1></div><button class="scan-button" data-focusable="true" data-action="scan">${state.scanBusy ? "Scanning…" : "Scan USB"}</button></header>${!isList ? `<section class="hero"><div><span class="hero-kicker">MUGEN FOR SAMSUNG TV</span><h2>Your library,<br/>ready for the room.</h2><p>Connect a USB drive to browse and play your media on the big screen.</p><button class="hero-cta" data-focusable="true" data-action="scan">Scan USB drive <b>→</b></button></div><div class="disc"><div class="disc-center">M</div></div></section><section class="quick-stats"><article><span>LIBRARY</span><strong>${state.items.length}</strong><small>Saved media files</small></article><article><span>CONNECTED</span><strong>${state.storage ? "01" : "—"}</strong><small>${escapeHtml(state.storage || "USB drive")}</small></article><article><span>VERSION</span><strong>${VERSION}</strong><small>TV preview build</small></article></section>` : `<section class="library-head"><span>${state.filtered.length} ITEMS</span><span>Page ${state.page + 1} / ${Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE))} · Use arrows and Enter</span></section><div class="media-list">${rows || `<div class="empty-state"><span>♫</span><h2>No media here yet</h2><p>Connect a USB drive and scan to add supported audio or video files.</p><button data-focusable="true" data-action="scan">Scan USB</button></div>`}</div>${state.filtered.length > PAGE_SIZE ? `<div class="page-actions"><button data-focusable="true" data-action="page" data-dir="-1" ${state.page === 0 ? "disabled" : ""}>Previous page</button><button data-focusable="true" data-action="page" data-dir="1" ${state.page >= Math.ceil(state.filtered.length / PAGE_SIZE) - 1 ? "disabled" : ""}>Next page</button></div>` : ""}` }<footer class="status-line"><span class="status-dot"></span>${escapeHtml(state.message)}</footer></section></main>`;
+  app.innerHTML = `<main class="tv-shell"><aside class="rail"><div class="brand"><span class="brand-mark">M</span><span>MUGEN<small>MEDIA CENTER</small></span></div><nav>${sections.map(([view, label]) => `<button class="nav-item ${state.view === view ? "current" : ""}" data-focusable="true" data-view="${view}"><span>${view === "library" ? "▦" : view === "music" ? "♫" : "▶"}</span>${label}</button>`).join("")}<button class="nav-item" data-focusable="true" data-action="scan"><span>＋</span>Scan USB</button></nav><div class="rail-bottom"><span class="online-dot"></span>LOCAL LIBRARY<br/><small>VERSION ${VERSION}</small></div></aside><section class="content"><header class="topline"><div><p class="eyebrow">YOUR MEDIA · ${escapeHtml(state.storage || "READY FOR USB")}</p><h1>${title}</h1></div><button class="scan-button" data-focusable="true" data-action="scan">${state.scanBusy ? "Scanning…" : "Scan USB"}</button></header>${!isList ? `<section class="hero"><div><span class="hero-kicker">MUGEN FOR SAMSUNG TV</span><h2>Your library,<br/>ready for the room.</h2><p>Connect a USB drive to browse and play your media on the big screen.</p><button class="hero-cta" data-focusable="true" data-action="scan">Scan USB drive <b>→</b></button></div><div class="disc"><div class="disc-center">M</div></div></section><section class="quick-stats"><article><span>LIBRARY</span><strong>${state.items.length}</strong><small>Saved media files</small></article><article><span>CONNECTED</span><strong>${state.storage ? state.storage.split(", ").length : "—"}</strong><small>${escapeHtml(state.storage || "USB drive")}</small></article><article><span>VERSION</span><strong>${VERSION}</strong><small>TV preview build</small></article></section>` : `<section class="library-head"><span>${state.filtered.length} ITEMS</span><span>Page ${state.page + 1} / ${Math.max(1, Math.ceil(state.filtered.length / PAGE_SIZE))} · Use arrows and Enter</span></section><div class="media-list">${rows || `<div class="empty-state"><span>♫</span><h2>No media here yet</h2><p>Connect a USB drive and scan to add supported audio or video files.</p><button data-focusable="true" data-action="scan">Scan USB</button></div>`}</div>${state.filtered.length > PAGE_SIZE ? `<div class="page-actions"><button data-focusable="true" data-action="page" data-dir="-1" ${state.page === 0 ? "disabled" : ""}>Previous page</button><button data-focusable="true" data-action="page" data-dir="1" ${state.page >= Math.ceil(state.filtered.length / PAGE_SIZE) - 1 ? "disabled" : ""}>Next page</button></div>` : ""}` }<footer class="status-line"><span class="status-dot"></span><span id="scan-status">${escapeHtml(state.message)}</span></footer></section></main>`;
   paintFocus();
 }
 
