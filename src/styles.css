@@ -613,6 +613,14 @@ video::cue { font-size: var(--cue, 100%); background: #000b; }
   transform: translateX(-50%); box-shadow: 0 12px 30px #000a; backdrop-filter: blur(16px);
 }
 .importBar i { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--accent); transition: width 0.2s; }
+.importBar.indeterminate i { width: 32%; animation: importIndeterminate 1.25s ease-in-out infinite; }
+@keyframes importIndeterminate {
+  from { transform: translateX(-110%); }
+  to { transform: translateX(420%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .importBar.indeterminate i { animation: none; transform: translateX(105%); }
+}
 
 /* ---------- Desktop ---------- */
 .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; }

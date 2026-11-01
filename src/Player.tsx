@@ -12,6 +12,7 @@ import { readPref, usePref, writePref } from "./prefs";
 import type { Comic, ComicProgress, EqSettings, Playlist, ReaderSettings, RepeatMode, Route, Screen, SongSort, Track, VideoFit } from "./types";
 import { ACCENTS, compareText, formatTime, shuffled, supported, toTrack, trackKey } from "./util";
 import { captureVideoFrame } from "./thumbnails";
+import { folderImportFailureMessage, getImportProgressPercent, recordFolderBatchOutcome, type FolderImportFailures } from "./importStatus";
 import { MiniPlayer, TrackMenu } from "./components";
 import { Library } from "./screens/Library";
 import { NowPlaying } from "./screens/NowPlaying";
@@ -696,7 +697,7 @@ export function Player() {
       const batch: Array<{ file: () => Promise<File>; path: string }> = [];
       const batchSize = 100;
       let visitedEntries = 0;
-      let failedFiles = 0;
+      let failures: FolderImportFailures = { files: 0, batches: 0 };
       let supportedFound = 0;
       const flush = async () => {
         if (!scanIsCurrent()) {
@@ -707,12 +708,20 @@ export function Player() {
         const current = batch.splice(0, batch.length);
         const results = await Promise.allSettled(current.map(async ({ file, path }) => ({ file: await file(), path })));
         const incoming: Incoming[] = [];
+        let fileReadFailures = 0;
         for (const result of results) {
           if (result.status === "fulfilled") incoming.push(result.value);
-          else failedFiles++;
+          else fileReadFailures++;
         }
         if (!scanIsCurrent()) return;
-        if (incoming.length && !(await importEntries(incoming, directory.name, true, folderSeen))) failedFiles += incoming.length;
+        const importSucceeded = incoming.length
+          ? await importEntries(incoming, directory.name, true, folderSeen)
+          : true;
+        failures = recordFolderBatchOutcome(failures, {
+          fileReadFailures,
+          incomingCount: incoming.length,
+          importSucceeded,
+        });
         if (!scanIsCurrent()) return;
         setImporting({ done: visitedEntries, total: 0, label: `Scanning and saving · ${supportedFound} supported files found` });
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
@@ -751,7 +760,8 @@ export function Player() {
         return;
       }
       setImporting(null);
-      if (failedFiles) toast(`Folder import finished with ${failedFiles} file/batch errors. Check storage and retry affected files.`);
+      const failureMessage = folderImportFailureMessage(failures);
+      if (failureMessage) toast(failureMessage);
       else if (!supportedFound) toast("No supported music, video, comic or photo files were found");
       else toast(`Finished scanning and saving ${supportedFound} supported files`);
     } catch (error) {
@@ -1878,6 +1888,7 @@ export function Player() {
     ab, subtitles, importing, installEvent, actions]);
 
   const progress = useMemo(() => ({ currentTime, duration }), [currentTime, duration]);
+  const importProgressPercent = importing ? getImportProgressPercent(importing.done, importing.total) : null;
   const accentColor = ACCENTS[accent] ?? ACCENTS.Coral;
 
   const swipeScreens: Screen[] = ["library", "videos", "books", "comics", "photos"];
@@ -1960,9 +1971,11 @@ export function Player() {
           {reader && (() => { const item = comics.find((c) => c.id === reader.id); return item?.format === "epub" ? <EpubReader key={reader.id} /> : item && isTextFormat(item.format) ? <TextReader key={reader.id} /> : <ComicReader key={reader.id} />; })()}
           {menu && <TrackMenu target={menu} onClose={() => actions.back()} />}
           {importing && (
-            <div className="importBar" role="status">
-              <span>{importing.total ? `${importing.label ?? "Importing"} ${importing.done} of ${importing.total}…` : `Scanning folder… ${importing.done} files found`}</span>
-              <i style={{ width: importing.total ? `${(importing.done / importing.total) * 100}%` : "15%" }} />
+            <div className={`importBar${importProgressPercent === null ? " indeterminate" : ""}`} role="status">
+              <span>{importing.total
+                ? `${importing.label ?? "Importing"} ${importing.done} of ${importing.total}…`
+                : `${importing.label ?? "Scanning folder"} ${importing.done} files found`}</span>
+              <i aria-hidden="true" style={importProgressPercent === null ? undefined : { width: `${importProgressPercent}%` }} />
             </div>
           )}
           {toastMessage && <div className="toast" role="status">{toastMessage}</div>}
