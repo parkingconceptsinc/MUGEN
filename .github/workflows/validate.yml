@@ -15,6 +15,13 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - name: Build Samsung Tizen TV web project
+        run: npm run build:tizen
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MUGEN-Tizen-web-project
+          path: tizen/build/
+          if-no-files-found: error
       - name: Install browser test runtime
         run: |
           npm install --no-save --package-lock=false playwright

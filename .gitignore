@@ -1,5 +1,7 @@
 node_modules/
 dist/
+tizen/build/
+tizen/artifacts/
 *.tsbuildinfo
 *.jks
 *.keystore

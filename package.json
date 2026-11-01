@@ -1,11 +1,12 @@
 {
   "name": "mugen",
   "private": true,
-  "version": "0.16.0",
+  "version": "0.17.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "npm run check:release && tsc -b && vite build",
+    "build:tizen": "vite build --config tizen/vite.config.js && node tizen/prepare-build.mjs",
     "preview": "vite preview",
     "check:release": "node scripts/check-release.mjs",
     "test": "node --experimental-strip-types --test tests/*.test.mjs"

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets" id="http://mugen.local/tv" version="0.1.0" viewmodes="maximized">
+  <tizen:application id="org.mugen.tv.MUGEN" package="org.mugen.tv" required_version="5.5"/>
+  <content src="index.html"/>
+  <name>MUGEN TV</name>
+  <icon src="icon.png"/>
+  <tizen:profile name="tv-samsung"/>
+  <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable"/>
+  <tizen:privilege name="http://tizen.org/privilege/filesystem.read"/>
+  <tizen:privilege name="http://tizen.org/privilege/filesystem.write"/>
+  <tizen:privilege name="http://tizen.org/privilege/externalstorage"/>
+  <tizen:privilege name="http://developer.samsung.com/privilege/avplay"/>
+</widget>
