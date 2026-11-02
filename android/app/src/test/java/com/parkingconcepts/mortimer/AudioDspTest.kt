@@ -27,6 +27,19 @@ class AudioDspTest {
         for(n in listOf(1,2,5,3,13)){p.queueInput(ByteBuffer.wrap(original,at,n));at+=n;val b=p.output;val bytes=ByteArray(b.remaining());b.get(bytes);output.write(bytes)}
         assertArrayEquals(original,output.toByteArray());p.reset()
     }
+    @Test fun bypassDoesNotRunAnalysisAndEffectsCanBeReenabled() {
+        val p=ProAudioProcessor()
+        p.configure(AudioProcessor.AudioFormat(48000,1,C.ENCODING_PCM_16BIT));p.flush()
+        fun feed() {
+            val block=ByteBuffer.allocateDirect(9600).order(ByteOrder.nativeOrder())
+            repeat(4800){block.putShort((sin(2*PI*1000*it/48000)*8000).toInt().toShort())};block.flip()
+            p.queueInput(block);assertEquals(9600,p.output.remaining())
+        }
+        feed();assertEquals(0,p.meters.sampleRate)
+        p.settings=AudioEffects.Settings(enabled=true);feed();assertEquals(48000,p.meters.sampleRate)
+        p.settings=AudioEffects.Settings();feed();assertEquals(0,p.meters.sampleRate)
+        p.reset()
+    }
     @Test fun anInTuneVoiceIsNotCancelledByThePitchGrains(){
         val a=tone(440.0,.3,1.0);process(a,AudioEffects.Settings(enabled=true,autoHeadroom=false,limiter=false,tune=true));assertEquals(.3/sqrt(2.0),rms(a),.01)
     }

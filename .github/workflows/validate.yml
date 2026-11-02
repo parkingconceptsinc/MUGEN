@@ -34,6 +34,7 @@ jobs:
         run: |
           npm run preview -- --host 127.0.0.1 > /tmp/mugen-preview.log 2>&1 &
           node tests/browser-library-tv.mjs
+          node tests/browser-audio-library.mjs
           node tests/browser-studio-audiolab.mjs
       - uses: actions/upload-artifact@v4
         if: always()

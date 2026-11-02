@@ -22,6 +22,7 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(pwaURL);
   await page.locator('input[type=file][multiple]:not([webkitdirectory])').waitFor({ state: 'attached' });
+  await page.getByText('Loading your library…', { exact: true }).waitFor({ state: 'hidden' });
   // Use the same File objects on retry so identity metadata remains unchanged.
   // Abort the second actual IndexedDB batch, rather than mocking the save result.
   await page.evaluate(() => {

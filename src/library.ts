@@ -1,3 +1,5 @@
+import { candidateKey, groupIdenticalFiles, mergeFileRecords, sameFileBytes, type FileRecord } from "./fileIdentity";
+
 export type StoredLibraryItem = {
   id: string;
   name: string;
@@ -75,7 +77,9 @@ const DB_NAME = "mortimer-player";
 const STORE = "library";
 const COMICS = "comics";
 const PHOTOS = "photos";
-const VERSION = 5;
+const VERSION = 6;
+const CANDIDATE_INDEX = "nameSize";
+const ALIASES = "aliases";
 const IDENTITY_INDEX = "identity";
 
 function openDB(): Promise<IDBDatabase> {
@@ -88,13 +92,13 @@ function openDB(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "id" });
       if (!db.objectStoreNames.contains(COMICS)) db.createObjectStore(COMICS, { keyPath: "id" });
       if (!db.objectStoreNames.contains(PHOTOS)) db.createObjectStore(PHOTOS, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(ALIASES)) db.createObjectStore(ALIASES, { keyPath: "id" });
       // A compound index lets imports check file identity without getAll() and
       // without rewriting existing records/large video Blobs during migration.
       for (const name of [STORE, COMICS, PHOTOS]) {
         const store = tx.objectStore(name);
-        // Replace any earlier experimental identity index with the compound key.
-        if (store.indexNames.contains(IDENTITY_INDEX)) store.deleteIndex(IDENTITY_INDEX);
-        store.createIndex(IDENTITY_INDEX, ["path", "size", "lastModified"], { unique: false });
+        if (!store.indexNames.contains(IDENTITY_INDEX)) store.createIndex(IDENTITY_INDEX, ["path", "size", "lastModified"], { unique: false });
+        if (!store.indexNames.contains(CANDIDATE_INDEX)) store.createIndex(CANDIDATE_INDEX, ["name", "size"], { unique: false });
       }
     };
     request.onsuccess = () => {
@@ -177,23 +181,138 @@ async function saveUniqueItems<T extends { id: string; path: string; size: numbe
 }
 
 
+// File comparisons cannot await inside a live IDB transaction. Read candidates,
+// compare outside the transaction, then verify their IDs in the serialized write
+// transaction. A concurrent tab/import forces a fresh comparison before any put.
+async function contentCandidates<T extends FileRecord>(storeName: string, items: T[]): Promise<Map<string, T[]>> {
+  const db = await openDB();
+  try {
+    return await new Promise((resolve, reject) => {
+      const result = new Map<string, T[]>();
+      const tx = db.transaction(storeName, "readonly");
+      const index = tx.objectStore(storeName).index(CANDIDATE_INDEX);
+      for (const item of items) {
+        const key = candidateKey(item);
+        if (result.has(key)) continue;
+        result.set(key, []);
+        const request = index.getAll([item.name, item.size]);
+        request.onsuccess = () => result.set(key, request.result);
+      }
+      tx.oncomplete = () => resolve(result);
+      tx.onabort = tx.onerror = () => reject(tx.error ?? new Error("Could not read file identities"));
+    });
+  } finally { db.close(); }
+}
+
+async function saveContentUniqueItems<T extends FileRecord>(storeName: string, items: T[], shouldSave: () => boolean): Promise<T[]> {
+  if (!items.length || !shouldSave()) return [];
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const snapshot = await contentCandidates(storeName, items);
+    const known = new Map([...snapshot].map(([key, values]) => [key, [...values]]));
+    const fresh: T[] = [];
+    for (const item of items) {
+      if (!shouldSave()) return [];
+      const key = candidateKey(item);
+      const candidates = known.get(key) ?? [];
+      let exists = false;
+      for (const other of candidates) {
+        if (await sameFileBytes(item.file, other.file, shouldSave)) { exists = true; break; }
+      }
+      if (!exists) { fresh.push(item); candidates.push(item); known.set(key, candidates); }
+    }
+    if (!shouldSave()) return [];
+    const db = await openDB();
+    try {
+      const saved = await new Promise<T[] | null>((resolve, reject) => {
+        const tx = db.transaction(storeName, "readwrite");
+        const store = tx.objectStore(storeName);
+        let remaining = snapshot.size;
+        let changed = false;
+        let wrote = false;
+        const commit = () => {
+          if (--remaining > 0) return;
+          if (!changed && shouldSave()) {
+            for (const item of fresh) store.put(item);
+            wrote = true;
+          }
+        };
+        for (const item of new Map(items.map(item => [candidateKey(item), item])).values()) {
+          const request = store.index(CANDIDATE_INDEX).getAllKeys([item.name, item.size]);
+          request.onsuccess = () => {
+            const before = (snapshot.get(candidateKey(item)) ?? []).map(item => item.id).sort();
+            changed ||= JSON.stringify(before) !== JSON.stringify(request.result.map(String).sort());
+            commit();
+          };
+        }
+        tx.oncomplete = () => resolve(changed ? null : wrote ? fresh : []);
+        tx.onabort = tx.onerror = () => reject(tx.error ?? new Error("Library transaction aborted"));
+      });
+      if (saved !== null) return saved;
+    } finally { db.close(); }
+  }
+  throw new Error("The library is changing in another tab. Close that tab and retry.");
+}
+
+// Alias records and cleanup commit together. If the app closes before preferences
+// are remapped, the next launch can still recover every old ID from this journal.
+async function repairContentDuplicates<T extends FileRecord>(storeName: string): Promise<T[]> {
+  const snapshot = (await withStore<T[]>("readonly", store => store.getAll(), storeName)) ?? [];
+  const groups = (await groupIdenticalFiles(snapshot)).filter(group => group.length > 1);
+  if (!groups.length) return snapshot;
+  const db = await openDB();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction([storeName, ALIASES], "readwrite");
+      const store = tx.objectStore(storeName);
+      for (const group of groups) {
+        const live: T[] = [];
+        let remaining = group.length;
+        for (const item of group) {
+          const request = store.get(item.id);
+          request.onsuccess = () => {
+            if (request.result) live.push(request.result);
+            if (--remaining || !live.length) return;
+            // Use the planned canonical ID, retaining metadata patched since the read.
+            live.sort((a, b) => group.findIndex(item => item.id === a.id) - group.findIndex(item => item.id === b.id));
+            const keep = mergeFileRecords(live);
+            store.put(keep);
+            for (const drop of live.slice(1)) {
+              tx.objectStore(ALIASES).put({ id: drop.id, canonicalId: keep.id, storeName });
+              store.delete(drop.id);
+            }
+          };
+        }
+      }
+      tx.oncomplete = () => resolve();
+      tx.onabort = tx.onerror = () => reject(tx.error ?? new Error("Duplicate cleanup aborted"));
+    });
+  } finally { db.close(); }
+  return (await withStore<T[]>("readonly", store => store.getAll(), storeName)) ?? [];
+}
+
+export async function loadFileAliases(): Promise<Record<string, string>> {
+  const rows = (await withStore<Array<{ id: string; canonicalId: string }>>("readonly", store => store.getAll(), ALIASES)) ?? [];
+  return Object.fromEntries(rows.map(row => [row.id, row.canonicalId]));
+}
+
+
 export async function saveLibraryFast(items: StoredLibraryItem[], shouldSave: () => boolean = () => true): Promise<StoredLibraryItem[]> {
   if (!items.length) return [];
-  return saveUniqueItems(STORE, items, (item) => JSON.stringify([item.path, item.size, item.lastModified]), shouldSave);
+  return saveContentUniqueItems(STORE, items, shouldSave);
 }
 
 export async function saveComicsFast(items: StoredComic[], shouldSave: () => boolean = () => true): Promise<StoredComic[]> {
   if (!items.length) return [];
-  return saveUniqueItems(COMICS, items, (item) => JSON.stringify([item.path, item.size, item.lastModified]), shouldSave);
+  return saveContentUniqueItems(COMICS, items, shouldSave);
 }
 
 export async function saveLibrary(items: StoredLibraryItem[]): Promise<StoredLibraryItem[]> {
   if (!items.length) return [];
-  return await saveUniqueItems(STORE, items, (item) => JSON.stringify([item.path, item.size, item.lastModified]));
+  return saveContentUniqueItems(STORE, items, () => true);
 }
 
 export async function loadLibrary(): Promise<StoredLibraryItem[]> {
-  return (await withStore<StoredLibraryItem[]>("readonly", (store) => store.getAll())) ?? [];
+  return repairContentDuplicates<StoredLibraryItem>(STORE);
 }
 
 export async function deleteTracks(ids: string[]) {
@@ -221,10 +340,11 @@ export async function clearLibrary() {
   const db = await openDB();
   try {
     await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction([STORE, COMICS, PHOTOS], "readwrite");
+      const tx = db.transaction([STORE, COMICS, PHOTOS, ALIASES], "readwrite");
       tx.objectStore(STORE).clear();
       tx.objectStore(COMICS).clear();
       tx.objectStore(PHOTOS).clear();
+      tx.objectStore(ALIASES).clear();
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
       tx.onabort = () => reject(tx.error ?? new Error("IndexedDB transaction aborted"));
@@ -236,11 +356,11 @@ export async function clearLibrary() {
 
 export async function saveComics(items: StoredComic[]): Promise<StoredComic[]> {
   if (!items.length) return [];
-  return await saveUniqueItems(COMICS, items, (item) => JSON.stringify([item.path, item.size, item.lastModified]));
+  return saveContentUniqueItems(COMICS, items, () => true);
 }
 
 export async function loadComics(): Promise<StoredComic[]> {
-  return (await withStore<StoredComic[]>("readonly", (store) => store.getAll(), COMICS)) ?? [];
+  return repairContentDuplicates<StoredComic>(COMICS);
 }
 
 export async function deleteComics(ids: string[]) {
