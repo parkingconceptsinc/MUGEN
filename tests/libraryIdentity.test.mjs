@@ -104,7 +104,7 @@ test('cancelled imports cannot write, failed batches retry without duplicate rec
     if (this.name === 'library') { this.transaction.abort(); return; }
     return put.apply(this, args);
   };
-  try { await assert.rejects(library.saveLibraryFast([item('failed')])); }
+  try { await assert.rejects(library.saveLibraryFast([item('failed'),item('failed2','abcd',{name:'Another.mp3'})])); }
   finally { IDBObjectStore.prototype.put = put; }
   assert.equal((await library.saveLibraryFast([item('retry')])).length, 1);
   assert.equal((await library.saveLibraryFast([item('again')])).length, 0);

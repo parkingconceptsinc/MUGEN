@@ -232,8 +232,14 @@ async function saveContentUniqueItems<T extends FileRecord>(storeName: string, i
         const commit = () => {
           if (--remaining > 0) return;
           if (!changed && shouldSave()) {
-            for (const item of fresh) store.put(item);
-            wrote = true;
+            try {
+              for (const item of fresh) store.put(item);
+              wrote = true;
+            } catch {
+              // Quota/cancellation can abort midway through this request callback.
+              // Report the transaction failure without an uncaught callback error.
+              try { tx.abort(); } catch {}
+            }
           }
         };
         for (const item of new Map(items.map(item => [candidateKey(item), item])).values()) {
@@ -274,12 +280,14 @@ async function repairContentDuplicates<T extends FileRecord>(storeName: string):
             if (--remaining || !live.length) return;
             // Use the planned canonical ID, retaining metadata patched since the read.
             live.sort((a, b) => group.findIndex(item => item.id === a.id) - group.findIndex(item => item.id === b.id));
-            const keep = mergeFileRecords(live);
-            store.put(keep);
-            for (const drop of live.slice(1)) {
-              tx.objectStore(ALIASES).put({ id: drop.id, canonicalId: keep.id, storeName });
-              store.delete(drop.id);
-            }
+            try {
+              const keep = mergeFileRecords(live);
+              store.put(keep);
+              for (const drop of live.slice(1)) {
+                tx.objectStore(ALIASES).put({ id: drop.id, canonicalId: keep.id, storeName });
+                store.delete(drop.id);
+              }
+            } catch { try { tx.abort(); } catch {} }
           };
         }
       }
