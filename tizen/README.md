@@ -7,7 +7,10 @@ This is the first TV-focused MUGEN shell. It is a separate Tizen web app so the 
 - The manifest currently uses **Tizen TV 5.5 as a provisional minimum**. Confirm the TV's exact model code and firmware before calling this compatible or submitting it. “Crystal UHD 5700 70-inch” alone does not establish a model year.
 - The app is a `.wgt` web application. It requires a Samsung certificate profile for installation. No private certificate or production signing key belongs in this repository.
 - Browser preview can exercise the layout and remote keyboard. It cannot scan USB paths or play them because it has no Samsung TV APIs.
-- This first slice supports discovering and browsing common audio/video media from mounted USB storage. Books, comics, network libraries, visual playback controls, resume positions, subtitles, playlists, and polished certification packaging remain planned work.
+- The pre-release package identity is `MugenTV001` / `MugenTV001.MUGEN`. Preserve this identity when signing subsequent upgrades. The build validates the package ID, Samsung Product API loader and remote-key privilege before preparing the project.
+- This slice supports discovering and browsing common audio/video media from mounted USB storage, visual Play/Pause and Back controls, and distinct remote media keys. Books, comics, network libraries, seeking/resume positions, subtitles, playlists, and certification packaging remain planned work.
+- USB scanning can be cancelled and reports unreadable folders or scan limits as partial results while preserving existing library entries. Playback callbacks from an abandoned opening cannot start playback after returning to the library. Hiding the application releases the decoder; Play explicitly reopens the file when returning.
+- Video uses an `application/avplayer` object and maps the visible stage into AVPlay's 1920-pixel coordinate system. This follows Samsung's [AVPlay guide](https://developer.samsung.com/smarttv/develop/guides/multimedia/media-playback/using-avplay.html); actual rendering remains a physical-TV acceptance check.
 - During iteration, test installation may remove the previous app installation and its local data on some SDK flows. Export or recreate test library data as needed.
 
 ## Development

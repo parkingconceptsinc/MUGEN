@@ -27,12 +27,13 @@ jobs:
           npm install --no-save --package-lock=false playwright
           npx playwright install --with-deps chromium
           command -v ffmpeg || { sudo apt-get update && sudo apt-get install -y ffmpeg; }
-      - name: Exercise Studio and Audio Lab in a real browser
+      - name: Exercise library recovery, TV controls, Studio and Audio Lab in a real browser
         env:
           MUGEN_TEST_URL: http://127.0.0.1:4173/MUGEN/
           MUGEN_ARTIFACT_DIR: /tmp/mugen-browser
         run: |
           npm run preview -- --host 127.0.0.1 > /tmp/mugen-preview.log 2>&1 &
+          node tests/browser-library-tv.mjs
           node tests/browser-studio-audiolab.mjs
       - uses: actions/upload-artifact@v4
         if: always()

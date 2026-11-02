@@ -6,6 +6,9 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.util.AtomicFile
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import org.json.JSONArray
@@ -222,10 +225,16 @@ suspend fun itemsFromUris(context: Context, uris: List<Uri>, kind: String): List
 }
 
 /**
- * Walks a folder picked with OpenDocumentTree (up to a few levels deep) and returns
+ * Walks a folder picked with OpenDocumentTree with bounded, cancellable work and returns
  * the files that belong on [kind]'s shelf. Sub-folder names become the series/album.
  */
-suspend fun itemsFromTree(context: Context, tree: Uri, kind: String): List<LibraryItem> {
+suspend fun itemsFromTree(
+    context: Context, tree: Uri, kind: String,
+    maxEntries: Int = 250_000, maxResults: Int = 25_000,
+    onProgress: suspend (visited: Int, found: Int) -> Unit = { _, _ -> },
+): List<LibraryItem> = withContext(Dispatchers.IO) {
+    require(maxEntries > 0 && maxResults > 0)
+
     runCatching { context.contentResolver.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
     val accepted = when (kind) {
         "audio" -> AUDIO_EXTENSIONS
@@ -235,9 +244,11 @@ suspend fun itemsFromTree(context: Context, tree: Uri, kind: String): List<Libra
     }
     val out = ArrayList<LibraryItem>()
     val visited = HashSet<String>()
+    val seenFiles = HashSet<String>()
+    var visitedEntries = 0
     val jobContext = currentCoroutineContext()
     val rootId = DocumentsContract.getTreeDocumentId(tree)
-    fun walk(docId: String, folderName: String, depth: Int) {
+    suspend fun walk(docId: String, folderName: String, depth: Int) {
         jobContext.ensureActive()
         if (!visited.add(docId)) return
         val children = DocumentsContract.buildChildDocumentsUriUsingTree(tree, docId)
@@ -253,12 +264,20 @@ suspend fun itemsFromTree(context: Context, tree: Uri, kind: String): List<Libra
         cursor.use { c ->
                 while (c.moveToNext()) {
                     jobContext.ensureActive()
+                    check(visitedEntries < maxEntries) { "This folder has too many entries. Import a smaller subfolder; no files from this scan were added." }
+                    visitedEntries++
+                    if (visitedEntries % 100 == 0) {
+                        onProgress(visitedEntries, out.size)
+                        yield()
+                        jobContext.ensureActive()
+                    }
                     val id = c.getString(0) ?: continue
                     val name = c.getString(1) ?: continue
                     val mime = c.getString(2) ?: ""
                     if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
                         dirs.add(id to name)
-                    } else if (extensionOf(name) in accepted) {
+                    } else if (extensionOf(name) in accepted && seenFiles.add(id)) {
+                        check(out.size < maxResults) { "This folder has too many media files. Import a smaller subfolder; no files from this scan were added." }
                         val uri = DocumentsContract.buildDocumentUriUsingTree(tree, id)
                         out.add(LibraryItem(uri = uri.toString(), title = name, kind = kind, format = formatOf(name, kind), folder = folderName, size = if (c.isNull(3)) 0 else c.getLong(3)))
                     }
@@ -268,8 +287,10 @@ suspend fun itemsFromTree(context: Context, tree: Uri, kind: String): List<Libra
         dirs.forEach { (id, name) -> walk(id, "$folderName/$name", depth + 1) }
     }
     val rootName = rootId.substringAfterLast(':').substringAfterLast('/').ifBlank { "Folder" }
+    onProgress(0, 0)
     walk(rootId, rootName, 0)
-    return out
+    onProgress(visitedEntries, out.size)
+    out
 }
 
 /** Natural ordering so "page 2" comes before "page 10". */

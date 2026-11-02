@@ -61,7 +61,7 @@ let metadataPump: Promise<void> | null = null;
 function startMetadataPump() {
   if (metadataPump || mediaImportActive) return;
   metadataPump = (async () => {
-    while (metadataQueue.length) {
+    while (metadataQueue.length && !mediaImportActive) {
       const batch = metadataQueue.splice(0, 2);
       await Promise.allSettled(batch.map((job) => job()));
       // Give rendering and touch/input events a chance between metadata batches.
@@ -539,6 +539,8 @@ export function Player() {
     const addedAt = Date.now();
     let libraryStorageOk = true;
     let comicStorageOk = true;
+    let importedMedia = 0;
+    const importedComics: StoredComic[] = [];
 
     let processed = 0;
     setImporting({ done: 0, total: totalToAdd, label: "Adding" });
@@ -554,12 +556,13 @@ export function Player() {
         }));
         let savedItems: StoredComic[] = [];
         if (comicStorageOk) {
-          try { savedItems = await saveComicsFast(items); } catch { comicStorageOk = false; operationOk = false; }
+          try { savedItems = await saveComicsFast(items, isImportCurrent); } catch { comicStorageOk = false; operationOk = false; }
         }
         if (!isImportCurrent()) {
           if (savedItems.length) await deleteComics(savedItems.map((item) => item.id)).catch(() => {});
           return false;
         }
+        importedComics.push(...savedItems);
         if (savedItems.length) setComics((old) => [...old, ...savedItems.map(toComic)]);
         processed += items.length;
         setImporting({ done: processed, total: totalToAdd, label: "Adding" });
@@ -574,12 +577,13 @@ export function Player() {
       if (!isImportCurrent()) { setImporting(null); return false; }
       let savedItems: StoredLibraryItem[] = [];
       if (libraryStorageOk) {
-        try { savedItems = await saveLibraryFast(items); } catch { libraryStorageOk = false; operationOk = false; }
+        try { savedItems = await saveLibraryFast(items, isImportCurrent); } catch { libraryStorageOk = false; operationOk = false; }
       }
       if (!isImportCurrent()) {
         if (savedItems.length) await deleteTracks(savedItems.map((item) => item.id)).catch(() => {});
         return;
       }
+      importedMedia += savedItems.length;
       if (savedItems.length) setTracks((old) => [...old, ...savedItems.map(toTrack)]);
 
       // Enrich audio metadata in the background. This must not delay adding
@@ -605,7 +609,6 @@ export function Player() {
     };
     // Process files in parallel batches. Awaiting each file one by one makes
     // large libraries feel unnecessarily slow, especially when importing folders.
-    let importedMedia = 0;
     let importFailures = 0;
     const importBatchSize = 100;
     for (let start = 0; start < fresh.length; start += importBatchSize) {
@@ -620,7 +623,6 @@ export function Player() {
         else importFailures++;
       }
       batch.push(...items);
-      importedMedia += items.length;
       processed += results.length;
       setImporting({ done: processed, total: totalToAdd, label: "Adding" });
       await flush();
@@ -632,7 +634,7 @@ export function Player() {
     const parts = [
       importedMedia ? `${importedMedia} song${importedMedia === 1 ? "" : "s"}/video${importedMedia === 1 ? "" : "s"}` : "",
       ...(["books", "comics"] as const).map((shelf) => {
-        const n = freshComics.filter((e) => defaultShelf(comicFormatOf(e.file.name)) === shelf).length;
+        const n = importedComics.filter((item) => item.shelf === shelf).length;
         return n ? `${n} ${shelf === "books" ? "book" : "comic"}${n === 1 ? "" : "s"}` : "";
       }),
     ].filter(Boolean);
@@ -644,7 +646,7 @@ export function Player() {
     const failureNote = importFailures
       ? ` · ${importFailures} media file${importFailures === 1 ? "" : "s"} couldn't be imported`
       : "";
-    const storageNote = libraryStorageOk && comicStorageOk ? "" : ", but some items couldn't be saved for next time";
+    const storageNote = libraryStorageOk && comicStorageOk ? "" : " · Storage could not save all selected files. Free space and retry";
     if (!quiet || !operationOk) toast(`${what}${failureNote}${storageNote}${photoNote ? ` · ${photoNote}` : ""}`);
     return operationOk;
   }
