@@ -6,6 +6,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 const pwaURL = process.env.MUGEN_TEST_URL || 'http://127.0.0.1:4173/MUGEN/';
 const tvServer = await preview({ configFile: 'tizen/vite.config.js', preview: { host: '127.0.0.1', port: 4174, strictPort: true } });
 let browser;
+let activePage;
 try {
   let ready = false;
   for (let attempt = 0; attempt < 40; attempt++) {
@@ -16,10 +17,11 @@ try {
   browser = await chromium.launch({ headless: true });
   const context = await browser.newContext();
   const page = await context.newPage();
+  activePage = page;
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(pwaURL);
-  await page.locator('input[type=file]').first().waitFor({ state: 'attached' });
+  await page.locator('input[type=file][multiple]:not([webkitdirectory])').waitFor({ state: 'attached' });
   // Use the same File objects on retry so identity metadata remains unchanged.
   // Abort the second actual IndexedDB batch, rather than mocking the save result.
   await page.evaluate(() => {
@@ -37,7 +39,7 @@ try {
     window.__pickImportFiles = () => {
       const transfer = new DataTransfer();
       window.__importFiles.forEach(file => transfer.items.add(file));
-      const input = document.querySelector('input[type=file]:not([webkitdirectory])');
+      const input = document.querySelector('input[type=file][multiple]:not([webkitdirectory])');
       input.files = transfer.files;
       input.dispatchEvent(new Event('change', { bubbles: true }));
     };
@@ -65,7 +67,7 @@ try {
   await page.waitForFunction(() => document.querySelector('.toast')?.textContent.includes('already in your library'));
   assert.equal(await countSaved(), 305);
   await page.reload();
-  await page.locator('input[type=file]').first().waitFor({ state: 'attached' });
+  await page.locator('input[type=file][multiple]:not([webkitdirectory])').waitFor({ state: 'attached' });
   assert.equal(await countSaved(), 305);
   assert.deepEqual(errors, []);
   console.log('PASS PWA: quota abort saves 100, retry adds 205, repeat/reload preserves 305 without duplicates');
@@ -73,6 +75,7 @@ try {
 
   const tv = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
   const screen = await tv.newPage();
+  activePage = screen;
   await screen.route('**/webapis/webapis.js', route => route.fulfill({ contentType: 'text/javascript', body: '/* Samsung API supplied by the test harness. */' }));
   const tvErrors = [];
   screen.on('pageerror', error => tvErrors.push(error.message));
@@ -109,6 +112,13 @@ try {
   assert.deepEqual(tvErrors, []);
   console.log('PASS Tizen browser simulation: paging, video surface, late preparation, distinct media keys and D-pad Back');
   await tv.close();
+} catch (error) {
+  console.error('Browser test state:', await activePage?.evaluate(() => ({
+    url: location.href, toast: document.querySelector('.toast')?.textContent,
+    progress: document.querySelector('.importBar')?.textContent,
+    mediaWrites: window.__mediaWrites, body: document.body.innerText.slice(0, 4000),
+  })).catch(() => null));
+  throw error;
 } finally {
   if (browser) await browser.close();
   await new Promise(resolve => tvServer.httpServer.close(resolve));
