@@ -4,7 +4,7 @@ import { syntheticPcmWav } from './browser/media-fixtures.mjs';
 
 const url = process.env.MUGEN_TEST_URL || 'http://127.0.0.1:4173/MUGEN/';
 const browser = await chromium.launch({ headless: true });
-const context = await browser.newContext();
+const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 const page = await context.newPage();
 const errors = [];
 page.on('pageerror', error => errors.push(error.message));
