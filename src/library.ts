@@ -177,14 +177,14 @@ async function saveUniqueItems<T extends { id: string; path: string; size: numbe
 }
 
 
-export async function saveLibraryFast(items: StoredLibraryItem[]): Promise<StoredLibraryItem[]> {
+export async function saveLibraryFast(items: StoredLibraryItem[], shouldSave: () => boolean = () => true): Promise<StoredLibraryItem[]> {
   if (!items.length) return [];
-  return saveUniqueItems(STORE, items, (item) => JSON.stringify([item.path, item.size, item.lastModified]));
+  return saveUniqueItems(STORE, items, (item) => JSON.stringify([item.path, item.size, item.lastModified]), shouldSave);
 }
 
-export async function saveComicsFast(items: StoredComic[]): Promise<StoredComic[]> {
+export async function saveComicsFast(items: StoredComic[], shouldSave: () => boolean = () => true): Promise<StoredComic[]> {
   if (!items.length) return [];
-  return saveUniqueItems(COMICS, items, (item) => JSON.stringify([item.path, item.size, item.lastModified]));
+  return saveUniqueItems(COMICS, items, (item) => JSON.stringify([item.path, item.size, item.lastModified]), shouldSave);
 }
 
 export async function saveLibrary(items: StoredLibraryItem[]): Promise<StoredLibraryItem[]> {

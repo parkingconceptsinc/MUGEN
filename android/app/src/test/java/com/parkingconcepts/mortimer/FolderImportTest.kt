@@ -77,6 +77,38 @@ class FolderImportTest {
         assertEquals(listOf("Song.MP3"), itemsFromTree(context, tree, "audio").map { it.title })
     }
 
+    @Test fun largeFolderReportsProgressAndDoesNotStopAtOneHundredFiles() = runBlocking {
+        provider.rows["root"] = (1..305).map { arrayOf<Any>("song$it", "Song$it.mp3", "audio/mpeg", 10L) }
+        val progress = mutableListOf<Pair<Int, Int>>()
+        val result = itemsFromTree(context, tree, "audio", onProgress = { visited, found -> progress.add(visited to found) })
+        assertEquals(305, result.size)
+        assertEquals(305 to 305, progress.last())
+        assertTrue(progress.any { it.first == 100 })
+        assertTrue(progress.any { it.first == 200 })
+    }
+
+    @Test fun duplicateFileIdsAcrossFoldersAreOnlyReturnedOnce() = runBlocking {
+        val song = arrayOf<Any>("song", "Song.mp3", "audio/mpeg", 10L)
+        provider.rows["root"] = listOf(song, arrayOf("child", "Child", DocumentsContract.Document.MIME_TYPE_DIR, 0L))
+        provider.rows["child"] = listOf(song, song)
+        assertEquals(1, itemsFromTree(context, tree, "audio").size)
+    }
+
+    @Test fun limitsFailExplicitlyInsteadOfReturningTruncatedSuccessfulLibrary() {
+        provider.rows["root"] = (1..3).map { arrayOf<Any>("song$it", "Song$it.mp3", "audio/mpeg", 10L) }
+        assertThrows(IllegalStateException::class.java) { runBlocking { itemsFromTree(context, tree, "audio", maxResults = 2) } }
+        assertThrows(IllegalStateException::class.java) { runBlocking { itemsFromTree(context, tree, "audio", maxEntries = 2) } }
+    }
+
+    @Test fun cancellationFromProgressDoesNotReturnPartialFiles() {
+        provider.rows["root"] = (1..305).map { arrayOf<Any>("song$it", "Song$it.mp3", "audio/mpeg", 10L) }
+        assertThrows(CancellationException::class.java) { runBlocking {
+            itemsFromTree(context, tree, "audio", onProgress = { visited, _ ->
+                if (visited == 100) throw CancellationException("cancelled while scanning")
+            })
+        } }
+    }
+
     private class FolderProvider : ContentProvider() {
         val rows = mutableMapOf<String, List<Array<Any>>>()
         var queries = 0

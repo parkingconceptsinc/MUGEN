@@ -366,7 +366,11 @@ private fun MortimerApp(
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
         if (tree != null) {
             val kind = pickKind
-            startImport(kind) { itemsFromTree(context, tree, kind) }
+            startImport(kind) {
+                itemsFromTree(context, tree, kind, onProgress = { visited, found ->
+                    withContext(Dispatchers.Main) { importing = "Scanning $visited entries · $found compatible files found…" }
+                })
+            }
         }
     }
     fun addFiles(kind: String) {
