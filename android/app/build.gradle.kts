@@ -58,7 +58,14 @@ android {
         compose = true
         buildConfig = true
     }
-    testOptions { unitTests.isIncludeAndroidResources = true }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+        unitTests.all {
+            // Use Maven Central's canonical endpoint for Robolectric SDK jars.
+            // The default repo1 endpoint returned HTTP 429 on fresh CI runners.
+            it.systemProperty("robolectric.dependency.repo.url", "https://repo.maven.apache.org/maven2")
+        }
+    }
     sourceSets.getByName("test").resources.srcDir("../../shared/fixtures")
 }
 

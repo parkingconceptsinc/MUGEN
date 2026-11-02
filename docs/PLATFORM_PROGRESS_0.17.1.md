@@ -15,3 +15,7 @@ SAF safety limits are 250,000 visited entries, 25,000 compatible files and 64 di
 Tizen reference implementation follows Samsung's [AVPlay guide](https://developer.samsung.com/smarttv/develop/guides/multimedia/media-playback/using-avplay.html), [AVPlay API](https://developer.samsung.com/smarttv/develop/api-references/samsung-product-api-references/avplay-api.html), and [remote-control guide](https://developer.samsung.com/smarttv/develop/guides/user-interaction/remote-control.html).
 
 Next priorities: validate these checks in CI, run the same import/recovery cases on actual phones, add Tizen seek/resume/queue, validate USB removal/reconnection on the TV, and complete the safe PWA identity-index migration design. This delivery does not establish full parity or a production-ready TV release.
+
+## CI follow-up — 0.17.2
+
+The browser integration test now targets the multiple-media input instead of the subtitle picker. Android compilation succeeded, but 19 Robolectric cases could not start because repo1.maven.org returned HTTP 429 while fetching the Android 9 runtime JAR. Test JVMs now use Maven Central at repo.maven.apache.org. No tests are skipped. Shared release increments to 0.17.2 / Android code 1702; full CI and publication must confirm the result.
