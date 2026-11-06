@@ -25,7 +25,7 @@ class ProAudioProcessor : BaseAudioProcessor() {
     override fun onFlush(){
         partialCount=0
         if(inputAudioFormat.sampleRate !in 8000..192000||inputAudioFormat.channelCount !in 1..8){engine=null;configured=false;return}
-        engine=AudioDspEngine(inputAudioFormat.sampleRate,inputAudioFormat.channelCount);configured=true
+        engine=null;configured=true
     }
     override fun onReset(){engine=null;samples=FloatArray(0);raw=ByteArray(0);rawView=ByteBuffer.wrap(raw);partialCount=0;configured=false}
     override fun queueInput(inputBuffer:ByteBuffer){
@@ -37,11 +37,15 @@ class ProAudioProcessor : BaseAudioProcessor() {
         val complete=total/frameBytes*frameBytes;partialCount=total-complete
         raw.copyInto(partial,0,complete,total)
         if(complete==0)return
+        val out=replaceOutputBuffer(complete).order(ByteOrder.nativeOrder());val s=settings
+        // The default player must not run FFT/pitch/filter work and then discard
+        // its result. Pass complete PCM frames through unchanged when bypassed.
+        if(!s.enabled){engine=null;out.put(raw,0,complete);out.flip();return}
+        val dsp=engine ?: AudioDspEngine(inputAudioFormat.sampleRate,inputAudioFormat.channelCount).also { engine=it }
         val count=complete/2;if(samples.size<count)samples=FloatArray(count)
         rawView.clear();rawView.limit(complete);for(i in 0 until count)samples[i]=rawView.short/32768f
-        val out=replaceOutputBuffer(complete).order(ByteOrder.nativeOrder());val s=settings
-        engine?.process(samples,count,s)
-        if(!s.enabled)out.put(raw,0,complete) else for(i in 0 until count)out.putShort((samples[i]*32768f).toInt().coerceIn(-32768,32767).toShort())
+        dsp.process(samples,count,s)
+        for(i in 0 until count)out.putShort((samples[i]*32768f).toInt().coerceIn(-32768,32767).toShort())
         out.flip()
     }
 }

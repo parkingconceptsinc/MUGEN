@@ -1,36 +1,25 @@
 import type { StoredLibraryItem } from "./library";
 import { kindOf, stripExt } from "./util";
+import type { Tags } from "./metadataReader";
 
-type ParseBlob = typeof import("music-metadata").parseBlob;
-
-// Bump when tag reading improves; older library items get re-read in the background.
 export const META_VERSION = 3;
-
-let parser: Promise<ParseBlob | null> | null = null;
-const loadParser = () => (parser ??= import("music-metadata").then((m) => m.parseBlob).catch(() => null));
-
 export type Incoming = { file: File; path: string };
-export type Tags = Pick<StoredLibraryItem, "title" | "artist" | "album" | "albumArtist" | "genre" | "year" | "trackNo" | "duration" | "cover">;
+export type { Tags } from "./metadataReader";
 
-export async function readTags(file: Blob, name: string): Promise<Tags> {
-  const tags: Tags = { title: stripExt(name) };
-  const parseBlob = await loadParser();
-  if (!parseBlob) throw new Error("Metadata parser unavailable");
-  const { common, format } = await parseBlob(file);
-    tags.title = common.title || tags.title;
-    tags.artist = common.artist || common.artists?.[0] || "";
-    tags.album = common.album || "";
-    tags.albumArtist = common.albumartist || "";
-    tags.genre = common.genre?.[0] || "";
-    tags.year = common.year || undefined;
-    tags.trackNo = common.track?.no ?? undefined;
-    tags.duration = format.duration && Number.isFinite(format.duration) ? format.duration : undefined;
-  const picture = common.picture?.find((candidate) => {
-    const type = (candidate as { type?: unknown }).type;
-    return type === 3 || /front/i.test(String(type));
-  }) ?? common.picture?.find((candidate) => /cover/i.test(String((candidate as { type?: unknown }).type ?? ""))) ?? common.picture?.[0];
-  if (picture) tags.cover = new Blob([new Uint8Array(picture.data)], { type: picture.format });
-  return tags;
+// Parsing runs off the UI thread, with a bounded lifetime for malformed media.
+export function readTags(file: Blob, name: string): Promise<Tags> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL("./metadataWorker.ts", import.meta.url), { type: "module" });
+    const finish = () => { clearTimeout(timer); worker.terminate(); };
+    const timer = setTimeout(() => { finish(); reject(new Error("Metadata read timed out")); }, 15000);
+    worker.onmessage = (event: MessageEvent<{ tags?: Tags; error?: string }>) => {
+      finish();
+      if (event.data.tags) resolve(event.data.tags);
+      else reject(new Error(event.data.error || "Could not read metadata"));
+    };
+    worker.onerror = () => { finish(); reject(new Error("Metadata reader unavailable")); };
+    worker.postMessage({ file, name });
+  });
 }
 
 export async function readItem({ file, path }: Incoming, addedAt: number): Promise<StoredLibraryItem> {

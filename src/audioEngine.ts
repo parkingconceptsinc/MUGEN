@@ -116,7 +116,7 @@ export function initEngine(): boolean {
   if (graph) return true;
   const Ctor = window.AudioContext ?? (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
   if (!Ctor) return false;
-  graph = registerGraph(createAudioLabGraph(new Ctor(), latestEq, lab, bypass));
+  graph = registerGraph(createAudioLabGraph(new Ctor({ latencyHint: "playback" }), latestEq, lab, bypass));
   return true;
 }
 export function attachElement(el: HTMLMediaElement | null) {

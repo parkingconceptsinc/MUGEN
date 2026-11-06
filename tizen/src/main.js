@@ -1,5 +1,6 @@
 import { createPlaybackController } from "./playback.js";
 import { collectUsbMedia } from "./scan.js";
+import { nextFocus } from "./focus.js";
 
 const VERSION = __MUGEN_VERSION__;
 const VIDEO_EXTENSIONS = /\.(mp4|m4v|mkv|mov|webm|avi)$/i;
@@ -150,7 +151,7 @@ function paintFocus() {
 
 function navigate(view) {
   state.view = view;
-  state.active = 0;
+  state.active = Math.max(0, ["library", "music", "movies"].indexOf(view));
   if (["library", "music", "movies"].indexOf(view) >= 0) applyFilter();
   render();
 }
@@ -264,8 +265,7 @@ function onKeyDown(event) {
   }
   const nodes = focusables();
   if (!nodes.length) return;
-  if (key === "LEFT" || key === "UP") state.active = (state.active + nodes.length - 1) % nodes.length;
-  else if (key === "RIGHT" || key === "DOWN") state.active = (state.active + 1) % nodes.length;
+  if (["LEFT", "RIGHT", "UP", "DOWN"].indexOf(key) >= 0) state.active = nextFocus(nodes.map(node => node.getBoundingClientRect()), state.active, key);
   else if (key === "ENTER") activate(nodes[state.active]);
   else if (["BACK", "ESCAPE"].indexOf(key) >= 0 && state.view !== "home") navigate("home");
   paintFocus();
@@ -276,6 +276,13 @@ app.addEventListener("click", (event) => {
   if (!node) return;
   state.active = focusables().indexOf(node);
   activate(node);
+});
+app.addEventListener("focusin", (event) => {
+  const index = focusables().indexOf(event.target);
+  if (index >= 0) {
+    state.active = index;
+    focusables().forEach((node, position) => node.classList.toggle("focused", position === index));
+  }
 });
 document.addEventListener("keydown", onKeyDown);
 function stopHiddenPlayback() {
