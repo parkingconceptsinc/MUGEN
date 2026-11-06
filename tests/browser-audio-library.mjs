@@ -16,6 +16,13 @@ try {
     window.Worker = class extends WorkerBase {
       constructor(url, ...args) { super(url, ...args); if (String(url).includes('metadataWorker')) window.__metadataWorkers++; }
     };
+    if (sessionStorage.getItem('failQueueSave')) {
+      const setItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function(key, value) {
+        if (this === localStorage && key === 'mortimer:playbackQueue') throw new DOMException('Interrupted queue save', 'QuotaExceededError');
+        return setItem.call(this, key, value);
+      };
+    }
   });
   await page.goto(url);
   await page.getByText('Loading your library…', { exact: true }).waitFor({ state: 'hidden' });
@@ -34,13 +41,23 @@ try {
         tx.oncomplete = () => { db.close(); resolve(); };
       };
     });
-    for (const [key,value] of Object.entries({ queue:['copy','other'], qIndex:0, favorites:['copy2'], playlists:[{id:'list',name:'Saved',createdAt:1,trackIds:['copy','old']}], plays:{old:2,copy:3}, resume:{id:'copy',time:2} })) localStorage.setItem('mortimer:'+key,JSON.stringify(value));
+    localStorage.removeItem('mortimer:playbackQueue');
+    sessionStorage.setItem('failQueueSave','1');
+    for (const [key,value] of Object.entries({ queue:['copy','other','copy2','other'], qIndex:2, originalQueue:['copy','other','copy2','other'], favorites:['copy2','old'], playlists:[{id:'list',name:'Saved',createdAt:1,trackIds:['copy','other','old']}], plays:{old:2,copy:3}, resume:{id:'copy2',time:2} })) localStorage.setItem('mortimer:'+key,JSON.stringify(value));
   }, Array.from(wav));
   await page.reload();
   await page.waitForFunction(() => document.querySelector('.library .screenHeader')?.textContent.includes('2 songs') || document.querySelector('.library')?.textContent.includes('2 songs'));
-  const prefs = await page.evaluate(() => Object.fromEntries(['queue','favorites','playlists','plays','resume'].map(key => [key,JSON.parse(localStorage.getItem('mortimer:'+key))])));
-  assert.deepEqual(prefs.queue,['old','other']); assert.deepEqual(prefs.favorites,['old']);
-  assert.deepEqual(prefs.playlists[0].trackIds,['old']); assert.equal(prefs.plays.old,5); assert.equal(prefs.resume.id,'old');
+  assert.equal(await page.evaluate(() => localStorage.getItem('mortimer:playbackQueue')),null,'failed snapshot writes retain the legacy queue for recovery');
+  await page.evaluate(() => sessionStorage.removeItem('failQueueSave'));
+  await page.reload();
+  await page.getByText('Loading your library…',{exact:true}).waitFor({state:'hidden'});
+  const prefs = await page.evaluate(() => Object.fromEntries(['playbackQueue','originalQueue','favorites','playlists','plays','resume'].map(key => [key,JSON.parse(localStorage.getItem('mortimer:'+key))])));
+  assert.deepEqual(prefs.playbackQueue,{version:1,ids:['old','other','old','other'],index:2});
+  assert.deepEqual(prefs.originalQueue,['old','other','old','other']); assert.deepEqual(prefs.favorites,['old']);
+  assert.deepEqual(prefs.playlists[0].trackIds,['old','other','old']); assert.equal(prefs.plays.old,5); assert.equal(prefs.resume.id,'old');
+  await page.reload();
+  await page.getByText('Loading your library…',{exact:true}).waitFor({state:'hidden'});
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('mortimer:playbackQueue'))),prefs.playbackQueue,'a second startup keeps the selected repeated occurrence');
   const input = page.locator('input[type=file][multiple]:not([webkitdirectory])');
   await input.setInputFiles({ name:'Song.wav',mimeType:'audio/wav',buffer:wav });
   await page.waitForFunction(() => document.querySelector('.toast')?.textContent.includes('already in your library'));
@@ -58,6 +75,7 @@ try {
   await page.locator('.miniPlayer').getByRole('button',{name:'Play',exact:true}).click();
   await page.locator('.miniPlayer').getByRole('button',{name:'Next',exact:true}).click();
   await page.waitForFunction(() => {const a=document.querySelector('audio');return !a.paused && a.currentTime>.3;});
+  assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('mortimer:playbackQueue'))),{version:1,ids:['old','other','old','other'],index:3},'queue actions save order and index together');
   const before = await page.evaluate(() => ({ workers:window.__metadataWorkers,time:document.querySelector('audio').currentTime,src:document.querySelector('audio').src }));
   await input.setInputFiles(Array.from({length:8},(_,i)=>({name:`Added ${i}.wav`,mimeType:'audio/wav',buffer:wav})));
   await page.waitForFunction(() => document.querySelector('.toast')?.textContent.includes('8 songs/videos added'));
@@ -76,8 +94,9 @@ try {
   await page.reload();
   await page.getByText('Loading your library…',{exact:true}).waitFor({state:'hidden'});
   await page.waitForFunction(() => document.querySelector('.library')?.textContent.includes('10 songs'));
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('mortimer:playbackQueue')).index),3,'track selection survives another restart');
   assert.deepEqual(errors,[]);
-  console.log('PASS PWA audio/library: legacy copies collapse with saved references, homonyms survive, reimport stays unique, stale play errors are ignored, music advances during import/navigation, metadata waits and resumes');
+  console.log('PASS PWA audio/library: legacy copies collapse, playlist repeats/selected queue occurrence survive interrupted saves and restarts, homonyms survive, reimport stays unique, stale play errors are ignored, music advances during import/navigation, metadata waits and resumes');
 } catch(error) {
   console.error(await page.evaluate(() => ({body:document.body.innerText.slice(0,2500),workers:window.__metadataWorkers,audio:{paused:document.querySelector('audio')?.paused,time:document.querySelector('audio')?.currentTime,error:document.querySelector('audio')?.error?.message}})).catch(()=>null));
   throw error;

@@ -50,7 +50,13 @@ export function resolveAlias(id: string, aliases: Record<string, string>): strin
 }
 
 export function remapIds(ids: string[], aliases: Record<string, string>): string[] {
-  return [...new Set(ids.map(id => resolveAlias(id, aliases)))];
+  // Playlists and queues are sequences: two positions can intentionally point
+  // to the same file, including after aliases converge on a canonical record.
+  return ids.map(id => resolveAlias(id, aliases));
+}
+
+export function remapUniqueIds(ids: string[], aliases: Record<string, string>): string[] {
+  return [...new Set(remapIds(ids, aliases))];
 }
 
 export function remapNumbers(values: Record<string, number>, aliases: Record<string, string>, sum = false): Record<string, number> {

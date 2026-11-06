@@ -2,7 +2,7 @@ import { test, before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { indexedDB, IDBObjectStore } from 'fake-indexeddb';
 import { createServer } from 'vite';
-import { groupIdenticalFiles, sameFileBytes, remapIds, remapNumbers, resolveAlias } from '../src/fileIdentity.ts';
+import { groupIdenticalFiles, sameFileBytes, remapIds, remapUniqueIds, remapNumbers, resolveAlias } from '../src/fileIdentity.ts';
 
 let server, library;
 before(async () => {
@@ -78,7 +78,8 @@ test('legacy cleanup merges metadata, journals aliases and preserves distinct ho
   assert.equal(original.artist, 'Artist'); assert.equal(original.album, 'Album'); assert.equal(original.duration, 10);
   const aliases = await library.loadFileAliases();
   assert.deepEqual(aliases, { duplicate: 'old' });
-  assert.deepEqual(remapIds(['duplicate','other','old'], aliases), ['old','other']);
+  assert.deepEqual(remapIds(['duplicate','other','old'], aliases), ['old','other','old']);
+  assert.deepEqual(remapUniqueIds(['duplicate','other','old'], aliases), ['old','other']);
   assert.deepEqual(remapNumbers({ old: 2, duplicate: 3 }, aliases, true), { old: 5 });
   assert.deepEqual(remapNumbers({ old: 5, duplicate: 2 }, aliases), { old: 5 });
   assert.equal(resolveAlias('duplicate', aliases), 'old');

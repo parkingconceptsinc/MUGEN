@@ -91,6 +91,13 @@ try {
   });
   await screen.goto('http://127.0.0.1:4174/');
   await screen.locator('[data-view=movies]').click();
+  await screen.keyboard.press('ArrowUp');
+  assert.equal(await screen.evaluate(() => document.activeElement.dataset.view),'music','Up follows the rail');
+  await screen.keyboard.press('ArrowRight');
+  assert.ok(await screen.evaluate(() => document.activeElement.matches('.media-row')),'Right enters the media list');
+  const focusedRow = await screen.evaluate(() => Number(document.activeElement.dataset.item));
+  await screen.keyboard.press('ArrowDown');
+  assert.equal(await screen.evaluate(() => Number(document.activeElement.dataset.item)),focusedRow+1,'Down follows the next visible row');
   await screen.locator('[data-action=page][data-dir="1"]').click();
   assert.match(await screen.locator('.library-head').innerText(), /Page 2 \/ 3/);
   await screen.locator('.media-row').first().click();
@@ -111,7 +118,7 @@ try {
   await screen.locator('.media-list').waitFor();
   assert.match(await screen.locator('.library-head').innerText(), /Page 2 \/ 3/);
   assert.deepEqual(tvErrors, []);
-  console.log('PASS Tizen browser simulation: paging, video surface, late preparation, distinct media keys and D-pad Back');
+  console.log('PASS Tizen browser simulation: spatial D-pad navigation, paging, video surface, late preparation, distinct media keys and D-pad Back');
   await tv.close();
 } catch (error) {
   console.error('Browser test state:', await activePage?.evaluate(() => ({

@@ -14,7 +14,9 @@ import { ACCENTS, compareText, formatTime, shuffled, supported, toTrack } from "
 import { captureVideoFrame } from "./thumbnails";
 import { folderImportFailureMessage, getImportProgressPercent, recordFolderBatchOutcome, type FolderImportFailures } from "./importStatus";
 import { BackgroundWork } from "./backgroundWork";
-import { remapIds, remapNumbers, resolveAlias } from "./fileIdentity";
+import { remapIds, remapUniqueIds, remapNumbers, resolveAlias } from "./fileIdentity";
+import { restoreQueue } from "./playbackQueue";
+import { readPlaybackQueue, usePlaybackQueue } from "./usePlaybackQueue";
 import { MiniPlayer, TrackMenu } from "./components";
 import { Library } from "./screens/Library";
 import { NowPlaying } from "./screens/NowPlaying";
@@ -90,8 +92,7 @@ export function Player() {
   const [loaded, setLoaded] = useState(false);
   const [tracks, setTracks] = useState<Track[]>([]);
   const tracksLiveRef = useRef<Track[]>([]);
-  const [queue, setQueue] = usePref<string[]>("queue", []);
-  const [qIndex, setQIndex] = usePref("qIndex", 0);
+  const [queue, setQueue, qIndex, setQIndex] = usePlaybackQueue();
   const [originalQueue, setOriginalQueue] = usePref<string[] | null>("originalQueue", null);
   const [queueSource, setQueueSource] = usePref("queueSource", "");
   const [shuffle, setShuffle] = usePref("shuffle", false);
@@ -788,7 +789,7 @@ export function Player() {
       const before = queue.slice(0, qIndex).filter((id) => !gone.has(id)).length;
       setQIndex(Math.min(before, Math.max(0, nextQueue.length - 1)));
     } else {
-      setQIndex(Math.max(0, nextQueue.indexOf(currentId)));
+      setQIndex(queue.slice(0, qIndex).filter(id => !gone.has(id)).length);
     }
     setQueue(nextQueue);
     setOriginalQueue((q) => q && q.filter((id) => !gone.has(id)));
@@ -1397,7 +1398,7 @@ export function Player() {
       if (cancelled) return;
       const aliases = await loadFileAliases();
       if (cancelled) return;
-      setFavoritesList(ids => remapIds(ids, aliases));
+      setFavoritesList(ids => remapUniqueIds(ids, aliases));
       setOriginalQueue(ids => ids ? remapIds(ids, aliases) : null);
       setPlaylists(lists => lists.map(list => ({ ...list, trackIds: remapIds(list.trackIds, aliases) })));
       setPlays(values => remapNumbers(values, aliases, true));
@@ -1415,11 +1416,8 @@ export function Player() {
         toast("Some saved music items could not be restored; their files remain in local storage");
       }
       const ids = new Set(restored.map((t) => t.id));
-      const savedQueue = readPref<string[]>("queue", []);
-      const savedIndex = readPref("qIndex", 0);
-      const currentId = resolveAlias(savedQueue[savedIndex] ?? "", aliases);
-      const kept = remapIds(savedQueue, aliases).filter((id) => ids.has(id));
-      const index = Math.max(0, kept.indexOf(currentId));
+      const saved = readPlaybackQueue();
+      const { ids: kept, index } = restoreQueue(saved.ids, saved.index, aliases, ids);
       const resume = readPref<{ id: string; time: number } | null>("resume", null);
       if (resume) { resume.id = resolveAlias(resume.id, aliases); writePref("resume", resume); }
       if (readPref("resumePosition", true) && resume && resume.id === kept[index]) pendingSeek.current = resume.time;
