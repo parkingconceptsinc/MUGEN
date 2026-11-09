@@ -4,17 +4,17 @@ import { folderImportFailureMessage, getImportProgressPercent, recordFolderBatch
 
 test('a partially failed 100-file folder batch is reported as one failed batch, not 100 failed files', () => {
   const result = recordFolderBatchOutcome(
-    { files: 0, batches: 0 },
+    { files: 0, batches: 0, folders: 0 },
     { fileReadFailures: 0, incomingCount: 100, importSucceeded: false },
   );
 
-  assert.deepEqual(result, { files: 0, batches: 1 });
-  assert.equal(folderImportFailureMessage(result), 'Folder import finished with 1 batch could not be fully imported. Check storage and retry affected items.');
+  assert.deepEqual(result, { files: 0, batches: 1, folders: 0 });
+  assert.match(folderImportFailureMessage(result), /1 incomplete batch/);
 });
 
 test('folder import counts actual file-read failures separately from an import batch warning', () => {
   const first = recordFolderBatchOutcome(
-    { files: 0, batches: 0 },
+    { files: 0, batches: 0, folders: 1 },
     { fileReadFailures: 2, incomingCount: 98, importSucceeded: false },
   );
   const result = recordFolderBatchOutcome(
@@ -22,9 +22,9 @@ test('folder import counts actual file-read failures separately from an import b
     { fileReadFailures: 0, incomingCount: 0, importSucceeded: true },
   );
 
-  assert.deepEqual(result, { files: 2, batches: 1 });
-  assert.equal(folderImportFailureMessage(result), 'Folder import finished with 2 file read errors and 1 batch could not be fully imported. Check storage and retry affected items.');
-  assert.equal(folderImportFailureMessage({ files: 0, batches: 0 }), null);
+  assert.deepEqual(result, { files: 2, batches: 1, folders: 1 });
+  assert.match(folderImportFailureMessage(result), /1 unreadable folder, 2 file read errors, 1 incomplete batch/);
+  assert.equal(folderImportFailureMessage({ files: 0, batches: 0, folders: 0 }), null);
 });
 
 test('unknown totals stay indeterminate while known totals produce a bounded percentage', () => {

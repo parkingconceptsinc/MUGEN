@@ -92,11 +92,26 @@ test('an aborted cleanup leaves both originals and the alias journal unchanged',
     if (this.name === 'aliases') { this.transaction.abort(); return; }
     return put.apply(this, args);
   };
-  try { await assert.rejects(library.loadLibrary()); }
+  try {
+    await assert.rejects(library.loadLibrary());
+    let warned = false;
+    const available = await library.loadLibrary(() => { warned = true; });
+    assert.equal(available.length, 2, 'the library opens even if optional cleanup fails');
+    assert.ok(warned);
+  }
   finally { IDBObjectStore.prototype.put = put; }
   assert.equal((await records()).length, 2);
   assert.equal((await records('aliases')).length, 0);
   assert.equal((await library.loadLibrary()).length, 1);
+});
+test('reopening a repaired library does not reread distinct files with identical names and sizes', async () => {
+  await seedLegacy([item('old', 'abcd', { addedAt: 1 }), item('other', 'abce', { addedAt: 2 }), item('duplicate', 'abcd', { addedAt: 3 })]);
+  assert.equal((await library.loadLibrary()).length, 2);
+  const slice = Blob.prototype.slice;
+  Blob.prototype.slice = () => { throw new Error('Reopening must skip byte comparisons'); };
+  try { assert.equal((await library.loadLibrary()).length, 2); }
+  finally { Blob.prototype.slice = slice; }
+  assert.equal(await (await library.loadTrackFile('old')).text(), 'abcd');
 });
 test('cancelled imports cannot write, failed batches retry without duplicate records', async () => {
   assert.equal((await library.saveLibraryFast([item('cancel')], () => false)).length, 0);

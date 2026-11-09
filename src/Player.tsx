@@ -5,7 +5,7 @@ import { BookOpen, Clapperboard, Disc3, Download, FilePlus, FolderOpen, Library 
 import { applyAudio, attachElement, connectAudioLabNode, EQ_PRESETS, getAudioLabSettings, initEngine, resumeEngine, subscribeAudioLab } from "./audioEngine";
 import { decodeAudioTrack, type DecodedAudio } from "./codecAudioDecoder";
 import { PlayerContext, ProgressContext, type Actions, type MenuTarget, type PlayerState, type SleepState } from "./context";
-import { clearLibrary as clearStoredLibrary, deleteComics, deleteTracks, loadComics, loadLibrary, loadFileAliases, patchComic, patchTrack, saveComicsFast, saveLibraryFast, type StoredComic, type StoredLibraryItem } from "./library";
+import { clearLibrary as clearStoredLibrary, deleteComics, deleteTracks, loadComics, loadLibrary, loadFileAliases, loadTrackFile, patchComic, patchTrack, saveComicsFast, saveLibraryFast, type StoredComic, type StoredLibraryItem } from "./library";
 import { comicFormatOf, defaultShelf, isComicFile, isTextFormat, makeThumbnail, openComic, toComic } from "./comics";
 import { META_VERSION, readItem, readTags, type Incoming } from "./metadata";
 import { readPref, usePref, writePref } from "./prefs";
@@ -605,10 +605,10 @@ export function Player() {
         else importFailures++;
       }
       batch.push(...items);
-      processed += results.length;
-      setImporting({ done: processed, total: totalToAdd, label: "Adding" });
       await flush();
       if (!isImportCurrent()) { setImporting(null); return false; }
+      processed += results.length;
+      setImporting({ done: processed, total: totalToAdd, label: "Adding" });
     }
     await flush();
     if (!isImportCurrent()) { setImporting(null); return false; }
@@ -662,9 +662,11 @@ export function Player() {
   }
 
   async function importFolder() {
+    if (!loaded) { toast("Please wait for the saved library to finish opening"); return; }
+    if (importing) return;
     const pickerHost = window as Window & { showDirectoryPicker?: (options?: { mode?: "read" }) => Promise<DirectoryHandleLike> };
     if (!pickerHost.showDirectoryPicker) {
-      setImporting({ done: 0, total: 0, label: "Android is preparing the folder…" });
+      setImporting({ done: 0, total: 0, label: "Preparing the selected folder…" });
       folderInput.current?.click();
       return;
     }
@@ -675,9 +677,9 @@ export function Player() {
       // Stream files to storage as the tree is walked instead of waiting for a
       // complete scan. This makes the first batch save quickly on large libraries.
       const batch: Array<{ file: () => Promise<File>; path: string }> = [];
-      const batchSize = 100;
+      let batchSize = 16;
       let visitedEntries = 0;
-      let failures: FolderImportFailures = { files: 0, batches: 0 };
+      let failures: FolderImportFailures = { files: 0, batches: 0, folders: 0 };
       let supportedFound = 0;
       const flush = async () => {
         if (!scanIsCurrent()) {
@@ -686,12 +688,16 @@ export function Player() {
         }
         if (!batch.length) return;
         const current = batch.splice(0, batch.length);
-        const results = await Promise.allSettled(current.map(async ({ file, path }) => ({ file: await file(), path })));
+        batchSize = 64;
         const incoming: Incoming[] = [];
         let fileReadFailures = 0;
-        for (const result of results) {
-          if (result.status === "fulfilled") incoming.push(result.value);
-          else fileReadFailures++;
+        for (let offset = 0; offset < current.length; offset += 8) {
+          if (!scanIsCurrent()) return;
+          const results = await Promise.allSettled(current.slice(offset, offset + 8).map(async ({ file, path }) => ({ file: await file(), path })));
+          for (const result of results) {
+            if (result.status === "fulfilled") incoming.push(result.value);
+            else fileReadFailures++;
+          }
         }
         if (!scanIsCurrent()) return;
         const importSucceeded = incoming.length
@@ -706,8 +712,15 @@ export function Player() {
         setImporting({ done: visitedEntries, total: 0, label: `Scanning and saving · ${supportedFound} supported files found` });
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       };
+      async function* readDirectory(dir: DirectoryHandleLike) {
+        try {
+          yield* dir.values();
+        } catch {
+          failures.folders++;
+        }
+      }
       const walk = async (dir: DirectoryHandleLike, prefix: string): Promise<void> => {
-        for await (const entry of dir.values()) {
+        for await (const entry of readDirectory(dir)) {
           if (!scanIsCurrent()) return;
           const path = `${prefix}/${entry.name}`;
           if (entry.kind === "file") {
@@ -1086,7 +1099,10 @@ export function Player() {
       })();
     },
     importFolder: () => void importFolder(),
-    importFiles: () => fileInput.current?.click(),
+    importFiles: () => {
+      if (loaded) fileInput.current?.click();
+      else toast("Please wait for the saved library to finish opening");
+    },
     setSleep(minutes) {
       if (minutes === null) {
         setSleepState({ endsAt: null, endOfTrack: false });
@@ -1393,8 +1409,17 @@ export function Player() {
   }, []);
 
   useEffect(() => {
+    const input = folderInput.current;
+    const onCancel = () => setImporting(null);
+    input?.addEventListener("cancel", onCancel);
+    return () => input?.removeEventListener("cancel", onCancel);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
-    const restoreMusic = loadLibrary().then(async (stored) => {
+    let repairFailed = false;
+    const reportRepairFailure = () => { repairFailed = true; };
+    const restoreMusic = loadLibrary(reportRepairFailure).then(async (stored) => {
       if (cancelled) return;
       const aliases = await loadFileAliases();
       if (cancelled) return;
@@ -1427,7 +1452,7 @@ export function Player() {
     }).catch(() => {
       if (!cancelled) toast("Local music storage is unavailable in this browser");
     });
-    const restoreBooks = loadComics().then(async (stored) => {
+    const restoreBooks = loadComics(reportRepairFailure).then(async (stored) => {
       const aliases = await loadFileAliases();
       if (!cancelled) {
         const restoredBooks = stored.flatMap((item) => {
@@ -1455,7 +1480,9 @@ export function Player() {
       if (!cancelled) toast("Local books and comics storage is unavailable in this browser");
     });
     Promise.allSettled([restoreMusic, restoreBooks]).finally(() => {
-      if (!cancelled) setLoaded(true);
+      if (cancelled) return;
+      setLoaded(true);
+      if (repairFailed) toast("Saved files opened. Duplicate cleanup could not finish and will retry on restart.");
     });
     return () => { cancelled = true; };
   }, []);
@@ -1638,9 +1665,9 @@ export function Player() {
     if (!stale.length) return;
     for (const track of stale) enqueueMetadata(async () => {
       if (!tracksLiveRef.current.some(live => live.id === track.id)) return;
-      const response = await fetch(track.url);
-      if (!response.ok) return;
-      const tags = await readTags(await response.blob(), track.name);
+      const file = await loadTrackFile(track.id);
+      if (!file) return;
+      const tags = await readTags(file, track.name);
       if (!tracksLiveRef.current.some(live => live.id === track.id)) return;
       const patch = Object.fromEntries(Object.entries({ ...tags, metaVersion: META_VERSION }).filter(([, value]) => value !== undefined));
       await patchTrack(track.id, patch);

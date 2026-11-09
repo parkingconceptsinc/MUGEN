@@ -72,6 +72,40 @@ try {
   assert.equal(await countSaved(), 305);
   assert.deepEqual(errors, []);
   console.log('PASS PWA: quota abort saves 100, retry adds 205, repeat/reload preserves 305 without duplicates');
+  await page.getByText('Loading your library…', { exact: true }).waitFor({ state: 'hidden' });
+  const addFolder = page.locator('.library').getByRole('button', { name: 'Add folder', exact: true });
+  await page.evaluate(() => {
+    window.showDirectoryPicker = undefined;
+    document.querySelector('input[webkitdirectory]').click = () => {};
+  });
+  await addFolder.click();
+  await page.getByText('Preparing the selected folder…').waitFor();
+  await page.locator('input[webkitdirectory]').dispatchEvent('cancel');
+  await page.getByText('Preparing the selected folder…').waitFor({ state: 'hidden' });
+  await page.evaluate(() => {
+    const file = (name, unreadable = false) => ({ kind: 'file', name, async getFile() {
+      if (unreadable) throw new DOMException('File removed', 'NotFoundError');
+      return new File([new Uint8Array(64)], name, { type: 'audio/mpeg' });
+    } });
+    window.showDirectoryPicker = async () => ({ name: 'Collection', async *values() {
+      for (let i = 0; i < 16; i++) yield file(`Early folder track ${i}.mp3`);
+      await new Promise(resolve => { window.__continueFolderScan = resolve; });
+      yield { kind: 'directory', name: 'Disconnected', async *values() { throw new DOMException('Access lost', 'NotReadableError'); } };
+      yield file('Unreadable track.mp3', true);
+      yield file('Track from remaining folder.mp3');
+    } });
+  });
+  await addFolder.click();
+  await page.waitForFunction(() => typeof window.__continueFolderScan === 'function');
+  assert.equal(await countSaved(), 321, 'first 16 files are persisted before folder enumeration finishes');
+  await page.evaluate(() => window.__continueFolderScan());
+  await page.waitForFunction(() => document.querySelector('.toast')?.textContent.includes('1 unreadable folder, 1 file read error'));
+  assert.equal(await countSaved(), 322, 'readable files after an inaccessible folder and file are still saved');
+  await page.reload();
+  await page.getByText('Loading your library…', { exact: true }).waitFor({ state: 'hidden' });
+  assert.equal(await countSaved(), 322);
+  assert.deepEqual(errors, []);
+  console.log('PASS PWA: first folder batch saves early and unreadable entries do not stop later files');
   await context.close();
 
   const tv = await browser.newContext({ viewport: { width: 1920, height: 1080 } });

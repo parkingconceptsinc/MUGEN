@@ -77,22 +77,30 @@ const DB_NAME = "mortimer-player";
 const STORE = "library";
 const COMICS = "comics";
 const PHOTOS = "photos";
-const VERSION = 6;
+const VERSION = 7;
 const CANDIDATE_INDEX = "nameSize";
 const ALIASES = "aliases";
 const IDENTITY_INDEX = "identity";
+const REPAIRS = "contentRepairs";
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, VERSION);
     let settled = false;
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const db = request.result;
       const tx = request.transaction!;
       if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: "id" });
       if (!db.objectStoreNames.contains(COMICS)) db.createObjectStore(COMICS, { keyPath: "id" });
       if (!db.objectStoreNames.contains(PHOTOS)) db.createObjectStore(PHOTOS, { keyPath: "id" });
       if (!db.objectStoreNames.contains(ALIASES)) db.createObjectStore(ALIASES, { keyPath: "id" });
+      if (!db.objectStoreNames.contains(REPAIRS)) {
+        const repairs = db.createObjectStore(REPAIRS);
+        if (!event.oldVersion) {
+          repairs.put(true, STORE);
+          repairs.put(true, COMICS);
+        }
+      }
       // A compound index lets imports check file identity without getAll() and
       // without rewriting existing records/large video Blobs during migration.
       for (const name of [STORE, COMICS, PHOTOS]) {
@@ -122,7 +130,7 @@ function openDB(): Promise<IDBDatabase> {
     request.onblocked = () => {
       if (settled) return;
       settled = true;
-      reject(new Error("Local library storage is blocked by another open tab. Close other Mortimer tabs and retry."));
+      reject(new Error("Local library storage is blocked by another open tab. Close other MUGEN tabs and retry."));
     };
   });
 }
@@ -259,41 +267,65 @@ async function saveContentUniqueItems<T extends FileRecord>(storeName: string, i
   throw new Error("The library is changing in another tab. Close that tab and retry.");
 }
 
-// Alias records and cleanup commit together. If the app closes before preferences
-// are remapped, the next launch can still recover every old ID from this journal.
-async function repairContentDuplicates<T extends FileRecord>(storeName: string): Promise<T[]> {
-  const snapshot = (await withStore<T[]>("readonly", store => store.getAll(), storeName)) ?? [];
+async function loadContentItems<T extends FileRecord>(storeName: string, onRepairError?: () => void): Promise<T[]> {
+  const db = await openDB();
+  let initial: { items: T[]; repaired: boolean };
+  try {
+    initial = await new Promise((resolve, reject) => {
+      const tx = db.transaction([storeName, REPAIRS]);
+      const items = tx.objectStore(storeName).getAll();
+      const repaired = tx.objectStore(REPAIRS).get(storeName);
+      tx.oncomplete = () => resolve({ items: items.result, repaired: repaired.result === true });
+      tx.onabort = tx.onerror = () => reject(tx.error ?? new Error("Could not open saved files"));
+    });
+  } finally { db.close(); }
+  if (initial.repaired) return initial.items;
+  try {
+    return await repairContentDuplicates(storeName, initial.items);
+  } catch (error) {
+    if (!onRepairError) throw error;
+    onRepairError();
+    return initial.items;
+  }
+}
+
+// Imported files are already checked by content. Only upgraded libraries need
+// repair. The marker, aliases and deletions must survive or roll back together.
+async function repairContentDuplicates<T extends FileRecord>(storeName: string, snapshot: T[]): Promise<T[]> {
   const groups = (await groupIdenticalFiles(snapshot)).filter(group => group.length > 1);
-  if (!groups.length) return snapshot;
   const db = await openDB();
   try {
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction([storeName, ALIASES], "readwrite");
+    const reload = await new Promise<boolean>((resolve, reject) => {
+      const tx = db.transaction([storeName, ALIASES, REPAIRS], "readwrite");
       const store = tx.objectStore(storeName);
-      for (const group of groups) {
-        const live: T[] = [];
-        let remaining = group.length;
-        for (const item of group) {
-          const request = store.get(item.id);
-          request.onsuccess = () => {
-            if (request.result) live.push(request.result);
-            if (--remaining || !live.length) return;
-            // Use the planned canonical ID, retaining metadata patched since the read.
-            live.sort((a, b) => group.findIndex(item => item.id === a.id) - group.findIndex(item => item.id === b.id));
-            try {
-              const keep = mergeFileRecords(live);
-              store.put(keep);
-              for (const drop of live.slice(1)) {
-                tx.objectStore(ALIASES).put({ id: drop.id, canonicalId: keep.id, storeName });
-                store.delete(drop.id);
-              }
-            } catch { try { tx.abort(); } catch {} }
-          };
+      const repairs = tx.objectStore(REPAIRS);
+      const completed = repairs.get(storeName);
+      completed.onsuccess = () => {
+        if (completed.result === true) return;
+        for (const group of groups) {
+          const live: T[] = [];
+          group.forEach((item, index) => {
+            const request = store.get(item.id);
+            request.onsuccess = () => {
+              if (request.result) live.push(request.result);
+              if (index !== group.length - 1 || live.length < 2) return;
+              try {
+                const keep = mergeFileRecords(live);
+                store.put(keep);
+                for (const drop of live.slice(1)) {
+                  tx.objectStore(ALIASES).put({ id: drop.id, canonicalId: keep.id, storeName });
+                  store.delete(drop.id);
+                }
+              } catch { try { tx.abort(); } catch {} }
+            };
+          });
         }
-      }
-      tx.oncomplete = () => resolve();
+        repairs.put(true, storeName);
+      };
+      tx.oncomplete = () => resolve(groups.length > 0 || completed.result === true);
       tx.onabort = tx.onerror = () => reject(tx.error ?? new Error("Duplicate cleanup aborted"));
     });
+    if (!reload) return snapshot;
   } finally { db.close(); }
   return (await withStore<T[]>("readonly", store => store.getAll(), storeName)) ?? [];
 }
@@ -319,8 +351,13 @@ export async function saveLibrary(items: StoredLibraryItem[]): Promise<StoredLib
   return saveContentUniqueItems(STORE, items, () => true);
 }
 
-export async function loadLibrary(): Promise<StoredLibraryItem[]> {
-  return repairContentDuplicates<StoredLibraryItem>(STORE);
+export async function loadLibrary(onRepairError?: () => void): Promise<StoredLibraryItem[]> {
+  return loadContentItems<StoredLibraryItem>(STORE, onRepairError);
+}
+
+export async function loadTrackFile(id: string): Promise<Blob | undefined> {
+  const item = await withStore<StoredLibraryItem | undefined>("readonly", (store) => store.get(id));
+  return item?.file;
 }
 
 export async function deleteTracks(ids: string[]) {
@@ -367,8 +404,8 @@ export async function saveComics(items: StoredComic[]): Promise<StoredComic[]> {
   return saveContentUniqueItems(COMICS, items, () => true);
 }
 
-export async function loadComics(): Promise<StoredComic[]> {
-  return repairContentDuplicates<StoredComic>(COMICS);
+export async function loadComics(onRepairError?: () => void): Promise<StoredComic[]> {
+  return loadContentItems<StoredComic>(COMICS, onRepairError);
 }
 
 export async function deleteComics(ids: string[]) {

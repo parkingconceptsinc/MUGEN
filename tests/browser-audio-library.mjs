@@ -24,13 +24,20 @@ try {
       };
     }
   });
-  await page.goto(url);
-  await page.getByText('Loading your library…', { exact: true }).waitFor({ state: 'hidden' });
+  const fixtureURL = new URL('legacy-library-fixture', url).href;
+  await page.route(fixtureURL, route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><title>Legacy library fixture</title>' }));
+  await page.goto(fixtureURL);
   await page.evaluate(async bytes => {
     const file = new Blob([new Uint8Array(bytes)], { type: 'audio/wav' });
     const other = new Uint8Array(bytes); other[other.length-1] ^= 1;
     await new Promise((resolve, reject) => {
-      const request = indexedDB.open('mortimer-player');
+      const request = indexedDB.open('mortimer-player', 5);
+      request.onupgradeneeded = () => {
+        for (const name of ['library', 'comics', 'photos']) {
+          const store = request.result.createObjectStore(name, { keyPath: 'id' });
+          store.createIndex('identity', ['path', 'size', 'lastModified']);
+        }
+      };
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
         const db = request.result, tx = db.transaction('library', 'readwrite'), store = tx.objectStore('library');
@@ -45,7 +52,7 @@ try {
     sessionStorage.setItem('failQueueSave','1');
     for (const [key,value] of Object.entries({ queue:['copy','other','copy2','other'], qIndex:2, originalQueue:['copy','other','copy2','other'], favorites:['copy2','old'], playlists:[{id:'list',name:'Saved',createdAt:1,trackIds:['copy','other','old']}], plays:{old:2,copy:3}, resume:{id:'copy2',time:2} })) localStorage.setItem('mortimer:'+key,JSON.stringify(value));
   }, Array.from(wav));
-  await page.reload();
+  await page.goto(url);
   await page.waitForFunction(() => document.querySelector('.library .screenHeader')?.textContent.includes('2 songs') || document.querySelector('.library')?.textContent.includes('2 songs'));
   assert.equal(await page.evaluate(() => localStorage.getItem('mortimer:playbackQueue')),null,'failed snapshot writes retain the legacy queue for recovery');
   await page.evaluate(() => sessionStorage.removeItem('failQueueSave'));

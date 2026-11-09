@@ -1,6 +1,7 @@
 export type FolderImportFailures = {
   files: number;
   batches: number;
+  folders: number;
 };
 
 export function recordFolderBatchOutcome(
@@ -15,18 +16,20 @@ export function recordFolderBatchOutcome(
     : 0;
 
   return {
+    ...failures,
     files: failures.files + fileReadFailures,
     batches: failures.batches + (incomingCount > 0 && !options.importSucceeded ? 1 : 0),
   };
 }
 
 export function folderImportFailureMessage(failures: FolderImportFailures): string | null {
-  if (failures.files === 0 && failures.batches === 0) return null;
+  if (failures.files === 0 && failures.batches === 0 && failures.folders === 0) return null;
   const parts = [
+    failures.folders ? `${failures.folders} unreadable folder${failures.folders === 1 ? "" : "s"}` : "",
     failures.files ? `${failures.files} file read error${failures.files === 1 ? "" : "s"}` : "",
-    failures.batches ? `${failures.batches} batch${failures.batches === 1 ? "" : "es"} could not be fully imported` : "",
+    failures.batches ? `${failures.batches} incomplete batch${failures.batches === 1 ? "" : "es"}` : "",
   ].filter(Boolean);
-  return `Folder import finished with ${parts.join(" and ")}. Check storage and retry affected items.`;
+  return `Folder import finished with ${parts.join(", ")}. Check folder access and storage, then retry affected items.`;
 }
 
 export function getImportProgressPercent(done: number, total: number): number | null {
