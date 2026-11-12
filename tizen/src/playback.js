@@ -54,8 +54,8 @@ export function createPlaybackController(avplay, onChange) {
           // A delayed callback from a previous opening has no effect.
           if (Number.isFinite(resumeAtMs) && resumeAtMs >= 1000 && typeof avplay.seekTo === "function") {
             const duration = Number(typeof avplay.getDuration === "function" ? avplay.getDuration() : 0);
-            const resume = Math.min(Math.floor(resumeAtMs), duration - 3000);
-            if (Number.isFinite(duration) && duration > 0 && resume >= 1000) {
+            const resume = Math.floor(resumeAtMs);
+            if (Number.isFinite(duration) && duration > 0 && resume >= 1000 && resume < duration - 3000) {
               avplay.seekTo(resume,
                 () => { if (current()) onChange({ status, message: "Resumed previous position." }); },
                 () => { if (current()) publish(status, "Playback started. Automatic resume is unavailable for this file."); });
