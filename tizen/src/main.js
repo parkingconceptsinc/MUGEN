@@ -1,10 +1,13 @@
 import { createPlaybackController } from "./playback.js";
+import { createPlaybackBookmarks } from "./bookmarks.js";
 import { collectUsbMedia } from "./scan.js";
 import { nextFocus } from "./focus.js";
 
 const VERSION = __MUGEN_VERSION__;
 const VIDEO_EXTENSIONS = /\.(mp4|m4v|mkv|mov|webm|avi)$/i;
 const STORE_KEY = "mugen.tv.library.v1";
+const bookmarks = createPlaybackBookmarks(window.localStorage);
+let lastVideoCheckpointAt = 0;
 const PAGE_SIZE = 12;
 const app = document.querySelector("#app");
 
@@ -28,6 +31,7 @@ const state = {
 };
 
 const playback = createPlaybackController(window.webapis && window.webapis.avplay, (update) => {
+  if (update.status === "ended" && state.current) bookmarks.clear(state.current.path);
   state.playerStatus = update.status;
   state.playing = update.status === "playing";
   state.message = update.message;
@@ -156,14 +160,22 @@ function navigate(view) {
   render();
 }
 
+function checkpointPosition() {
+  if (!state.current || !["playing", "paused", "ready"].includes(playback.getStatus())) return;
+  const { position, duration } = playback.getTimeline();
+  if (duration > 0) bookmarks.set(state.current.path, position, duration);
+}
+
 function play(item) {
   if (!item) return;
   if (state.view !== "player") {
     state.returnView = state.view;
     state.returnFocus = state.active;
   }
+  checkpointPosition();
   state.current = item;
-  state.message = "Opening " + item.name + "…";
+  const resumeAt = bookmarks.get(item.path);
+  state.message = resumeAt ? "Resuming " + item.name + "…" : "Opening " + item.name + "…";
   state.playerStatus = "loading";
   state.playing = false;
   state.view = "player";
@@ -173,10 +185,11 @@ function play(item) {
   const rect = document.querySelector(".player-stage").getBoundingClientRect();
   const ratio = 1920 / document.documentElement.clientWidth;
   playback.open(item.path, { x: Math.round(rect.left * ratio), y: Math.round(rect.top * ratio),
-    width: Math.round(rect.width * ratio), height: Math.round(rect.height * ratio) });
+    width: Math.round(rect.width * ratio), height: Math.round(rect.height * ratio) }, resumeAt);
 }
 
 function closePlayer() {
+  checkpointPosition();
   playback.close();
   state.playing = false;
   state.playerStatus = "idle";
@@ -297,10 +310,18 @@ app.addEventListener("focusin", (event) => {
 });
 document.addEventListener("keydown", onKeyDown);
 // Update the timeline without rebuilding the remote-focus DOM on every tick.
-setInterval(() => { if (state.view === "player" && !document.hidden) paintPlayerStatus(); }, 500);
+setInterval(() => {
+  if (state.view !== "player" || document.hidden) return;
+  paintPlayerStatus();
+  if (Date.now() - lastVideoCheckpointAt >= 5000) {
+    checkpointPosition();
+    lastVideoCheckpointAt = Date.now();
+  }
+}, 500);
 
 function stopHiddenPlayback() {
   state.scanCancelled = true;
+  checkpointPosition();
   playback.close();
   if (state.view === "player") {
     state.playing = false;
