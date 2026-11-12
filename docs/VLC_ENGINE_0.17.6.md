@@ -32,3 +32,7 @@ LibVLC is a VideoLAN component distributed under LGPL-2.1-or-later terms. Before
 ## Tizen TV timeline controls
 
 The Samsung AVPlay adapter now exposes a state-checked duration/current-position timeline and bounded ±10-second seeks from on-screen buttons or supported remote media keys. In-flight callbacks from previous videos are ignored. This remains subject to Tizen firmware/codec support and physical remote testing.
+
+## Storage permission minimization
+
+The unused Android all-files-access permission (`MANAGE_EXTERNAL_STORAGE`) has been removed. Imported media is read using Storage Access Framework grants and file descriptors. The app does not require global storage privileges to play imported files.
