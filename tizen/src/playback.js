@@ -70,6 +70,31 @@ export function createPlaybackController(avplay, onChange) {
       publish(status, "Playback control failed: " + String(error && error.message || error));
     }
   }
-  return { open, close: release, setPlaying, getStatus: () => status,
+  // AVPlay supports seeking only after the decoder has reached READY.
+  // A stale async seek callback must never mutate a subsequent playback session.
+  function getTimeline() {
+    if (!avplay || !["ready", "playing", "paused"].includes(status)) return { position: 0, duration: 0 };
+    try {
+      const duration = Number(avplay.getDuration());
+      const position = Number(avplay.getCurrentTime());
+      return { position: Number.isFinite(position) ? Math.max(0, position) : 0,
+        duration: Number.isFinite(duration) ? Math.max(0, duration) : 0 };
+    } catch { return { position: 0, duration: 0 }; }
+  }
+  function seekBy(deltaMs) {
+    if (!avplay || !["ready", "playing", "paused"].includes(status) || !Number.isFinite(deltaMs)) return false;
+    const opening = generation;
+    const timeline = getTimeline();
+    const next = Math.max(0, Math.min(timeline.duration || Number.MAX_SAFE_INTEGER, timeline.position + deltaMs));
+    try {
+      avplay.seekTo(Math.round(next), () => { if (opening === generation) onChange({ status, message: "Seek complete." }); },
+        error => { if (opening === generation) publish(status, "Seek failed: " + String(error && error.message || error)); });
+      return true;
+    } catch (error) {
+      if (opening === generation) publish(status, "Seek failed: " + String(error && error.message || error));
+      return false;
+    }
+  }
+  return { open, close: release, setPlaying, seekBy, getTimeline, getStatus: () => status,
     toggle: () => setPlaying(status === "loading" ? !intendedPlaying : status !== "playing") };
 }

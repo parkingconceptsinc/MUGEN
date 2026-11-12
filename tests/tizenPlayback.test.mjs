@@ -45,3 +45,29 @@ test('stream end and decoder errors release resources and invalidate callbacks',
     assert.equal(h.controller.getStatus(), event === 'onerror' ? 'error' : 'ended');
   }
 });
+
+test('AVPlay seek is bounded, rejects non-ready states, and ignores stale callbacks', () => {
+  const h = harness();
+  let time = 27000, done;
+  h.controller.close();
+  assert.equal(h.controller.seekBy(10000), false);
+  const player = h.controller;
+  // A standalone controller with the additional AVPlay timeline methods.
+  const moves = [], changes = [];
+  const av = { stop() {}, close() {}, open() {}, setListener() {},
+    setDisplayRect() {}, setDisplayMethod() {}, prepareAsync(callback) { this.ready = callback; },
+    play() {}, pause() {}, getDuration() { return 60000; }, getCurrentTime() { return time; },
+    seekTo(target, ok) { moves.push(target); done = ok; } };
+  const seek = createPlaybackController(av, value => changes.push(value));
+  seek.open('/usb/movie.mkv', { x: 0, y: 0, width: 800, height: 600 });
+  assert.equal(seek.seekBy(10000), false);
+  av.ready();
+  assert.deepEqual(seek.getTimeline(), { position: 27000, duration: 60000 });
+  assert.equal(seek.seekBy(90000), true);
+  assert.equal(seek.seekBy(-40000), true);
+  assert.deepEqual(moves, [60000, 0]);
+  seek.close();
+  const count = changes.length;
+  done();
+  assert.equal(changes.length, count);
+});

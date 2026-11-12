@@ -28,3 +28,7 @@ LibVLC is a VideoLAN component distributed under LGPL-2.1-or-later terms. Before
 7. Production Android release requires the original matching keystore; Samsung WGT requires Samsung developer certificates and physical TV validation.
 
 **Status:** Source implementation added; compilation and device behavior must be verified in CI/hardware. Not a claim of a completed production release.
+
+## Tizen TV timeline controls
+
+The Samsung AVPlay adapter now exposes a state-checked duration/current-position timeline and bounded ±10-second seeks from on-screen buttons or supported remote media keys. In-flight callbacks from previous videos are ignored. This remains subject to Tizen firmware/codec support and physical remote testing.
