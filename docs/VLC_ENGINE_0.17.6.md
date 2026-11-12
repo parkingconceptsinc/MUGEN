@@ -2,7 +2,7 @@
 
 ## Architecture
 
-- **Android video:** VideoLAN LibVLC 3.7.7 via `org.videolan.android:libvlc-all`, using native `VLCVideoLayout`. This is the default video engine. Seek, pause, resume position, basic error handling and a Media3 fallback action are provided.
+- **Android video:** VideoLAN LibVLC 3.6.1 via `org.videolan.android:libvlc-all`, using native `VLCVideoLayout`. This is the default video engine. Seek, pause, resume position, basic error handling and a Media3 fallback action are provided.
 - **Android music / Android Auto:** the existing shared Media3 `MediaLibraryService` is retained. Before opening LibVLC, the Media3 player is paused so the engines do not compete for audio output.
 - **PWA:** browser Media APIs, IndexedDB persistence, media capabilities and optional local transcoding. Native LibVLC is not available from a normal PWA.
 - **Samsung Tizen:** Samsung AVPlay with its supported Tizen codecs and USB filesystem API. The APK's LibVLC AAR cannot be reused in a Tizen web app.
