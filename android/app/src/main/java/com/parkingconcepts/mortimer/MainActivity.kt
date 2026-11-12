@@ -1,6 +1,7 @@
 package com.parkingconcepts.mortimer
 
 import android.Manifest
+import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -408,7 +409,19 @@ private fun MortimerApp(
     var playbackError by remember { mutableStateOf<String?>(null) }
     var queueVersion by remember { mutableIntStateOf(0) }
     var videoOpen by rememberSaveable { mutableStateOf<LibraryItem?>(null) }
-    fun playVideo(item: LibraryItem) {
+    var pendingVideoFallback by rememberSaveable { mutableStateOf<String?>(null) }
+    val vlcLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_FIRST_USER) {
+            pendingVideoFallback = result.data?.getStringExtra(VlcVideoActivity.EXTRA_URI)
+        }
+    }
+    fun playVideo(item: LibraryItem, useMedia3: Boolean = false) {
+        if (!useMedia3) {
+            // LibVLC owns ordinary video. Keep Media3/session playback for music and Android Auto.
+            player.pause()
+            vlcLauncher.launch(VlcVideoActivity.intent(context, item))
+            return
+        }
         playbackError = null
         player.currentMediaItem?.let { PlaybackPositions.save(context, it.mediaId, player.currentPosition, player.duration) }
         videoOpen = item
@@ -417,6 +430,15 @@ private fun MortimerApp(
         player.seekTo(PlaybackPositions.get(context, item.uri))
         player.setPlaybackSpeed(1f)
         player.play()
+    }
+
+    LaunchedEffect(pendingVideoFallback, library) {
+        pendingVideoFallback?.let { requestedUri ->
+            library.firstOrNull { it.uri == requestedUri }?.let { item ->
+                pendingVideoFallback = null
+                playVideo(item, useMedia3 = true)
+            }
+        }
     }
 
     DisposableEffect(player) {
@@ -628,7 +650,14 @@ private fun MortimerApp(
                 player.play()
             },
             onNavigate = { direction ->
-                videos.getOrNull(videoIndex + direction)?.let { playVideo(it) }
+                videos.getOrNull(videoIndex + direction)?.let { playVideo(it, useMedia3 = true) }
+            },
+            onVlc = {
+                PlaybackPositions.save(context, item.uri, player.currentPosition, player.duration)
+                player.pause()
+                videoOpen = null
+                playbackError = null
+                vlcLauncher.launch(VlcVideoActivity.intent(context, item))
             },
             onEdit = { itemToEdit, at ->
                 player.pause(); editorItem = itemToEdit; editorPosition = at; videoOpen = null; section = "editor"

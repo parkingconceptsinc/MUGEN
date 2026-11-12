@@ -78,6 +78,8 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.media:media:1.7.0")
     implementation("androidx.media3:media3-exoplayer:1.6.1")
+    // Official VideoLAN LibVLC engine for native Android video and difficult codecs.
+    implementation("org.videolan.android:libvlc-all:3.7.7")
     implementation("androidx.media3:media3-ui:1.6.1")
     implementation("androidx.media3:media3-session:1.6.1")
     implementation("androidx.media3:media3-transformer:1.6.1")

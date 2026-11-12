@@ -37,6 +37,11 @@
                 android:resource="@xml/update_file_paths" />
         </provider>
         <activity
+            android:name=".VlcVideoActivity"
+            android:exported="false"
+            android:screenOrientation="unspecified"
+            android:theme="@android:style/Theme.Material.NoActionBar" />
+        <activity
             android:name=".ComicReaderActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize"
             android:theme="@android:style/Theme.Material.NoActionBar"

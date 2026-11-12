@@ -58,6 +58,7 @@ internal fun VideoPlayerDialog(
     item: LibraryItem, player: Player, error: String?, onErrorDismiss: () -> Unit,
     canPrevious: Boolean, canNext: Boolean,
     onRetry: () -> Unit, onClose: () -> Unit, onNavigate: (Int) -> Unit,
+    onVlc: () -> Unit,
     onEdit: (LibraryItem, Long) -> Unit,
     persistSettings: Boolean = true,
 ) {
@@ -163,6 +164,7 @@ internal fun VideoPlayerDialog(
                     }) {
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
                         TextButton(onClick = onClose) { Text("Close") }
+                        TextButton(onClick = onVlc) { Text("VLC Engine") }
                         TextButton(onClick = { interact { pinned = !pinned } }) { Text(if (pinned) "Unpin controls" else "Pin controls") }
                         TextButton(onClick = { interact { player.pause(); captionPanel = true } }) { Text("Subtitles") }
                         TextButton(onClick = { player.pause(); onEdit(item, position) }) { Text("Open in Editor") }
@@ -176,7 +178,7 @@ internal fun VideoPlayerDialog(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), fontSize = 12.sp, maxLines = 1)
                 }
                 if (error != null) Surface(Modifier.align(Alignment.Center).padding(24.dp), shape = MaterialTheme.shapes.large) {
-                    Column(Modifier.padding(18.dp)) { Text(error); Button(onClick = onRetry) { Text("Retry from current position") }; TextButton(onClick = onErrorDismiss) { Text("Dismiss error") } }
+                    Column(Modifier.padding(18.dp)) { Text(error); Button(onClick = onVlc) { Text("Try VLC engine") }; Button(onClick = onRetry) { Text("Retry from current position") }; TextButton(onClick = onErrorDismiss) { Text("Dismiss error") } }
                 }
         }
         if (captionPanel) SubtitleControls(timeline, sync, captionEnabled, position, subtitleError,
