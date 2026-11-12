@@ -39,7 +39,7 @@ class VideoControlsQaActivity : ComponentActivity() {
         player = playback
         setContent { MortimerTheme("dark") {
             VideoPlayerDialog(item, playback, null, {}, false, false, onRetry = {}, onClose = { finish() },
-                onNavigate = {}, onEdit = { _, _ -> }, persistSettings = false)
+                onNavigate = {}, onVlc = {}, onEdit = { _, _ -> }, persistSettings = false)
         } }
     }
     override fun onDestroy() {
