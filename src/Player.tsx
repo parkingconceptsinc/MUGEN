@@ -5,14 +5,18 @@ import { BookOpen, Clapperboard, Disc3, Download, FilePlus, FolderOpen, Library 
 import { applyAudio, attachElement, connectAudioLabNode, EQ_PRESETS, getAudioLabSettings, initEngine, resumeEngine, subscribeAudioLab } from "./audioEngine";
 import { decodeAudioTrack, type DecodedAudio } from "./codecAudioDecoder";
 import { PlayerContext, ProgressContext, type Actions, type MenuTarget, type PlayerState, type SleepState } from "./context";
-import { clearLibrary as clearStoredLibrary, deleteComics, deleteTracks, loadComics, loadLibrary, patchComic, patchTrack, saveComicsFast, saveLibraryFast, type StoredComic, type StoredLibraryItem } from "./library";
+import { clearLibrary as clearStoredLibrary, deleteComics, deleteTracks, loadComics, loadLibrary, loadFileAliases, loadTrackFile, patchComic, patchTrack, saveComicsFast, saveLibraryFast, type StoredComic, type StoredLibraryItem } from "./library";
 import { comicFormatOf, defaultShelf, isComicFile, isTextFormat, makeThumbnail, openComic, toComic } from "./comics";
 import { META_VERSION, readItem, readTags, type Incoming } from "./metadata";
 import { readPref, usePref, writePref } from "./prefs";
 import type { Comic, ComicProgress, EqSettings, Playlist, ReaderSettings, RepeatMode, Route, Screen, SongSort, Track, VideoFit } from "./types";
-import { ACCENTS, compareText, formatTime, shuffled, supported, toTrack, trackKey } from "./util";
+import { ACCENTS, compareText, formatTime, shuffled, supported, toTrack } from "./util";
 import { captureVideoFrame } from "./thumbnails";
 import { folderImportFailureMessage, getImportProgressPercent, recordFolderBatchOutcome, type FolderImportFailures } from "./importStatus";
+import { BackgroundWork } from "./backgroundWork";
+import { remapIds, remapUniqueIds, remapNumbers, resolveAlias } from "./fileIdentity";
+import { restoreQueue } from "./playbackQueue";
+import { readPlaybackQueue, usePlaybackQueue } from "./usePlaybackQueue";
 import { MiniPlayer, TrackMenu } from "./components";
 import { Library } from "./screens/Library";
 import { NowPlaying } from "./screens/NowPlaying";
@@ -53,30 +57,9 @@ type DirectoryHandleLike = { name: string; values: () => AsyncIterable<Directory
 const MEDIA_EVENTS = ["play", "pause", "timeupdate", "loadedmetadata", "durationchange", "ended", "error"] as const;
 type CodecAudioState = DecodedAudio & { id: string; source: AudioBufferSourceNode | null; gain: GainNode; disconnectLab: () => void; startedAt: number; offset: number };
 
-const metadataQueue: Array<() => Promise<void>> = [];
+const backgroundWork = new BackgroundWork();
 let mediaImportQueue: Promise<void> = Promise.resolve();
-let mediaImportActive = false;
-let metadataPump: Promise<void> | null = null;
-
-function startMetadataPump() {
-  if (metadataPump || mediaImportActive) return;
-  metadataPump = (async () => {
-    while (metadataQueue.length && !mediaImportActive) {
-      const batch = metadataQueue.splice(0, 2);
-      await Promise.allSettled(batch.map((job) => job()));
-      // Give rendering and touch/input events a chance between metadata batches.
-      await new Promise((resolve) => window.setTimeout(resolve, 0));
-    }
-  })().finally(() => {
-    metadataPump = null;
-    if (metadataQueue.length) startMetadataPump();
-  });
-}
-
-function enqueueMetadata(task: () => Promise<void>) {
-  metadataQueue.push(task);
-  startMetadataPump();
-}
+const enqueueMetadata = (task: () => Promise<void>) => backgroundWork.enqueue(task);
 
 export function Player() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -95,6 +78,8 @@ export function Player() {
   useEffect(() => subscribeAudioLab(() => setLabEnabled(getAudioLabSettings().enabled)), []);
   const toastTimer = useRef<number | undefined>(undefined);
   const thumbBusy = useRef(false);
+  const thumbnailAbort = useRef<AbortController | null>(null);
+  const playRequest = useRef(0);
   const comicBusy = useRef(false);
   const rescanStarted = useRef(false);
   const returnScreen = useRef<Screen>("library");
@@ -107,8 +92,7 @@ export function Player() {
   const [loaded, setLoaded] = useState(false);
   const [tracks, setTracks] = useState<Track[]>([]);
   const tracksLiveRef = useRef<Track[]>([]);
-  const [queue, setQueue] = usePref<string[]>("queue", []);
-  const [qIndex, setQIndex] = usePref("qIndex", 0);
+  const [queue, setQueue, qIndex, setQIndex] = usePlaybackQueue();
   const [originalQueue, setOriginalQueue] = usePref<string[] | null>("originalQueue", null);
   const [queueSource, setQueueSource] = usePref("queueSource", "");
   const [shuffle, setShuffle] = usePref("shuffle", false);
@@ -377,6 +361,11 @@ export function Player() {
   }
 
   function startPlayback(el: HTMLMediaElement) {
+    const request = ++playRequest.current;
+    const trackId = playbackLiveRef.current.current?.id;
+    const isCurrent = () => playRequest.current === request && playbackLiveRef.current.current?.id === trackId && mediaRef.current === el;
+    backgroundWork.setPaused("playback", true);
+    thumbnailAbort.current?.abort();
     resumeEngine();
     wantPlay.current = true;
     const track = current;
@@ -398,9 +387,11 @@ export function Player() {
       return;
     }
     void el.play().catch((error: DOMException) => {
+      if (!isCurrent()) return;
       if (error?.name === "NotSupportedError" && current) {
         void activateCodecAudio(current, el).then((ok) => {
-          if (!ok) {
+          if (!ok && isCurrent()) {
+            backgroundWork.setPaused("playback", false);
             wantPlay.current = false;
             setPlaying(false);
             toast("This audio/video codec could not be decoded");
@@ -410,6 +401,7 @@ export function Player() {
       }
       // Load failures surface through the element's "error" event.
       if (error?.name === "AbortError") return;
+      backgroundWork.setPaused("playback", false);
       wantPlay.current = false;
       setPlaying(false);
       if (error?.name !== "NotAllowedError") toast("This file can't be played in this browser");
@@ -493,22 +485,12 @@ export function Player() {
     label?: string,
     quiet = false,
     expectedGeneration = importGenerationRef.current,
-    sharedSeen?: Set<string>,
   ): Promise<boolean> {
     let operationOk = true;
     const importGeneration = expectedGeneration;
     const isImportCurrent = () => importGenerationRef.current === importGeneration;
     if (!isImportCurrent()) { setImporting(null); return false; }
-    // Folder imports share one identity set across all streamed batches. Rebuilding
-    // this from the full live library for every 100 files made large imports
-    // increasingly expensive on phones/tablets.
-    const seen = sharedSeen ?? new Set([...tracksLiveRef.current, ...comicsLiveRef.current].map((t) => trackKey(t.path, t.size, t.lastModified)));
-    const isNew = ({ file, path }: Incoming) => {
-      const key = trackKey(path, file.size, file.lastModified);
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    };
+    // Content-aware storage checks identity; picker paths/dates are not stable.
     const photoEntries = entries.filter((e) => isPhotoFile(e.file.name));
     let photoNote = "";
     if (photoEntries.length) {
@@ -528,8 +510,8 @@ export function Player() {
         return operationOk;
       }
     }
-    const fresh = entries.filter((e) => supported(e.file.name) && isNew(e));
-    const freshComics = entries.filter((e) => isComicFile(e.file.name) && isNew(e));
+    const fresh = entries.filter((e) => supported(e.file.name));
+    const freshComics = entries.filter((e) => isComicFile(e.file.name));
     const totalToAdd = fresh.length + freshComics.length;
     if (!totalToAdd) {
       if (!quiet) toast(photoNote || (entries.some((e) => supported(e.file.name) || isComicFile(e.file.name)) ? "Those files are already in your library" : "No supported music, video, comic or photo files found"));
@@ -623,10 +605,10 @@ export function Player() {
         else importFailures++;
       }
       batch.push(...items);
-      processed += results.length;
-      setImporting({ done: processed, total: totalToAdd, label: "Adding" });
       await flush();
       if (!isImportCurrent()) { setImporting(null); return false; }
+      processed += results.length;
+      setImporting({ done: processed, total: totalToAdd, label: "Adding" });
     }
     await flush();
     if (!isImportCurrent()) { setImporting(null); return false; }
@@ -640,7 +622,7 @@ export function Player() {
     ].filter(Boolean);
     const what = parts.length
       ? `${parts.join(" and ")} added${label ? ` from “${label}”` : ""}`
-      : "Nothing was added";
+      : operationOk && libraryStorageOk && comicStorageOk && !importFailures ? "Those files are already in your library" : "Nothing was added";
     if (importFailures) operationOk = false;
     if (!libraryStorageOk || !comicStorageOk) operationOk = false;
     const failureNote = importFailures
@@ -650,7 +632,8 @@ export function Player() {
     if (!quiet || !operationOk) toast(`${what}${failureNote}${storageNote}${photoNote ? ` · ${photoNote}` : ""}`);
     return operationOk;
   }
-  function importEntries(entries: Incoming[], label?: string, quiet = false, sharedSeen?: Set<string>): Promise<boolean> {
+  function importEntries(entries: Incoming[], label?: string, quiet = false): Promise<boolean> {
+    if (!loaded) { toast("Please wait for the saved library to finish opening"); return Promise.resolve(false); }
     // Capture at enqueue time so a queued job cannot resurrect a removed item.
     const requestedGeneration = importGenerationRef.current;
     const result = mediaImportQueue
@@ -658,18 +641,16 @@ export function Player() {
       .then(async () => {
         // Pause expensive tag/cover parsing while the user is importing a library.
         // Parsing concurrently with IndexedDB writes can saturate mobile CPUs and memory.
-        mediaImportActive = true;
+        backgroundWork.setPaused("import", true);
         try {
-          return await performImportEntries(entries, label, quiet, requestedGeneration, sharedSeen);
+          return await performImportEntries(entries, label, quiet, requestedGeneration);
         } finally {
-          mediaImportActive = false;
-          startMetadataPump();
+          backgroundWork.setPaused("import", false);
         }
       })
       .catch((error) => {
         // A failed import must never leave the progress UI stuck indefinitely.
-        mediaImportActive = false;
-        startMetadataPump();
+        backgroundWork.setPaused("import", false);
         setImporting(null);
         toast((error as Error)?.name === "QuotaExceededError"
           ? "Not enough browser storage to finish importing"
@@ -681,9 +662,11 @@ export function Player() {
   }
 
   async function importFolder() {
+    if (!loaded) { toast("Please wait for the saved library to finish opening"); return; }
+    if (importing) return;
     const pickerHost = window as Window & { showDirectoryPicker?: (options?: { mode?: "read" }) => Promise<DirectoryHandleLike> };
     if (!pickerHost.showDirectoryPicker) {
-      setImporting({ done: 0, total: 0, label: "Android is preparing the folder…" });
+      setImporting({ done: 0, total: 0, label: "Preparing the selected folder…" });
       folderInput.current?.click();
       return;
     }
@@ -691,15 +674,12 @@ export function Player() {
       const directory = await pickerHost.showDirectoryPicker({ mode: "read" });
       const scanGeneration = importGenerationRef.current;
       const scanIsCurrent = () => importGenerationRef.current === scanGeneration;
-      // Seed once per folder scan, then share the set with every batch so import
-      // cost scales with new files rather than (existing library × batch count).
-      const folderSeen = new Set([...tracksLiveRef.current, ...comicsLiveRef.current].map((item) => trackKey(item.path, item.size, item.lastModified)));
       // Stream files to storage as the tree is walked instead of waiting for a
       // complete scan. This makes the first batch save quickly on large libraries.
       const batch: Array<{ file: () => Promise<File>; path: string }> = [];
-      const batchSize = 100;
+      let batchSize = 16;
       let visitedEntries = 0;
-      let failures: FolderImportFailures = { files: 0, batches: 0 };
+      let failures: FolderImportFailures = { files: 0, batches: 0, folders: 0 };
       let supportedFound = 0;
       const flush = async () => {
         if (!scanIsCurrent()) {
@@ -708,16 +688,20 @@ export function Player() {
         }
         if (!batch.length) return;
         const current = batch.splice(0, batch.length);
-        const results = await Promise.allSettled(current.map(async ({ file, path }) => ({ file: await file(), path })));
+        batchSize = 64;
         const incoming: Incoming[] = [];
         let fileReadFailures = 0;
-        for (const result of results) {
-          if (result.status === "fulfilled") incoming.push(result.value);
-          else fileReadFailures++;
+        for (let offset = 0; offset < current.length; offset += 8) {
+          if (!scanIsCurrent()) return;
+          const results = await Promise.allSettled(current.slice(offset, offset + 8).map(async ({ file, path }) => ({ file: await file(), path })));
+          for (const result of results) {
+            if (result.status === "fulfilled") incoming.push(result.value);
+            else fileReadFailures++;
+          }
         }
         if (!scanIsCurrent()) return;
         const importSucceeded = incoming.length
-          ? await importEntries(incoming, directory.name, true, folderSeen)
+          ? await importEntries(incoming, directory.name, true)
           : true;
         failures = recordFolderBatchOutcome(failures, {
           fileReadFailures,
@@ -728,8 +712,15 @@ export function Player() {
         setImporting({ done: visitedEntries, total: 0, label: `Scanning and saving · ${supportedFound} supported files found` });
         await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
       };
+      async function* readDirectory(dir: DirectoryHandleLike) {
+        try {
+          yield* dir.values();
+        } catch {
+          failures.folders++;
+        }
+      }
       const walk = async (dir: DirectoryHandleLike, prefix: string): Promise<void> => {
-        for await (const entry of dir.values()) {
+        for await (const entry of readDirectory(dir)) {
           if (!scanIsCurrent()) return;
           const path = `${prefix}/${entry.name}`;
           if (entry.kind === "file") {
@@ -811,7 +802,7 @@ export function Player() {
       const before = queue.slice(0, qIndex).filter((id) => !gone.has(id)).length;
       setQIndex(Math.min(before, Math.max(0, nextQueue.length - 1)));
     } else {
-      setQIndex(Math.max(0, nextQueue.indexOf(currentId)));
+      setQIndex(queue.slice(0, qIndex).filter(id => !gone.has(id)).length);
     }
     setQueue(nextQueue);
     setOriginalQueue((q) => q && q.filter((id) => !gone.has(id)));
@@ -1108,7 +1099,10 @@ export function Player() {
       })();
     },
     importFolder: () => void importFolder(),
-    importFiles: () => fileInput.current?.click(),
+    importFiles: () => {
+      if (loaded) fileInput.current?.click();
+      else toast("Please wait for the saved library to finish opening");
+    },
     setSleep(minutes) {
       if (minutes === null) {
         setSleepState({ endsAt: null, endOfTrack: false });
@@ -1381,6 +1375,7 @@ export function Player() {
           break;
         }
         case "pause":
+          backgroundWork.setPaused("playback", false);
           if (codecAudioRef.current?.id === playbackLiveRef.current.current?.id) pauseCodecAudio();
           setPlaying(false);
           handlers.current.onPause();
@@ -1414,52 +1409,27 @@ export function Player() {
   }, []);
 
   useEffect(() => {
+    const input = folderInput.current;
+    const onCancel = () => setImporting(null);
+    input?.addEventListener("cancel", onCancel);
+    return () => input?.removeEventListener("cancel", onCancel);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
-    const restoreMusic = loadLibrary().then(async (stored) => {
+    let repairFailed = false;
+    const reportRepairFailure = () => { repairFailed = true; };
+    const restoreMusic = loadLibrary(reportRepairFailure).then(async (stored) => {
       if (cancelled) return;
-      const uniqueStored = new Map<string, StoredLibraryItem>();
-      const duplicateIds: string[] = [];
-      const repaired: StoredLibraryItem[] = [];
-      for (const item of stored) {
-        const key = trackKey(item.path, item.size, item.lastModified);
-        const previous = uniqueStored.get(key);
-        if (!previous) {
-          uniqueStored.set(key, item);
-          continue;
-        }
-        const keep = (item.addedAt ?? 0) < (previous.addedAt ?? 0) ? item : previous;
-        const drop = keep.id === item.id ? previous : item;
-        const merged: StoredLibraryItem = {
-          ...keep,
-          title: keep.title || drop.title,
-          artist: keep.artist || drop.artist,
-          album: keep.album || drop.album,
-          albumArtist: keep.albumArtist || drop.albumArtist,
-          genre: keep.genre || drop.genre,
-          year: keep.year ?? drop.year,
-          trackNo: keep.trackNo ?? drop.trackNo,
-          duration: keep.duration ?? drop.duration,
-          metaVersion: Math.max(keep.metaVersion ?? 0, drop.metaVersion ?? 0),
-          cover: keep.cover ?? drop.cover,
-        };
-        uniqueStored.set(key, merged);
-        duplicateIds.push(drop.id);
-        if (merged.cover !== keep.cover || merged.metaVersion !== keep.metaVersion || merged.title !== keep.title ||
-            merged.artist !== keep.artist || merged.album !== keep.album || merged.albumArtist !== keep.albumArtist ||
-            merged.genre !== keep.genre || merged.year !== keep.year || merged.trackNo !== keep.trackNo || merged.duration !== keep.duration) repaired.push(merged);
-      }
-      try {
-        await Promise.all([
-          ...(duplicateIds.length ? [deleteTracks(duplicateIds)] : []),
-          ...repaired.map((item) => {
-            const { id, file: _file, ...patch } = item;
-            return patchTrack(id, patch);
-          }),
-        ]);
-      } catch {
-        toast("Some duplicate music records could not be cleaned up. Close other MUGEN tabs and reopen the app to retry.");
-      }
-      const restored = [...uniqueStored.values()].flatMap((item) => {
+      const aliases = await loadFileAliases();
+      if (cancelled) return;
+      setFavoritesList(ids => remapUniqueIds(ids, aliases));
+      setOriginalQueue(ids => ids ? remapIds(ids, aliases) : null);
+      setPlaylists(lists => lists.map(list => ({ ...list, trackIds: remapIds(list.trackIds, aliases) })));
+      setPlays(values => remapNumbers(values, aliases, true));
+      setLastPlayed(values => remapNumbers(values, aliases));
+      setVideoProgress(values => remapNumbers(values, aliases));
+      const restored = stored.flatMap((item) => {
         try {
           return [toTrack(item)];
         } catch {
@@ -1467,16 +1437,14 @@ export function Player() {
           return [];
         }
       }).sort((a, b) => a.addedAt - b.addedAt);
-      if (restored.length !== uniqueStored.size) {
+      if (restored.length !== stored.length) {
         toast("Some saved music items could not be restored; their files remain in local storage");
       }
       const ids = new Set(restored.map((t) => t.id));
-      const savedQueue = readPref<string[]>("queue", []);
-      const savedIndex = readPref("qIndex", 0);
-      const currentId = savedQueue[savedIndex];
-      const kept = savedQueue.filter((id) => ids.has(id));
-      const index = Math.max(0, kept.indexOf(currentId));
+      const saved = readPlaybackQueue();
+      const { ids: kept, index } = restoreQueue(saved.ids, saved.index, aliases, ids);
       const resume = readPref<{ id: string; time: number } | null>("resume", null);
+      if (resume) { resume.id = resolveAlias(resume.id, aliases); writePref("resume", resume); }
       if (readPref("resumePosition", true) && resume && resume.id === kept[index]) pendingSeek.current = resume.time;
       setTracks(restored);
       setQueue(kept);
@@ -1484,46 +1452,10 @@ export function Player() {
     }).catch(() => {
       if (!cancelled) toast("Local music storage is unavailable in this browser");
     });
-    const restoreBooks = loadComics().then(async (stored) => {
-      const uniqueStored = new Map<string, StoredComic>();
-      const duplicateIds: string[] = [];
-      const repaired: StoredComic[] = [];
-      for (const item of stored) {
-        const key = trackKey(item.path, item.size, item.lastModified);
-        const previous = uniqueStored.get(key);
-        if (!previous) {
-          uniqueStored.set(key, item);
-          continue;
-        }
-        const keep = item.addedAt < previous.addedAt ? item : previous;
-        const drop = keep.id === item.id ? previous : item;
-        const merged: StoredComic = {
-          ...keep,
-          title: keep.title || drop.title,
-          author: keep.author || drop.author,
-          pages: keep.pages ?? drop.pages,
-          shelf: keep.shelf ?? drop.shelf,
-          locations: keep.locations ?? drop.locations,
-          cover: keep.cover ?? drop.cover,
-        };
-        uniqueStored.set(key, merged);
-        duplicateIds.push(drop.id);
-        if (merged.cover !== keep.cover || merged.title !== keep.title || merged.author !== keep.author ||
-            merged.pages !== keep.pages || merged.shelf !== keep.shelf || merged.locations !== keep.locations) repaired.push(merged);
-      }
-      try {
-        await Promise.all([
-          ...(duplicateIds.length ? [deleteComics(duplicateIds)] : []),
-          ...repaired.map((item) => {
-            const { id, file: _file, ...patch } = item;
-            return patchComic(id, patch);
-          }),
-        ]);
-      } catch {
-        toast("Some duplicate book/comic records could not be cleaned up. Close other MUGEN tabs and reopen the app to retry.");
-      }
+    const restoreBooks = loadComics(reportRepairFailure).then(async (stored) => {
+      const aliases = await loadFileAliases();
       if (!cancelled) {
-        const restoredBooks = [...uniqueStored.values()].flatMap((item) => {
+        const restoredBooks = stored.flatMap((item) => {
           try {
             return [toComic(item)];
           } catch {
@@ -1531,16 +1463,26 @@ export function Player() {
             return [];
           }
         }).sort((a, b) => a.addedAt - b.addedAt);
-        if (restoredBooks.length !== uniqueStored.size) {
+        if (restoredBooks.length !== stored.length) {
           toast("Some saved books or comics could not be restored; their files remain in local storage");
         }
+        setComicProgress(values => {
+          const result: Record<string, ComicProgress> = {};
+          for (const [id, progress] of Object.entries(values)) {
+            const key = resolveAlias(id, aliases);
+            if (!result[key] || progress.at > result[key].at) result[key] = progress;
+          }
+          return result;
+        });
         setComics(restoredBooks);
       }
     }).catch(() => {
       if (!cancelled) toast("Local books and comics storage is unavailable in this browser");
     });
     Promise.allSettled([restoreMusic, restoreBooks]).finally(() => {
-      if (!cancelled) setLoaded(true);
+      if (cancelled) return;
+      setLoaded(true);
+      if (repairFailed) toast("Saved files opened. Duplicate cleanup could not finish and will retry on restart.");
     });
     return () => { cancelled = true; };
   }, []);
@@ -1549,6 +1491,7 @@ export function Player() {
     const audio = audioRef.current;
     const video = videoRef.current;
     if (!audio || !video) return;
+    playRequest.current++;
     const el = current?.kind === "video" ? video : audio;
     const other = el === audio ? video : audio;
     mediaRef.current = el;
@@ -1614,6 +1557,22 @@ export function Player() {
     if (state) state.gain.gain.value = muted ? 0 : Math.max(0, Math.min(1, volume * sleepFade));
   }, [volume, muted, sleepFade]);
 
+  useEffect(() => { backgroundWork.setPaused("playback", playing); }, [playing]);
+  useEffect(() => {
+    const onVisibility = () => {
+      backgroundWork.setPaused("hidden", document.hidden);
+      if (!document.hidden && mediaRef.current && !mediaRef.current.paused) resumeEngine();
+    };
+    onVisibility();
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pageshow", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pageshow", onVisibility);
+      backgroundWork.setPaused("hidden", false);
+    };
+  }, []);
+
   useEffect(() => {
     const needed = labEnabled || eq.enabled || balance !== 0 || boost !== 1;
     if (!needed && !engineStarted.current) return;
@@ -1627,13 +1586,16 @@ export function Player() {
   }, [eq, balance, boost, labEnabled]);
 
   useEffect(() => {
-    if (screen === "player" || thumbBusy.current) return;
+    if (playing || wantPlay.current || importing || screen === "player" || thumbBusy.current || document.hidden) return;
     const next = tracks.find((t) => t.kind === "video" && !t.cover && !thumbAttempted.has(t.id));
     if (!next) return;
     thumbAttempted.add(next.id);
     thumbBusy.current = true;
-    void captureVideoFrame(next.url).then(({ image, duration: d }) => {
+    const controller = new AbortController();
+    thumbnailAbort.current = controller;
+    void captureVideoFrame(next.url, controller.signal).then(({ image, duration: d }) => {
       thumbBusy.current = false;
+      if (controller.signal.aborted) { thumbAttempted.delete(next.id); return; }
       const newDuration = !next.duration && d ? d : undefined;
       setTracks((old) => {
         const live = old.find((t) => t.id === next.id);
@@ -1650,10 +1612,10 @@ export function Player() {
       thumbBusy.current = false;
       setThumbTick((n) => n + 1);
     });
-  }, [tracks, screen, thumbTick]);
+  }, [tracks, screen, thumbTick, playing, importing]);
 
   useEffect(() => {
-    if ((screen !== "comics" && screen !== "books") || reader || comicBusy.current) return;
+    if (playing || wantPlay.current || importing || document.hidden || (screen !== "comics" && screen !== "books") || reader || comicBusy.current) return;
     const next = comics.find((c) => (!c.cover || (!c.pages && c.format !== "epub")) && !comicCoverAttempted.has(c.id));
     if (!next) return;
     comicCoverAttempted.add(next.id);
@@ -1690,7 +1652,7 @@ export function Player() {
       }
       setThumbTick((n) => n + 1);
     })();
-  }, [comics, screen, reader, thumbTick]);
+  }, [comics, screen, reader, thumbTick, playing, importing]);
 
 
   useEffect(() => {
@@ -1701,53 +1663,21 @@ export function Player() {
     rescanStarted.current = true;
     const stale = tracks.filter((t) => t.kind === "audio" && t.metaVersion < META_VERSION);
     if (!stale.length) return;
-    void (async () => {
-      let improved = 0;
-      for (let start = 0; start < stale.length; start += 2) {
-        const batch = stale.slice(start, start + 2);
-        const results = await Promise.allSettled(batch.map(async (track) => {
-          const response = await fetch(track.url);
-          if (!response.ok) throw new Error("Unable to read saved audio");
-          const tags = await readTags(await response.blob(), track.name);
-          const patch = Object.fromEntries(Object.entries({ ...tags, metaVersion: META_VERSION }).filter(([, v]) => v !== undefined));
-          await patchTrack(track.id, patch).catch(() => {});
-          return { track, tags };
-        }));
-        for (const result of results) {
-          if (result.status !== "fulfilled") continue;
-          const { track, tags } = result.value;
-          if (!tracksLiveRef.current.some((live) => live.id === track.id)) continue;
-          const cover = tags.cover ? URL.createObjectURL(tags.cover) : undefined;
-          setTracks((old) => {
-            if (!old.some((live) => live.id === track.id)) {
-              if (cover) URL.revokeObjectURL(cover);
-              return old;
-            }
-            return old.map((live) => {
-              if (live.id !== track.id) return live;
-              if (cover && live.cover) URL.revokeObjectURL(live.cover);
-              return {
-                ...live,
-                title: tags.title || live.title,
-                artist: tags.artist ?? live.artist,
-                album: tags.album ?? live.album,
-                albumArtist: tags.albumArtist ?? live.albumArtist,
-                genre: tags.genre ?? live.genre,
-                year: tags.year ?? live.year,
-                trackNo: tags.trackNo ?? live.trackNo,
-                duration: tags.duration ?? live.duration,
-                cover: cover ?? live.cover,
-                metaVersion: META_VERSION,
-              };
-            });
-          });
-          if (tags.artist || tags.album || tags.cover) improved++;
-        }
-        // Keep the main thread responsive while older metadata is refreshed.
-        await new Promise((resolve) => window.setTimeout(resolve, 0));
-      }
-      if (improved) toast(`Updated tags and covers for ${improved} song${improved === 1 ? "" : "s"}`);
-    })();
+    for (const track of stale) enqueueMetadata(async () => {
+      if (!tracksLiveRef.current.some(live => live.id === track.id)) return;
+      const file = await loadTrackFile(track.id);
+      if (!file) return;
+      const tags = await readTags(file, track.name);
+      if (!tracksLiveRef.current.some(live => live.id === track.id)) return;
+      const patch = Object.fromEntries(Object.entries({ ...tags, metaVersion: META_VERSION }).filter(([, value]) => value !== undefined));
+      await patchTrack(track.id, patch);
+      setTracks(old => old.map(live => {
+        if (live.id !== track.id) return live;
+        const cover = tags.cover ? URL.createObjectURL(tags.cover) : live.cover;
+        if (tags.cover && live.cover) URL.revokeObjectURL(live.cover);
+        return { ...live, ...tags, cover, metaVersion: META_VERSION };
+      }));
+    });
   }, [loaded, tracks]);
 
   useEffect(() => {

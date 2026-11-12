@@ -324,9 +324,9 @@ private fun MortimerApp(
         importJob = scope.launch {
             try {
                 val tagged = withContext(Dispatchers.IO) {
-                    val found = read().distinctBy { it.uri }
-                    val known = LibraryStore.load(context).mapTo(HashSet()) { it.uri }
-                    val fresh = found.filter { it.uri !in known }
+                    val found = read().distinctBy { libraryIdentity(it.uri) }
+                    val known = LibraryStore.load(context).mapTo(HashSet()) { libraryIdentity(it.uri) }
+                    val fresh = found.filter { libraryIdentity(it.uri) !in known }
                     fresh.mapIndexed { index, item ->
                         currentCoroutineContext().ensureActive()
                         if (index % 20 == 0) withContext(Dispatchers.Main) {

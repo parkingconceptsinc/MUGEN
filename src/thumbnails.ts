@@ -1,4 +1,4 @@
-export function captureVideoFrame(url: string): Promise<{ image: Blob | null; duration?: number }> {
+export function captureVideoFrame(url: string, signal?: AbortSignal): Promise<{ image: Blob | null; duration?: number }> {
   return new Promise((resolve) => {
     const video = document.createElement("video");
     let settled = false;
@@ -9,9 +9,10 @@ export function captureVideoFrame(url: string): Promise<{ image: Blob | null; du
       if (settled) return;
       settled = true;
       window.clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+      const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : undefined;
       video.removeAttribute("src");
       video.load();
-      const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : undefined;
       resolve({ image, duration });
     };
 
@@ -41,6 +42,9 @@ export function captureVideoFrame(url: string): Promise<{ image: Blob | null; du
     };
 
     const timer = window.setTimeout(() => finish(null), 10000);
+    const onAbort = () => finish(null);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    if (signal?.aborted) { finish(null); return; }
     video.muted = true;
     video.playsInline = true;
     video.preload = "auto";

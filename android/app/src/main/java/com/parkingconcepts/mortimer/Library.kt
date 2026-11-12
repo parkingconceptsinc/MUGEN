@@ -95,6 +95,36 @@ fun formatOf(name: String, kind: String): String = when (kind) {
     }
 }
 
+/** Tree picks and individual picks may wrap the same provider document in
+ * different URIs. Document identity includes its authority and complete ID;
+ * filenames and sizes alone must never merge unrelated files. */
+internal fun libraryIdentity(value: String): String {
+    val uri = Uri.parse(value)
+    if (uri.scheme == "content" && uri.pathSegments.contains("document")) {
+        val documentId = runCatching { DocumentsContract.getDocumentId(uri) }.getOrNull()
+        if (documentId != null) return "document:${uri.authority}:$documentId"
+    }
+    return value
+}
+
+private fun uniqueLibraryItems(items: List<LibraryItem>): List<LibraryItem> {
+    val unique = linkedMapOf<String, LibraryItem>()
+    for (item in items) {
+        val key = libraryIdentity(item.uri)
+        val keep = unique[key]
+        if (keep == null) unique[key] = item
+        else {
+            val progress = if (item.openedAt > keep.openedAt) item else keep
+            unique[key] = keep.copy(
+                artist = keep.artist.ifBlank { item.artist }, album = keep.album.ifBlank { item.album },
+                position = progress.position, progress = progress.progress, openedAt = progress.openedAt,
+                pages = maxOf(keep.pages, item.pages),
+            )
+        }
+    }
+    return unique.values.toList()
+}
+
 object LibraryStore {
     private const val FILE = "library.json"
 
@@ -105,12 +135,12 @@ object LibraryStore {
 
     private fun decode(bytes: ByteArray): List<LibraryItem> {
         val arr = JSONArray(bytes.toString(Charsets.UTF_8))
-        return (0 until arr.length()).map { i ->
+        return uniqueLibraryItems((0 until arr.length()).map { i ->
             LibraryItem.fromJson(arr.getJSONObject(i)).also {
                 require(it.uri.isNotBlank()) { "Library entry has no file URI." }
                 require(it.progress.isFinite()) { "Library progress is invalid." }
             }
-        }.distinctBy { it.uri }
+        })
     }
 
     private fun writeAtomic(file: File, bytes: ByteArray) {
@@ -149,7 +179,7 @@ object LibraryStore {
 
     private fun save(context: Context, items: List<LibraryItem>) {
         val arr = JSONArray()
-        items.distinctBy { it.uri }.forEach { arr.put(it.toJson()) }
+        uniqueLibraryItems(items).forEach { arr.put(it.toJson()) }
         val bytes = arr.toString().toByteArray(Charsets.UTF_8)
         decode(bytes) // Validate the complete snapshot before touching either file.
         writeAtomic(file(context), bytes)
@@ -160,23 +190,23 @@ object LibraryStore {
 
     @Synchronized
     fun update(context: Context, transform: (List<LibraryItem>) -> List<LibraryItem>): List<LibraryItem> {
-        val next = transform(load(context)).distinctBy { it.uri }
+        val next = uniqueLibraryItems(transform(load(context)))
         save(context, next)
         return next
     }
 
     fun find(context: Context, uri: String): LibraryItem? =
-        runCatching { load(context).firstOrNull { it.uri == uri } }.getOrNull()
+        runCatching { load(context).firstOrNull { libraryIdentity(it.uri) == libraryIdentity(uri) } }.getOrNull()
 
     fun add(context: Context, items: List<LibraryItem>): List<LibraryItem> = update(context) { current ->
-        val known = current.mapTo(HashSet()) { it.uri }
-        current + items.filter { known.add(it.uri) }
+        val known = current.mapTo(HashSet()) { libraryIdentity(it.uri) }
+        current + items.filter { known.add(libraryIdentity(it.uri)) }
     }
 
     fun saveProgress(context: Context, uri: String, position: String, progress: Float, pages: Int) {
         update(context) { list ->
             list.map {
-                if (it.uri == uri) it.copy(position = position, progress = progress.coerceIn(0f, 1f), pages = pages, openedAt = System.currentTimeMillis()) else it
+                if (libraryIdentity(it.uri) == libraryIdentity(uri)) it.copy(position = position, progress = progress.coerceIn(0f, 1f), pages = pages, openedAt = System.currentTimeMillis()) else it
             }
         }
     }
@@ -196,7 +226,7 @@ object LibraryStore {
             }
         }
         save(context, items)
-        return items
+        return uniqueLibraryItems(items)
     }
 }
 

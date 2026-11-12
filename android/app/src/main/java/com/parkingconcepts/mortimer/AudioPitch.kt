@@ -50,6 +50,11 @@ internal class VoicePitchShift(private val sr:Int,private val channels:Int){
     fun frame(frame:DoubleArray,s:AudioEffects.Settings){
         var mono=0.0;for(v in frame)mono+=v;mono/=channels
         val wanted=s.tune||abs(s.shiftSemitones)>.001
+        if(!wanted&&mix<.00001){
+            detectedHz=0.0;targetHz=0.0
+            for(ch in 0 until channels)delays[ch].write(frame[ch])
+            return
+        }
         if(wanted&&detector.push(mono)){
             detectedHz=detector.hz
             val note=if(detectedHz>0)PitchScale.nearest(PitchScale.midi(detectedHz),s.tuneKey,s.tuneScale) else 0

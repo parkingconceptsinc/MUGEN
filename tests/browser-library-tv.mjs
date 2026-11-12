@@ -22,6 +22,7 @@ try {
   page.on('pageerror', error => errors.push(error.message));
   await page.goto(pwaURL);
   await page.locator('input[type=file][multiple]:not([webkitdirectory])').waitFor({ state: 'attached' });
+  await page.getByText('Loading your library…', { exact: true }).waitFor({ state: 'hidden' });
   // Use the same File objects on retry so identity metadata remains unchanged.
   // Abort the second actual IndexedDB batch, rather than mocking the save result.
   await page.evaluate(() => {
@@ -71,6 +72,40 @@ try {
   assert.equal(await countSaved(), 305);
   assert.deepEqual(errors, []);
   console.log('PASS PWA: quota abort saves 100, retry adds 205, repeat/reload preserves 305 without duplicates');
+  await page.getByText('Loading your library…', { exact: true }).waitFor({ state: 'hidden' });
+  const addFolder = page.locator('.library').getByRole('button', { name: 'Add folder', exact: true });
+  await page.evaluate(() => {
+    window.showDirectoryPicker = undefined;
+    document.querySelector('input[webkitdirectory]').click = () => {};
+  });
+  await addFolder.click();
+  await page.getByText('Preparing the selected folder…').waitFor();
+  await page.locator('input[webkitdirectory]').dispatchEvent('cancel');
+  await page.getByText('Preparing the selected folder…').waitFor({ state: 'hidden' });
+  await page.evaluate(() => {
+    const file = (name, unreadable = false) => ({ kind: 'file', name, async getFile() {
+      if (unreadable) throw new DOMException('File removed', 'NotFoundError');
+      return new File([new Uint8Array(64)], name, { type: 'audio/mpeg' });
+    } });
+    window.showDirectoryPicker = async () => ({ name: 'Collection', async *values() {
+      for (let i = 0; i < 16; i++) yield file(`Early folder track ${i}.mp3`);
+      await new Promise(resolve => { window.__continueFolderScan = resolve; });
+      yield { kind: 'directory', name: 'Disconnected', async *values() { throw new DOMException('Access lost', 'NotReadableError'); } };
+      yield file('Unreadable track.mp3', true);
+      yield file('Track from remaining folder.mp3');
+    } });
+  });
+  await addFolder.click();
+  await page.waitForFunction(() => typeof window.__continueFolderScan === 'function');
+  assert.equal(await countSaved(), 321, 'first 16 files are persisted before folder enumeration finishes');
+  await page.evaluate(() => window.__continueFolderScan());
+  await page.waitForFunction(() => document.querySelector('.toast')?.textContent.includes('1 unreadable folder, 1 file read error'));
+  assert.equal(await countSaved(), 322, 'readable files after an inaccessible folder and file are still saved');
+  await page.reload();
+  await page.getByText('Loading your library…', { exact: true }).waitFor({ state: 'hidden' });
+  assert.equal(await countSaved(), 322);
+  assert.deepEqual(errors, []);
+  console.log('PASS PWA: first folder batch saves early and unreadable entries do not stop later files');
   await context.close();
 
   const tv = await browser.newContext({ viewport: { width: 1920, height: 1080 } });
@@ -90,6 +125,13 @@ try {
   });
   await screen.goto('http://127.0.0.1:4174/');
   await screen.locator('[data-view=movies]').click();
+  await screen.keyboard.press('ArrowUp');
+  assert.equal(await screen.evaluate(() => document.activeElement.dataset.view),'music','Up follows the rail');
+  await screen.keyboard.press('ArrowRight');
+  assert.ok(await screen.evaluate(() => document.activeElement.matches('.media-row')),'Right enters the media list');
+  const focusedRow = await screen.evaluate(() => Number(document.activeElement.dataset.item));
+  await screen.keyboard.press('ArrowDown');
+  assert.equal(await screen.evaluate(() => Number(document.activeElement.dataset.item)),focusedRow+1,'Down follows the next visible row');
   await screen.locator('[data-action=page][data-dir="1"]').click();
   assert.match(await screen.locator('.library-head').innerText(), /Page 2 \/ 3/);
   await screen.locator('.media-row').first().click();
@@ -110,7 +152,7 @@ try {
   await screen.locator('.media-list').waitFor();
   assert.match(await screen.locator('.library-head').innerText(), /Page 2 \/ 3/);
   assert.deepEqual(tvErrors, []);
-  console.log('PASS Tizen browser simulation: paging, video surface, late preparation, distinct media keys and D-pad Back');
+  console.log('PASS Tizen browser simulation: spatial D-pad navigation, paging, video surface, late preparation, distinct media keys and D-pad Back');
   await tv.close();
 } catch (error) {
   console.error('Browser test state:', await activePage?.evaluate(() => ({

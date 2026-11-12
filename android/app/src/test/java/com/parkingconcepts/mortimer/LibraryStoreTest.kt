@@ -126,4 +126,33 @@ class LibraryStoreTest {
         assertEquals("Artist", migrated.artist)
         assertEquals("Album", migrated.album)
     }
+    @Test fun treeAndIndividualPicksOfTheSameDocumentDoNotDuplicate() {
+        val direct = item("one").copy(uri = "content://com.android.externalstorage.documents/document/primary%3AMusic%2Fone.mp3")
+        val tree = direct.copy(uri = "content://com.android.externalstorage.documents/tree/primary%3AMusic/document/primary%3AMusic%2Fone.mp3")
+        LibraryStore.add(context, listOf(direct.copy(progress = .5f, openedAt = 123)))
+        val saved = LibraryStore.add(context, listOf(tree, tree))
+        assertEquals(1, saved.size)
+        assertEquals(direct.uri, saved.single().uri)
+        assertEquals(.5f, saved.single().progress)
+        LibraryStore.saveProgress(context, tree.uri, "10", .8f, 20)
+        assertEquals(.8f, LibraryStore.find(context, direct.uri)!!.progress)
+    }
+
+    @Test fun legacyDocumentAliasesMergeLatestProgressAndKeepOriginalUri() {
+        val direct = item("one").copy(uri = "content://provider/document/abc", openedAt = 1, addedAt = 1)
+        val tree = direct.copy(uri = "content://provider/tree/root/document/abc", progress = .75f, position = "8", openedAt = 2)
+        file("library.json").writeText(JSONArray().put(direct.toJson()).put(tree.toJson()).toString())
+        val saved = LibraryStore.load(context).single()
+        assertEquals(direct.uri, saved.uri)
+        assertEquals(.75f, saved.progress)
+        assertEquals("8", saved.position)
+    }
+
+    @Test fun identicalNamesInDifferentDocumentsAndProvidersRemainSeparate() {
+        val one = item("one").copy(uri = "content://provider/document/abc", size = 100)
+        val two = one.copy(uri = "content://provider/document/def")
+        val three = one.copy(uri = "content://other/document/abc")
+        assertEquals(3, LibraryStore.add(context, listOf(one, two, three)).size)
+    }
+
 }
