@@ -71,3 +71,29 @@ test('AVPlay seek is bounded, rejects non-ready states, and ignores stale callba
   done();
   assert.equal(changes.length, count);
 });
+
+test('resume attempts to seek after playback preparation and ignores late callbacks', () => {
+  const callbacks = [];
+  const seekCalls = [];
+  const events = [];
+  const av = {
+    stop() {}, close() {}, open() {}, setListener() {}, setDisplayRect() {},
+    setDisplayMethod() {}, play() {}, pause() {},
+    prepareAsync(ready) { this.ready = ready; }, getDuration() { return 80000; },
+    seekTo(ms, onSuccess, onFailure) { seekCalls.push(ms); callbacks.push({ onSuccess, onFailure }); },
+  };
+  const playback = createPlaybackController(av, value => events.push(value));
+  playback.open('/usb/movie.mp4', { x: 0, y: 0, width: 800, height: 500 }, 40000);
+  assert.equal(seekCalls.length, 0);
+  av.ready();
+  assert.deepEqual(seekCalls, [40000]);
+  assert.equal(playback.getStatus(), 'playing');
+  playback.close();
+  const before = events.length;
+  callbacks[0].onSuccess();
+  callbacks[0].onFailure(Error('late'));
+  assert.equal(events.length, before);
+  playback.open('/usb/new.mp4', { x: 0, y: 0, width: 800, height: 500 }, 79900);
+  av.ready();
+  assert.deepEqual(seekCalls, [40000], 'near-end resume must restart instead of seeking');
+});

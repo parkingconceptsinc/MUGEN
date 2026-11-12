@@ -151,7 +151,7 @@ try {
   assert.equal(await screen.evaluate(() => window.__avCalls.filter(([name]) => name === 'pause').length), 1);
   // Physical TV media seek keys use AVPlay's bounded seek API.
   await screen.evaluate(() => { window.__mediaKey(417); window.__mediaKey(412); });
-  assert.deepEqual(await screen.evaluate(() => window.__avCalls.filter(([name]) => name === 'seekTo').map(([, at]) => at)), [40000, 20000]);
+  assert.deepEqual(await screen.evaluate(() => window.__avCalls.filter(([name]) => name === 'seekTo').map(([, at]) => at).slice(-2)), [40000, 20000]);
   // The player now has four controls: −10s, Play/Pause, +10s, and Back.
   // D-pad navigation must still reach Back without implicit playback.
   await screen.keyboard.press('ArrowRight');
@@ -161,6 +161,12 @@ try {
   await screen.keyboard.press('Enter');
   await screen.locator('.media-list').waitFor();
   assert.match(await screen.locator('.library-head').innerText(), /Page 2 \/ 3/);
+  // Leaving playback checkpoints the position; reopening the same USB file resumes it.
+  assert.equal(await screen.evaluate(() => JSON.parse(localStorage.getItem("mugen.tv.resume.v1")).entries[0].position), 30000);
+  await screen.locator(".media-row").first().click();
+  await screen.evaluate(() => window.__preparations[2].ready());
+  assert.equal(await screen.evaluate(() => window.__avCalls.filter(([name]) => name === "seekTo").at(-1)[1]), 30000);
+  await screen.keyboard.press("Escape");
   assert.deepEqual(tvErrors, []);
   console.log('PASS Tizen browser simulation: spatial D-pad navigation, paging, video surface, late preparation, distinct media keys and D-pad Back');
   await tv.close();

@@ -16,7 +16,7 @@ export function createPlaybackController(avplay, onChange) {
     }
     status = "idle";
   }
-  function open(path, rect) {
+  function open(path, rect, resumeAtMs = 0) {
     release();
     intendedPlaying = true;
     const opening = generation;
@@ -50,6 +50,17 @@ export function createPlaybackController(avplay, onChange) {
           // in an invalid state. READY can be played later by an explicit action.
           if (intendedPlaying) avplay.play();
           publish(intendedPlaying ? "playing" : "ready", intendedPlaying ? "Playback started." : "Ready. Choose Play to start.");
+          // Resume only after AVPlay preparation, and never seek blindly into the final seconds.
+          // A delayed callback from a previous opening has no effect.
+          if (Number.isFinite(resumeAtMs) && resumeAtMs >= 1000 && typeof avplay.seekTo === "function") {
+            const duration = Number(typeof avplay.getDuration === "function" ? avplay.getDuration() : 0);
+            const resume = Math.min(Math.floor(resumeAtMs), duration - 3000);
+            if (Number.isFinite(duration) && duration > 0 && resume >= 1000) {
+              avplay.seekTo(resume,
+                () => { if (current()) onChange({ status, message: "Resumed previous position." }); },
+                () => { if (current()) publish(status, "Playback started. Automatic resume is unavailable for this file."); });
+            }
+          }
         } catch (error) { fail(error); }
       }, fail);
     } catch (error) { fail(error); }
