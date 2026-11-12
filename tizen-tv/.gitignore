@@ -1,0 +1,5 @@
+*.wgt
+*.p12
+*.cer
+*.pem
+*.keystore

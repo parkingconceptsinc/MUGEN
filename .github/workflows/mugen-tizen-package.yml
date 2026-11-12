@@ -1,0 +1,56 @@
+name: MUGEN Tizen TV package
+
+on:
+  push:
+    branches: [feature/tizen-tv]
+    paths:
+      - "tizen-tv/**"
+      - ".github/workflows/mugen-tizen-package.yml"
+  pull_request:
+    paths:
+      - "tizen-tv/**"
+      - ".github/workflows/mugen-tizen-package.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-package-source:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout MUGEN
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate JavaScript
+        run: |
+          node --check tizen-tv/app.js
+          node --check tizen-tv/media.js
+
+      - name: Run TV UI smoke checks
+        run: node tizen-tv/tests/smoke.mjs
+
+      - name: Validate Tizen manifest
+        run: python -c "import xml.etree.ElementTree as ET; ET.parse('tizen-tv/config.xml'); print('config.xml is well-formed XML')"
+
+      - name: Create source bundle
+        run: |
+          mkdir -p dist
+          git archive --format=zip --prefix=MUGEN-Tizen-TV/ HEAD tizen-tv > dist/MUGEN-Tizen-TV-source.zip
+          sha256sum dist/MUGEN-Tizen-TV-source.zip > dist/MUGEN-Tizen-TV-source.zip.sha256
+          cat dist/MUGEN-Tizen-TV-source.zip.sha256
+
+      - name: Upload source bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: MUGEN-Tizen-TV-source
+          path: |
+            dist/MUGEN-Tizen-TV-source.zip
+            dist/MUGEN-Tizen-TV-source.zip.sha256
+          if-no-files-found: error
+          retention-days: 30
