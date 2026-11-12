@@ -187,6 +187,12 @@ function closePlayer() {
   render();
 }
 
+function prettyTime(milliseconds) {
+  const seconds = Math.floor(Math.max(0, milliseconds) / 1000);
+  return [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
+    .map((value, index) => index === 0 ? String(value) : String(value).padStart(2, "0")).join(":");
+}
+
 function paintPlayerStatus() {
   const status = document.querySelector("#player-status");
   if (status) status.textContent = state.playerStatus.toUpperCase();
@@ -194,6 +200,8 @@ function paintPlayerStatus() {
   if (message) message.textContent = state.message;
   const toggle = app.querySelector("[data-action='toggle']");
   if (toggle) toggle.textContent = state.playing ? "Pause" : "Play";
+  const timeline = app.querySelector("#playback-progress");
+  if (timeline) { const position = playback.getTimeline(); timeline.textContent = prettyTime(position.position) + " / " + prettyTime(position.duration); }
 }
 
 function updateScanStatus() {
@@ -207,7 +215,7 @@ function itemCard(item, index) {
 
 function render() {
   if (state.view === "player") {
-    app.innerHTML = `<main class="player-view"><div class="player-stage">${state.current && state.current.video ? `<object class="av-surface" type="application/avplayer"></object>` : ""}<div class="equalizer" ${state.current && state.current.video ? `hidden` : ""}>${Array.from({ length: 24 }, (_, i) => `<i style="height:${12 + (i % 7) * 9}%"></i>`).join("")}</div><span id="player-status" class="pill">${state.playerStatus.toUpperCase()}</span></div><section class="player-meta"><p class="eyebrow">NOW PLAYING</p><h1>${escapeHtml(state.current ? state.current.name : "MUGEN")}</h1><p>${escapeHtml(state.current ? state.current.storageLabel : "USB DRIVE")}</p><div class="player-actions"><button data-focusable="true" data-action="toggle">${state.playing ? "Pause" : "Resume"}</button><button data-focusable="true" data-action="back">Back to library</button></div><p class="playback-message">${escapeHtml(state.message)}</p><p class="hint">Press BACK to return to your library.</p></section></main>`;
+    app.innerHTML = `<main class="player-view"><div class="player-stage">${state.current && state.current.video ? `<object class="av-surface" type="application/avplayer"></object>` : ""}<div class="equalizer" ${state.current && state.current.video ? `hidden` : ""}>${Array.from({ length: 24 }, (_, i) => `<i style="height:${12 + (i % 7) * 9}%"></i>`).join("")}</div><span id="player-status" class="pill">${state.playerStatus.toUpperCase()}</span></div><section class="player-meta"><p class="eyebrow">NOW PLAYING</p><h1>${escapeHtml(state.current ? state.current.name : "MUGEN")}</h1><p>${escapeHtml(state.current ? state.current.storageLabel : "USB DRIVE")}</p><div class="player-actions"><button data-focusable="true" data-action="seek" data-ms="-10000">−10s</button><button data-focusable="true" data-action="toggle">${state.playing ? "Pause" : "Resume"}</button><button data-focusable="true" data-action="seek" data-ms="10000">+10s</button><button data-focusable="true" data-action="back">Back to library</button></div><p id="playback-progress" class="hint">0:00:00 / 0:00:00</p><p class="playback-message">${escapeHtml(state.message)}</p><p class="hint">Press BACK to return to your library.</p></section></main>`;
     paintFocus();
     return;
   }
@@ -231,6 +239,7 @@ function activate(node) {
   }
   else if (node.dataset.action === "back") closePlayer();
   else if (node.dataset.action === "toggle") togglePlayback();
+  else if (node.dataset.action === "seek") playback.seekBy(Number(node.dataset.ms));
   else if (node.dataset.action === "page") {
     const lastPage = Math.max(0, Math.ceil(state.filtered.length / PAGE_SIZE) - 1);
     state.page = Math.max(0, Math.min(lastPage, state.page + Number(node.dataset.dir)));
@@ -250,9 +259,9 @@ function togglePlayback() {
 }
 
 function onKeyDown(event) {
-  const keys = { 37: "LEFT", 38: "UP", 39: "RIGHT", 40: "DOWN", 13: "ENTER", 10009: "BACK", 8: "BACK", 415: "PLAY", 19: "PAUSE", 413: "STOP", 10252: "PLAYPAUSE" };
+  const keys = { 37: "LEFT", 38: "UP", 39: "RIGHT", 40: "DOWN", 13: "ENTER", 10009: "BACK", 8: "BACK", 415: "PLAY", 19: "PAUSE", 413: "STOP", 412: "REWIND", 417: "FAST_FORWARD", 10252: "PLAYPAUSE" };
   const key = keys[event.keyCode] || ({ ArrowLeft: "LEFT", ArrowRight: "RIGHT", ArrowUp: "UP", ArrowDown: "DOWN" })[event.key] || String(event.key).toUpperCase();
-  if (["LEFT", "RIGHT", "UP", "DOWN", "ENTER", "BACK", "ESCAPE", "PLAY", "PAUSE", "STOP", "PLAYPAUSE"].indexOf(key) >= 0) event.preventDefault();
+  if (["LEFT", "RIGHT", "UP", "DOWN", "ENTER", "BACK", "ESCAPE", "PLAY", "PAUSE", "STOP", "PLAYPAUSE", "REWIND", "FAST_FORWARD"].indexOf(key) >= 0) event.preventDefault();
   if (state.view === "player") {
     if (["BACK", "ESCAPE", "STOP"].indexOf(key) >= 0) { closePlayer(); return; }
     if (key === "PLAY") {
@@ -262,6 +271,8 @@ function onKeyDown(event) {
     }
     if (key === "PAUSE") { playback.setPlaying(false); return; }
     if (key === "PLAYPAUSE") { togglePlayback(); return; }
+    if (key === "REWIND") { playback.seekBy(-10000); return; }
+    if (key === "FAST_FORWARD") { playback.seekBy(10000); return; }
   }
   const nodes = focusables();
   if (!nodes.length) return;
@@ -285,6 +296,9 @@ app.addEventListener("focusin", (event) => {
   }
 });
 document.addEventListener("keydown", onKeyDown);
+// Update the timeline without rebuilding the remote-focus DOM on every tick.
+setInterval(() => { if (state.view === "player" && !document.hidden) paintPlayerStatus(); }, 500);
+
 function stopHiddenPlayback() {
   state.scanCancelled = true;
   playback.close();
@@ -299,7 +313,7 @@ window.addEventListener("pagehide", stopHiddenPlayback);
 document.addEventListener("visibilitychange", () => { if (document.hidden) stopHiddenPlayback(); });
 
 if (window.tizen && tizen.tvinputdevice) {
-  ["MediaPlayPause", "MediaPlay", "MediaPause", "MediaStop"].forEach((key) => {
+  ["MediaPlayPause", "MediaPlay", "MediaPause", "MediaStop", "MediaRewind", "MediaFastForward"].forEach((key) => {
     try { tizen.tvinputdevice.registerKey(key); } catch {}
   });
 }

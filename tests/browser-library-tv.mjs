@@ -120,6 +120,9 @@ try {
     window.__preparations = [];
     window.webapis = { avplay: Object.fromEntries(['open', 'stop', 'close', 'play', 'pause', 'setDisplayRect', 'setDisplayMethod', 'setListener'].map(name => [name, (...args) => window.__avCalls.push([name, ...args])])) };
     webapis.avplay.prepareAsync = (ready, failed) => window.__preparations.push({ ready, failed });
+    webapis.avplay.getDuration = () => 90000;
+    webapis.avplay.getCurrentTime = () => 30000;
+    webapis.avplay.seekTo = (at, done) => { window.__avCalls.push(['seekTo', at]); if (done) done(); };
     window.tizen = { tvinputdevice: { registerKey() {} } };
     window.__mediaKey = keyCode => document.dispatchEvent(new KeyboardEvent('keydown', { keyCode, bubbles: true }));
   });
@@ -146,8 +149,15 @@ try {
   await screen.evaluate(() => { window.__mediaKey(415); window.__mediaKey(415); window.__mediaKey(19); window.__mediaKey(19); });
   assert.equal(await screen.locator('#player-status').innerText(), 'PAUSED');
   assert.equal(await screen.evaluate(() => window.__avCalls.filter(([name]) => name === 'pause').length), 1);
-  // Enter activates the focused Back button instead of always toggling playback.
+  // Physical TV media seek keys use AVPlay's bounded seek API.
+  await screen.evaluate(() => { window.__mediaKey(417); window.__mediaKey(412); });
+  assert.deepEqual(await screen.evaluate(() => window.__avCalls.filter(([name]) => name === 'seekTo').map(([, at]) => at)), [40000, 20000]);
+  // The player now has four controls: −10s, Play/Pause, +10s, and Back.
+  // D-pad navigation must still reach Back without implicit playback.
   await screen.keyboard.press('ArrowRight');
+  await screen.keyboard.press('ArrowRight');
+  await screen.keyboard.press('ArrowRight');
+  assert.equal(await screen.evaluate(() => document.activeElement.dataset.action), 'back');
   await screen.keyboard.press('Enter');
   await screen.locator('.media-list').waitFor();
   assert.match(await screen.locator('.library-head').innerText(), /Page 2 \/ 3/);
