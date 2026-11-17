@@ -24,7 +24,7 @@ internal fun DeviceScanDialog(library:List<LibraryItem>,onImport:suspend(List<Li
     val context=LocalContext.current;val scope=rememberCoroutineScope();val lifecycle=LocalLifecycleOwner.current.lifecycle
     var allowed by remember{mutableStateOf(deviceScanAllowed(context))};var progress by remember{mutableStateOf(DeviceScanProgress())}
     var result by remember{mutableStateOf<DeviceScanResult?>(null)};var job by remember{mutableStateOf<Job?>(null)};var error by remember{mutableStateOf<String?>(null)}
-    var importing by remember{mutableStateOf(false)};var categories by remember{mutableStateOf(setOf("audio","videos","books","comics"))}
+    var importing by remember{mutableStateOf(false)};var categories by remember{mutableStateOf(setOf("audio","videos","books","comics","photos"))}
     fun scan(){if(job?.isActive==true)return;result=null;error=null;progress=DeviceScanProgress();job=scope.launch{
         try{result=scanDeviceFiles(context,library,onProgress={value->scope.launch{progress=value}})}
         catch(cancelled:CancellationException){error="Scan cancelled. No files were imported.";throw cancelled}
@@ -36,16 +36,16 @@ internal fun DeviceScanDialog(library:List<LibraryItem>,onImport:suspend(List<Li
     DisposableEffect(lifecycle){val observer=LifecycleEventObserver{_,event->if(event==Lifecycle.Event.ON_RESUME)allowed=deviceScanAllowed(context)};lifecycle.addObserver(observer);onDispose{lifecycle.removeObserver(observer);job?.cancel()}}
     val selected=result?.items?.filter{it.kind in categories}.orEmpty()
     AlertDialog(onDismissRequest={if(!importing){job?.cancel();onClose()}},title={Text("Scan device")},text={Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(10.dp)){
-        Text("Find music, videos, EPUB/PDF/text books and comic archives in shared storage and mounted SD cards. Originals and reading progress are preserved.")
+        Text("Find music, videos, EPUB/PDF/text books, comic archives and photos in shared storage and mounted SD cards. Originals and reading progress are preserved.")
         if(!allowed)Text("Allow shared-storage access in Android to scan all folders. Android keeps private app folders protected.")
         if(job?.isActive==true){LinearProgressIndicator(Modifier.fillMaxWidth());Text("${progress.visited} entries checked · ${progress.found} new files · ${progress.duplicates} already in library");Text(progress.path,style=MaterialTheme.typography.bodySmall)}
         result?.let{r->
             Text("${r.items.size} new files · ${r.progress.duplicates} duplicates skipped · ${r.roots} storage volumes")
             if(r.partial)Text("Partial scan: ${r.progress.unreadable} folders could not be read, or a scan limit was reached. Only the files listed below will be added.",color=MaterialTheme.colorScheme.error)
-            listOf("audio" to "Music","videos" to "Videos","books" to "Books","comics" to "Comics").forEach{(kind,label)->
+            listOf("audio" to "Music","videos" to "Videos","books" to "Books","comics" to "Comics","photos" to "Photos").forEach{(kind,label)->
                 Row{Checkbox(kind in categories,onCheckedChange={categories=if(it)categories+kind else categories-kind});Text("$label · ${r.items.count{it.kind==kind}}",Modifier.padding(top=12.dp))}
             }
-            Text("ZIP archives are included only when recognized as EPUB or image-only comics. Photos remain available in Photos.",style=MaterialTheme.typography.bodySmall)
+            Text("ZIP archives are included only when recognized as EPUB or image-only comics.",style=MaterialTheme.typography.bodySmall)
         }
         error?.let{Text(it,color=MaterialTheme.colorScheme.error)}
         if(importing)LinearProgressIndicator(Modifier.fillMaxWidth())

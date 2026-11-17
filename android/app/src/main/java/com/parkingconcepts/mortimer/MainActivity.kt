@@ -319,7 +319,7 @@ private fun MortimerApp(
         }
     }
 
-    fun startImport(kind: String, read: suspend () -> List<LibraryItem>) {
+    fun startImport(read: suspend () -> List<LibraryItem>) {
         if (importJob?.isActive == true) return
         importing = "Scanning files…"
         importJob = scope.launch {
@@ -333,19 +333,26 @@ private fun MortimerApp(
                         if (index % 20 == 0) withContext(Dispatchers.Main) {
                             importing = "Preparing ${index + 1} of ${fresh.size} files…"
                         }
-                        if (kind == "audio") withAudioTags(context, item) else item
+                        if (item.kind == "audio") withAudioTags(context, item) else item
                     }
                 }
                 currentCoroutineContext().ensureActive()
+                var added = emptyList<LibraryItem>()
                 if (tagged.isNotEmpty()) libraryMutex.withLock {
                     // Once the atomic commit begins, finish it and publish its result even
                     // if the user leaves the screen. Cancellation never saves a partial scan.
                     withContext(NonCancellable) {
-                        library = withContext(Dispatchers.IO) { LibraryStore.add(context, tagged) }
+                        library = withContext(Dispatchers.IO) {
+                            LibraryStore.update(context) { current ->
+                                val known = current.mapTo(HashSet()) { libraryIdentity(it.uri) }
+                                added = tagged.filter { known.add(libraryIdentity(it.uri)) }
+                                current + added
+                            }
+                        }
                         libraryError = null
                     }
                 }
-                importing = if (tagged.isEmpty()) "No new compatible files found." else "Added ${tagged.size} files."
+                importing = if (added.isEmpty()) "No new compatible files found." else "Added ${importSummary(added)}."
             } catch (cancelled: CancellationException) {
                 importing = "Import cancelled."
                 throw cancelled
@@ -357,38 +364,21 @@ private fun MortimerApp(
         }
     }
 
-    var pickKind by remember { mutableStateOf("audio") }
     val filePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-        if (uris.isNotEmpty()) {
-            val kind = pickKind
-            startImport(kind) { itemsFromUris(context, uris, kind) }
-        }
+        if (uris.isNotEmpty()) startImport { itemsFromUris(context, uris) }
     }
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { tree ->
-        if (tree != null) {
-            val kind = pickKind
-            startImport(kind) {
-                itemsFromTree(context, tree, kind, onProgress = { visited, found ->
-                    withContext(Dispatchers.Main) { importing = "Scanning $visited entries · $found compatible files found…" }
-                })
-            }
+        if (tree != null) startImport {
+            itemsFromTree(context, tree, onProgress = { visited, found ->
+                withContext(Dispatchers.Main) { importing = "Scanning $visited entries · $found compatible files found…" }
+            })
         }
     }
-    fun addFiles(kind: String) {
-        if (importJob?.isActive == true) return
-        pickKind = kind
-        filePicker.launch(
-            when (kind) {
-                "audio" -> arrayOf("audio/*")
-                "videos" -> arrayOf("video/*")
-                "comics" -> arrayOf("application/zip", "application/x-cbz", "application/vnd.comicbook+zip", "application/x-cbr", "application/vnd.comicbook-rar", "application/x-rar-compressed", "application/pdf", "application/octet-stream", "*/*")
-                else -> arrayOf("application/epub+zip", "application/pdf", "text/plain", "application/octet-stream", "*/*")
-            }
-        )
+    fun addFiles() {
+        if (importJob?.isActive != true) filePicker.launch(arrayOf("*/*"))
     }
-    fun addFolder(kind: String) {
-        if (importJob?.isActive == true) return
-        pickKind = kind; folderPicker.launch(null)
+    fun addFolder() {
+        if (importJob?.isActive != true) folderPicker.launch(null)
     }
 
     var section by rememberSaveable { mutableStateOf("home") }
@@ -556,8 +546,8 @@ private fun MortimerApp(
                 ) { targetSection ->
                     val content = Modifier.fillMaxSize()
                     when (targetSection) {
-                    "home" -> HomeSection(library, content, onGo = { section = it }, openExternal = { openExternal(it.androidUri, mimeForItem(it)) })
-                    "music" -> MusicSection(library, currentUri, content, onAddFiles = { addFiles("audio") }, onAddFolder = { addFolder("audio") }, onScanDevice = { deviceScanOpen = true },
+                    "home" -> HomeSection(library, content, onGo = { section = it }, onAddFiles = { addFiles() }, onAddFolder = { addFolder() }, openExternal = { openExternal(it.androidUri, mimeForItem(it)) })
+                    "music" -> MusicSection(library, currentUri, content, onAddFiles = { addFiles() }, onAddFolder = { addFolder() }, onScanDevice = { deviceScanOpen = true },
                         onPlaylists = { playlistsOpen = true },
                         onPlay = { list, i -> playList(list, i) },
                         onQueue = { item, next ->
@@ -567,16 +557,16 @@ private fun MortimerApp(
                         },
                         onRemove = { item -> Covers.forget(context, item.uri); commit { list -> list.filter { it.uri != item.uri } } })
                     "playing" -> NowPlayingSection(player, current, currentTitle, isPlaying, queueVersion, playbackError, content, onEqualizer = { section = "eq" }, onPlaylists = { playlistsOpen = true })
-                    "videos" -> VideosSection(library, content, onAddFiles = { addFiles("videos") }, onAddFolder = { addFolder("videos") }, onScanDevice = { deviceScanOpen = true },
+                    "videos" -> VideosSection(library, content, onAddFiles = { addFiles() }, onAddFolder = { addFolder() }, onScanDevice = { deviceScanOpen = true },
                         onPlay = { item -> playVideo(item) },
                         onRemove = { item -> Covers.forget(context, item.uri); commit { list -> list.filter { it.uri != item.uri } } })
                     "editor" -> VideoStudioScreen(library, content, editorItem, editorPosition, onInitialConsumed = { editorItem = null }, onExit = { navigate("videos") }, onExportState = { busy, saving -> editorProcessing = busy; editorSaving = saving }, onPendingExport = { editorHasRender = it })
                     "books", "comics" -> ShelfSection(
                         kind = targetSection, library = library, modifier = content,
-                        onAddFiles = { addFiles(targetSection) }, onAddFolder = { addFolder(targetSection) }, onScanDevice = { deviceScanOpen = true },
+                        onAddFiles = { addFiles() }, onAddFolder = { addFolder() }, onScanDevice = { deviceScanOpen = true },
                         onChange = { commit(it) }, openExternal = { openExternal(it.androidUri, mimeForItem(it)) },
                     )
-                    "photos" -> PhotosSection(content)
+                    "photos" -> PhotosSection(content, library = library, onAddFiles = { addFiles() }, onAddFolder = { addFolder() })
                     "eq" -> EqualizerSection(content, player)
                     "services" -> Column(content) {
                         HomeCard("♫", "Spotify", "Open the official Spotify app", "Open") { openSpotify() }
@@ -729,7 +719,7 @@ private fun TabBar(section: String, onPick: (String) -> Unit) {
 }
 
 @Composable
-private fun HomeSection(library: List<LibraryItem>, modifier: Modifier, onGo: (String) -> Unit, openExternal: (LibraryItem) -> Unit) {
+private fun HomeSection(library: List<LibraryItem>, modifier: Modifier, onGo: (String) -> Unit, onAddFiles: () -> Unit, onAddFolder: () -> Unit, openExternal: (LibraryItem) -> Unit) {
     val context = LocalContext.current
     val c = LocalMortimerColors.current
     val reading = library.filter { (it.kind == "books" || it.kind == "comics") && it.started }.sortedByDescending { it.openedAt }.take(10)
@@ -779,6 +769,11 @@ private fun HomeSection(library: List<LibraryItem>, modifier: Modifier, onGo: (S
                 }
             }
         }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 8.dp)) {
+            ActionButton("＋ Add files", primary = true, onClick = onAddFiles)
+            ActionButton("▤ Add folder", primary = false, onClick = onAddFolder)
+        }
+        Text("Select mixed files. MUGEN sorts music, videos, books, comics and photos automatically.", color = c.muted, fontSize = 12.sp, modifier = Modifier.padding(bottom = 12.dp))
         SectionLabel("Your library")
         HomeCard("♫", "My Music", "Files from phone, SD card, or USB", "${count("audio")} tracks") { onGo("music") }
         HomeCard("▶", "Videos", "Your local videos", "${count("videos")} videos") { onGo("videos") }
@@ -821,7 +816,7 @@ private fun MusicSection(
 
     Column(modifier.fillMaxWidth()) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp)) {
-            ActionButton("＋ Add music", primary = true, onClick = onAddFiles)
+            ActionButton("＋ Add files", primary = true, onClick = onAddFiles)
             ActionButton("▤ Add folder", primary = false, onClick = onAddFolder)
             ActionButton("⌕ Scan device", primary = false, onClick = onScanDevice)
             ActionButton("♫ Playlists", primary = false, onClick = onPlaylists)
@@ -835,7 +830,7 @@ private fun MusicSection(
                 Spacer(Modifier.height(5.dp))
                 Text("Add tracks or scan a folder on your phone, SD card, or USB drive. Your library stays available in MUGEN.", color = c.muted, fontSize = 13.sp, lineHeight = 19.sp, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(14.dp))
-                ActionButton("＋ Add your first tracks", primary = true, onClick = onAddFiles)
+                ActionButton("＋ Add files", primary = true, onClick = onAddFiles)
             }
             return@Column
         }
@@ -917,7 +912,7 @@ private fun VideosSection(library: List<LibraryItem>, modifier: Modifier, onAddF
     var menu by remember { mutableStateOf<LibraryItem?>(null) }
     Column(modifier.fillMaxWidth()) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp)) {
-            ActionButton("＋ Add videos", primary = true, onClick = onAddFiles)
+            ActionButton("＋ Add files", primary = true, onClick = onAddFiles)
             ActionButton("▤ Add folder", primary = false, onClick = onAddFolder)
             ActionButton("⌕ Scan device", primary = false, onClick = onScanDevice)
         }
@@ -929,7 +924,7 @@ private fun VideosSection(library: List<LibraryItem>, modifier: Modifier, onAddF
                 Spacer(Modifier.height(5.dp))
                 Text("Add individual videos or scan a folder on your phone, SD card, or USB drive.", color = c.muted, fontSize = 13.sp, lineHeight = 19.sp, textAlign = TextAlign.Center)
                 Spacer(Modifier.height(14.dp))
-                ActionButton("＋ Add your first videos", primary = true, onClick = onAddFiles)
+                ActionButton("＋ Add files", primary = true, onClick = onAddFiles)
             }
             return@Column
         }

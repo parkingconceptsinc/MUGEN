@@ -3,7 +3,7 @@ import { chromium } from 'playwright';
 import { syntheticPcmWav } from './browser/media-fixtures.mjs';
 
 const url = process.env.MUGEN_TEST_URL || 'http://127.0.0.1:4173/MUGEN/';
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ executablePath: process.env.MUGEN_CHROMIUM_PATH || undefined, headless: true });
 const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
 const page = await context.newPage();
 const errors = [];
@@ -85,7 +85,7 @@ try {
   assert.deepEqual(await page.evaluate(() => JSON.parse(localStorage.getItem('mortimer:playbackQueue'))),{version:1,ids:['old','other','old','other'],index:3},'queue actions save order and index together');
   const before = await page.evaluate(() => ({ workers:window.__metadataWorkers,time:document.querySelector('audio').currentTime,src:document.querySelector('audio').src }));
   await input.setInputFiles(Array.from({length:8},(_,i)=>({name:`Added ${i}.wav`,mimeType:'audio/wav',buffer:wav})));
-  await page.waitForFunction(() => document.querySelector('.toast')?.textContent.includes('8 songs/videos added'));
+  await page.waitForFunction(() => document.querySelector('.toast')?.textContent.includes('8 songs added'));
   await page.locator('.tabbar').getByRole('button',{name:'Videos',exact:true}).click();
   await page.locator('.tabbar').getByRole('button',{name:'Music',exact:true}).click();
   await page.waitForFunction(time => document.querySelector('audio').currentTime>time+3,before.time);

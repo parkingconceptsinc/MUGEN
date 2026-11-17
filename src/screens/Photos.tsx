@@ -132,7 +132,7 @@ export function Photos() {
             {showGrid && <button className="iconBtn" aria-label="Sort" title="Sort" onClick={() => setSheet("sort")}><ArrowDownUp size={19} /></button>}
             {album && <button className="iconBtn" aria-label="Album options" title="Album options" onClick={() => setSheet("album-menu")}><Pencil size={18} /></button>}
             <button className="iconBtn" aria-label="Add folder" title="Add folder" onClick={actions.importFolder}><FolderOpen size={20} /></button>
-            <button className="iconBtn" aria-label="Add photos" title="Add photos" onClick={actions.importFiles}><FilePlus size={20} /></button>
+            <button className="iconBtn" aria-label="Add files" title="Add files" onClick={actions.importFiles}><FilePlus size={20} /></button>
           </>
         )}
       </ScreenHeader>
@@ -152,8 +152,8 @@ export function Photos() {
           <div className="photoEmptyIcon"><Images size={44} /></div>
           <p>Add a folder of photos or pick a few images. Mortimer keeps a copy on this device and builds your timeline from the date each photo was taken.</p>
           <div className="heroActions">
-            <button className="btn primary" onClick={actions.importFolder}><FolderOpen size={18} /> Add photo folder</button>
-            <button className="btn" onClick={actions.importFiles}><FilePlus size={18} /> Add photos</button>
+            <button className="btn primary" onClick={actions.importFolder}><FolderOpen size={18} /> Add folder</button>
+            <button className="btn" onClick={actions.importFiles}><FilePlus size={18} /> Add files</button>
           </div>
           <small>JPEG, PNG, WebP, AVIF, GIF and BMP. HEIC photos from iPhone need converting to JPEG first.</small>
         </div>
@@ -175,7 +175,7 @@ export function Photos() {
           {!scope.length ? (
             <div className="emptyState">
               {tab === "favorites" && !place ? <><Star /><p>Tap the heart on a photo to keep it here.</p></>
-                : album ? <><ImageIcon /><p>This album is empty.</p><button className="btn primary" onClick={() => { setPickFor(album.id); setPlace(null); setTab("library"); setSelected(new Set()); }}><Plus size={18} /> Add photos</button></>
+                : album ? <><ImageIcon /><p>This album is empty.</p><button className="btn primary" onClick={() => { setPickFor(album.id); setPlace(null); setTab("library"); setSelected(new Set()); }}><Plus size={18} /> Add files</button></>
                 : <><Search /><p>No photos match.</p></>}
             </div>
           ) : (
@@ -259,7 +259,7 @@ export function Photos() {
       )}
       {sheet === "album-menu" && album && (
         <Sheet title={album.name} subtitle={`${album.photoIds.length} photos`} onClose={() => setSheet(null)}>
-          <SheetItem icon={Plus} label="Add photos" onClick={() => { setSheet(null); setPickFor(album.id); setPlace(null); setTab("library"); setSelected(new Set()); }} />
+          <SheetItem icon={Plus} label="Add files" onClick={() => { setSheet(null); setPickFor(album.id); setPlace(null); setTab("library"); setSelected(new Set()); }} />
           <SheetItem icon={Pencil} label="Rename album" onClick={() => { const name = window.prompt("Album name", album.name); if (name != null) renameAlbum(album.id, name); setSheet(null); }} />
           <SheetItem icon={Trash2} label="Delete album" danger onClick={() => {
             if (!window.confirm(`Delete the album “${album.name}”? The photos stay in your library.`)) return;

@@ -1,5 +1,6 @@
 import type { StoredLibraryItem } from "./library";
-import { kindOf, stripExt } from "./util";
+import { stripExt } from "./util";
+import { classifyLibraryFile } from "./mediaFormats";
 import type { Tags } from "./metadataReader";
 
 export const META_VERSION = 3;
@@ -23,7 +24,9 @@ export function readTags(file: Blob, name: string): Promise<Tags> {
 }
 
 export async function readItem({ file, path }: Incoming, addedAt: number): Promise<StoredLibraryItem> {
-  const kind = kindOf(file.name);
+  const route = classifyLibraryFile(file.name, file.type);
+  if (route?.kind !== "audio" && route?.kind !== "video") throw new Error("Unsupported media file");
+  const kind = route.kind;
   const item: StoredLibraryItem = {
     id: crypto.randomUUID(),
     name: file.name,

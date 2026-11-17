@@ -59,7 +59,7 @@ export function Comics({ shelfOverride }: { shelfOverride?: Shelf }) {
           <h2>Your bookshelf</h2>
           <p>Add EPUB, PDF, DOCX, ODT and text-based books. HTML can be viewed as a document, while TXT, Markdown, RTF and common data/config files open in a clean text reader.</p>
           <div className="heroActions">
-            <button className="btn primary" onClick={actions.importFolder}><FolderOpen size={18} /> Add books folder</button>
+            <button className="btn primary" onClick={actions.importFolder}><FolderOpen size={18} /> Add folder</button>
             <button className="btn" onClick={actions.importFiles}><FilePlus size={18} /> Add files</button>
           </div>
           <small>PDF, EPUB, DOCX, ODT, TXT, Markdown, HTML and other text documents are supported here.</small>
@@ -70,7 +70,7 @@ export function Comics({ shelfOverride }: { shelfOverride?: Shelf }) {
           <h2>Your comic shelf</h2>
           <p>Add CBZ or CBR comics and manga (or move a PDF here). Swipe to turn pages, pinch or double-tap to zoom, read right-to-left or as a vertical webtoon — and pick up where you left off.</p>
           <div className="heroActions">
-            <button className="btn primary" onClick={actions.importFolder}><FolderOpen size={18} /> Add comics folder</button>
+            <button className="btn primary" onClick={actions.importFolder}><FolderOpen size={18} /> Add folder</button>
             <button className="btn" onClick={actions.importFiles}><FilePlus size={18} /> Add files</button>
           </div>
           <small>Comics found while adding a music folder show up here too.</small>

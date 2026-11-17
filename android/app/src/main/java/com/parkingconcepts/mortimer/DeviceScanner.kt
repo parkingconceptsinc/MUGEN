@@ -10,7 +10,6 @@ import androidx.core.content.FileProvider
 import kotlinx.coroutines.*
 import java.io.File
 import java.util.ArrayDeque
-import java.util.zip.ZipFile
 
 internal data class DeviceScanProgress(val visited:Int=0,val found:Int=0,val duplicates:Int=0,val unreadable:Int=0,val path:String="")
 internal data class DeviceScanResult(val items:List<LibraryItem>,val progress:DeviceScanProgress,val partial:Boolean,val roots:Int)
@@ -42,20 +41,8 @@ internal fun scanKind(file:File):Pair<String,String>? {
         catch(_:Exception){"videos" to "video"}finally{reader.release()}
     }
     return when{
-        extension in AUDIO_EXTENSIONS->"audio" to "audio"
-        extension in VIDEO_EXTENSIONS->"videos" to "video"
-        extension=="epub"->"books" to "epub"
-        extension=="pdf"->"books" to "pdf"
-        extension in setOf("txt","md","markdown")->"books" to "txt"
-        extension in setOf("cbz","cbr","cb7")->"comics" to if(extension=="cbz")"cbz" else "cbr"
-        extension=="zip"&&file.length()<=MAX_CACHE_BYTES->runCatching{ZipFile(file).use{zip->
-            if(zip.getEntry("META-INF/container.xml")!=null)"books" to "epub" else {
-                val entries=zip.entries();var count=0;var images=0;var other=0
-                while(entries.hasMoreElements()&&count++<5000){val e=entries.nextElement();if(!e.isDirectory){val ext=e.name.substringAfterLast('.',"").lowercase();if(ext in setOf("jpg","jpeg","png","webp","gif","avif"))images++ else if(ext !in setOf("xml","txt","nfo","json","db"))other++}}
-                if(!entries.hasMoreElements()&&images>0&&other==0)"comics" to "cbz" else null
-            }
-        }}.getOrNull()
-        else->null
+        extension=="zip"->classifyZipLibraryFile(file)?.let { it.kind to it.format }
+        else->classifyLibraryFile(file.name)?.let { it.kind to it.format }
     }
 }
 /** Enumerate shared storage only. Canonical containment and visited sets stop symlinks escaping roots/looping. */

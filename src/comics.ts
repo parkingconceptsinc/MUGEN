@@ -2,9 +2,10 @@ import type { Comic, ComicFormat, Shelf } from "./types";
 import type { StoredComic } from "./library";
 import { folderOf, stripExt } from "./util";
 
-export const TEXT_BOOK_EXT = /\.(txt|md|markdown|log|nfo|csv|tsv|json|xml|yaml|yml|toml|ini|cfg|conf|srt|vtt|ass|ssa|sub|html|htm|rtf|docx|odt)$/i;
+import { TEXT_BOOK_EXT, classifyLibraryFile } from "./mediaFormats";
+export { TEXT_BOOK_EXT } from "./mediaFormats";
 export const isTextBookFile = (name: string) => TEXT_BOOK_EXT.test(name);
-export const isComicFile = (name: string) => /\.(cbz|cbr|pdf|epub)$/i.test(name) || isTextBookFile(name);
+export const isComicFile = (name: string) => ["books", "comics"].includes(classifyLibraryFile(name)?.kind ?? "");
 export const comicFormatOf = (name: string): ComicFormat => {
   const ext = name.split(".").pop()?.toLowerCase() ?? "";
   if (ext === "cbr") return "cbr";

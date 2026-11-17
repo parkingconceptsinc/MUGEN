@@ -23,6 +23,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
@@ -42,6 +43,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -86,6 +88,18 @@ data class DevicePhoto(
     val size: Long,
     val mime: String,
 )
+
+/** Imported document photos remain visible even without broad gallery permission. */
+internal fun mergeImportedPhotos(device: List<DevicePhoto>, library: List<LibraryItem>): List<DevicePhoto> {
+    val known = device.mapTo(HashSet()) { libraryIdentity(it.uri.toString()) }
+    val imported = library.filter { it.kind == "photos" && known.add(libraryIdentity(it.uri)) }.map { item ->
+        // Gallery IDs are nonnegative; document photos get stable negative IDs.
+        val bytes = java.security.MessageDigest.getInstance("SHA-256").digest(libraryIdentity(item.uri).toByteArray(Charsets.UTF_8))
+        val id = java.nio.ByteBuffer.wrap(bytes).long or Long.MIN_VALUE
+        DevicePhoto(id, item.androidUri, item.title, item.folder.ifBlank { "Imported" }, item.addedAt, 0, 0, item.size, "image/*")
+    }
+    return (device + imported).sortedByDescending { it.takenAt }
+}
 
 private fun queryPhotos(context: Context): List<DevicePhoto> {
     val collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
@@ -174,7 +188,7 @@ private val monthFormat = SimpleDateFormat("LLLL yyyy", Locale.getDefault())
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun PhotosSection(modifier: Modifier = Modifier) {
+fun PhotosSection(modifier: Modifier = Modifier, library: List<LibraryItem> = emptyList(), onAddFiles: () -> Unit = {}, onAddFolder: () -> Unit = {}) {
     val context = LocalContext.current
     var access by remember { mutableStateOf(photoAccess(context)) }
     var refresh by remember { mutableIntStateOf(0) }
@@ -191,8 +205,11 @@ fun PhotosSection(modifier: Modifier = Modifier) {
         refresh++
     }
 
-    LaunchedEffect(access, refresh) {
-        photos = if (access == "none") emptyList() else withContext(Dispatchers.IO) { runCatching { queryPhotos(context) }.getOrDefault(emptyList()) }
+    LaunchedEffect(access, refresh, library) {
+        photos = withContext(Dispatchers.IO) {
+            val device = if (access == "none") emptyList() else runCatching { queryPhotos(context) }.getOrDefault(emptyList())
+            mergeImportedPhotos(device, library)
+        }
     }
 
     fun setFavorite(ids: Collection<Long>, on: Boolean) {
@@ -201,17 +218,24 @@ fun PhotosSection(modifier: Modifier = Modifier) {
     }
 
     Column(modifier.fillMaxWidth()) {
-        if (access == "none") {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 10.dp)) {
+            ActionButton("＋ Add files", primary = true, onClick = onAddFiles)
+            ActionButton("▤ Add folder", primary = false, onClick = onAddFolder)
+        }
+        if (access == "none" && library.none { it.kind == "photos" }) {
             Column(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 16.dp).clip(RoundedCornerShape(20.dp)).background(PhPanel).padding(horizontal = 22.dp, vertical = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(Modifier.size(58.dp).clip(CircleShape).background(PhAccent.copy(alpha = 0.14f)), contentAlignment = Alignment.Center) {
                     Text("▦", color = PhAccent, fontSize = 28.sp, fontWeight = FontWeight.Bold)
                 }
                 Spacer(Modifier.height(14.dp))
                 Text("Your photos, beautifully organized", color = PhText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text("MUGEN displays photos from your device without copying them. Photo access permission is required.", color = PhMuted, fontSize = 14.sp, lineHeight = 20.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(vertical = 12.dp))
+                Text("Imported photos appear here. Allow gallery access to include other photos from your device.", color = PhMuted, fontSize = 14.sp, lineHeight = 20.sp, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(vertical = 12.dp))
                 Button(onClick = { launcher.launch(photoPermissions()) }, colors = ButtonDefaults.buttonColors(containerColor = PhAccent, contentColor = Color(0xFF111114))) { Text("Allow photo access") }
             }
-        } else if (photos == null) {
+        } else if (access == "none") {
+            TextButton(onClick = { launcher.launch(photoPermissions()) }) { Text("Include device gallery") }
+        }
+        if (photos == null) {
             Text("Loading photos…", color = PhMuted, modifier = Modifier.padding(top = 20.dp))
         } else {
         val all = photos!!
