@@ -6,11 +6,12 @@ import { applyAudio, attachElement, connectAudioLabNode, EQ_PRESETS, getAudioLab
 import { decodeAudioTrack, type DecodedAudio } from "./codecAudioDecoder";
 import { PlayerContext, ProgressContext, type Actions, type MenuTarget, type PlayerState, type SleepState } from "./context";
 import { clearLibrary as clearStoredLibrary, deleteComics, deleteTracks, loadComics, loadLibrary, loadFileAliases, loadTrackFile, patchComic, patchTrack, saveComicsFast, saveLibraryFast, type StoredComic, type StoredLibraryItem } from "./library";
-import { comicFormatOf, defaultShelf, isComicFile, isTextFormat, makeThumbnail, openComic, toComic } from "./comics";
+import { isTextFormat, makeThumbnail, openComic, toComic } from "./comics";
+import { classifyLibraryFile, mayImportLibraryFile } from "./mediaFormats";
 import { META_VERSION, readItem, readTags, type Incoming } from "./metadata";
 import { readPref, usePref, writePref } from "./prefs";
-import type { Comic, ComicProgress, EqSettings, Playlist, ReaderSettings, RepeatMode, Route, Screen, SongSort, Track, VideoFit } from "./types";
-import { ACCENTS, compareText, formatTime, shuffled, supported, toTrack } from "./util";
+import type { Comic, ComicFormat, ComicProgress, EqSettings, Playlist, ReaderSettings, RepeatMode, Route, Screen, SongSort, Track, VideoFit } from "./types";
+import { ACCENTS, compareText, formatTime, shuffled, toTrack } from "./util";
 import { captureVideoFrame } from "./thumbnails";
 import { folderImportFailureMessage, getImportProgressPercent, recordFolderBatchOutcome, type FolderImportFailures } from "./importStatus";
 import { BackgroundWork } from "./backgroundWork";
@@ -27,7 +28,7 @@ import { Settings } from "./screens/Settings";
 import { Videos } from "./screens/Videos";
 import { Comics } from "./screens/Comics";
 import { Photos } from "./screens/Photos";
-import { describeImport, importPhotos, isPhotoFile, resetPhotos } from "./photos";
+import { describeImport, importPhotos, resetPhotos } from "./photos";
 import { ComicReader } from "./screens/ComicReader";
 import { EpubReader } from "./screens/EpubReader";
 import { TextReader } from "./screens/TextReader";
@@ -491,7 +492,10 @@ export function Player() {
     const isImportCurrent = () => importGenerationRef.current === importGeneration;
     if (!isImportCurrent()) { setImporting(null); return false; }
     // Content-aware storage checks identity; picker paths/dates are not stable.
-    const photoEntries = entries.filter((e) => isPhotoFile(e.file.name));
+    const routed = entries.map(entry => ({ ...entry, route: classifyLibraryFile(entry.file.name, entry.file.type) }));
+    const unsupportedCount = routed.filter(entry => !entry.route).length;
+    const skippedNote = unsupportedCount ? `${unsupportedCount} unsupported file${unsupportedCount === 1 ? "" : "s"} skipped` : "";
+    const photoEntries = routed.filter(entry => entry.route?.kind === "photos");
     let photoNote = "";
     if (photoEntries.length) {
       setImporting({ done: 0, total: photoEntries.length, label: "Adding photos" });
@@ -504,24 +508,24 @@ export function Player() {
       if (!isImportCurrent()) { setImporting(null); return false; }
       setImporting(null);
       photoNote = describeImport(photoResult);
-      entries = entries.filter((e) => !isPhotoFile(e.file.name));
-      if (!entries.length) {
-        if (!quiet && photoNote) toast(photoNote);
+      if (routed.every(entry => !entry.route || entry.route.kind === "photos")) {
+        if (!quiet && photoNote) toast([photoNote, skippedNote].filter(Boolean).join(" · "));
         return operationOk;
       }
     }
-    const fresh = entries.filter((e) => supported(e.file.name));
-    const freshComics = entries.filter((e) => isComicFile(e.file.name));
+    const fresh = routed.filter(entry => entry.route?.kind === "audio" || entry.route?.kind === "video");
+    const freshComics = routed.filter(entry => entry.route?.kind === "books" || entry.route?.kind === "comics");
     const totalToAdd = fresh.length + freshComics.length;
     if (!totalToAdd) {
-      if (!quiet) toast(photoNote || (entries.some((e) => supported(e.file.name) || isComicFile(e.file.name)) ? "Those files are already in your library" : "No supported music, video, comic or photo files found"));
+      if (!quiet) toast(["No supported music, video, book, comic or photo files found", skippedNote].filter(Boolean).join(" · "));
       return operationOk;
     }
     void navigator.storage?.persist?.().catch(() => false);
     const addedAt = Date.now();
     let libraryStorageOk = true;
     let comicStorageOk = true;
-    let importedMedia = 0;
+    let importedSongs = 0;
+    let importedVideos = 0;
     const importedComics: StoredComic[] = [];
 
     let processed = 0;
@@ -532,9 +536,9 @@ export function Player() {
       for (let start = 0; start < freshComics.length; start += comicBatchSize) {
         if (!isImportCurrent()) { setImporting(null); return false; }
         const end = Math.min(start + comicBatchSize, freshComics.length);
-        const items: StoredComic[] = freshComics.slice(start, end).map(({ file, path }, offset) => ({
+        const items: StoredComic[] = freshComics.slice(start, end).map(({ file, path, route }, offset) => ({
           id: crypto.randomUUID(), name: file.name, path, size: file.size, lastModified: file.lastModified,
-          addedAt: addedAt + start + offset, format: comicFormatOf(file.name), shelf: defaultShelf(comicFormatOf(file.name)), file,
+          addedAt: addedAt + start + offset, format: route!.format as ComicFormat, shelf: route!.kind as "books" | "comics", file,
         }));
         let savedItems: StoredComic[] = [];
         if (comicStorageOk) {
@@ -565,7 +569,8 @@ export function Player() {
         if (savedItems.length) await deleteTracks(savedItems.map((item) => item.id)).catch(() => {});
         return;
       }
-      importedMedia += savedItems.length;
+      importedSongs += savedItems.filter(item => item.kind === "audio").length;
+      importedVideos += savedItems.filter(item => item.kind === "video").length;
       if (savedItems.length) setTracks((old) => [...old, ...savedItems.map(toTrack)]);
 
       // Enrich audio metadata in the background. This must not delay adding
@@ -614,7 +619,8 @@ export function Player() {
     if (!isImportCurrent()) { setImporting(null); return false; }
     setImporting(null);
     const parts = [
-      importedMedia ? `${importedMedia} song${importedMedia === 1 ? "" : "s"}/video${importedMedia === 1 ? "" : "s"}` : "",
+      importedSongs ? `${importedSongs} song${importedSongs === 1 ? "" : "s"}` : "",
+      importedVideos ? `${importedVideos} video${importedVideos === 1 ? "" : "s"}` : "",
       ...(["books", "comics"] as const).map((shelf) => {
         const n = importedComics.filter((item) => item.shelf === shelf).length;
         return n ? `${n} ${shelf === "books" ? "book" : "comic"}${n === 1 ? "" : "s"}` : "";
@@ -629,7 +635,7 @@ export function Player() {
       ? ` · ${importFailures} media file${importFailures === 1 ? "" : "s"} couldn't be imported`
       : "";
     const storageNote = libraryStorageOk && comicStorageOk ? "" : " · Storage could not save all selected files. Free space and retry";
-    if (!quiet || !operationOk) toast(`${what}${failureNote}${storageNote}${photoNote ? ` · ${photoNote}` : ""}`);
+    if (!quiet || !operationOk) toast(`${what}${failureNote}${storageNote}${photoNote ? ` · ${photoNote}` : ""}${skippedNote ? ` · ${skippedNote}` : ""}`);
     return operationOk;
   }
   function importEntries(entries: Incoming[], label?: string, quiet = false): Promise<boolean> {
@@ -724,7 +730,7 @@ export function Player() {
           if (!scanIsCurrent()) return;
           const path = `${prefix}/${entry.name}`;
           if (entry.kind === "file") {
-            if ((supported(entry.name) || isComicFile(entry.name) || isPhotoFile(entry.name)) && entry.getFile) {
+            if (mayImportLibraryFile(entry.name) && entry.getFile) {
               batch.push({ file: () => entry.getFile!(), path });
               supportedFound++;
               if (batch.length >= batchSize) await flush();
@@ -755,7 +761,7 @@ export function Player() {
       setImporting(null);
       const failureMessage = folderImportFailureMessage(failures);
       if (failureMessage) toast(failureMessage);
-      else if (!supportedFound) toast("No supported music, video, comic or photo files were found");
+      else if (!supportedFound) toast("No supported music, video, book, comic or photo files were found");
       else toast(`Finished scanning and saving ${supportedFound} supported files`);
     } catch (error) {
       setImporting(null);
@@ -1868,6 +1874,7 @@ export function Player() {
             <div className="sidebarActions">
               <button onClick={actions.importFolder}><FolderOpen size={17} /> Add folder</button>
               <button onClick={actions.importFiles}><FilePlus size={17} /> Add files</button>
+              <p className="hint">Mixed files are sorted automatically.</p>
               {installEvent && <button className="accent" onClick={actions.install}><Download size={17} /> Install app</button>}
             </div>
           </aside>
@@ -1914,7 +1921,7 @@ export function Player() {
 
           <audio ref={audioRef} preload="auto" />
           <input ref={fileInput} hidden type="file" multiple
-            accept="audio/*,video/*,text/*,image/*,.heic,.heif,.flac,.aac,.ogg,.oga,.opus,.weba,.aiff,.aif,.alac,.wma,.mka,.mp2,.mpa,.ac3,.eac3,.dts,.amr,.ape,.tak,.tta,.mpc,.wv,.shn,.caf,.au,.snd,.ra,.rm,.rma,.mp4,.webm,.ogv,.mov,.m4v,.mkv,.avi,.3gp,.3g2,.ts,.m2ts,.mts,.m2v,.mpg,.mpeg,.mpeg2,.vob,.wmv,.asf,.flv,.f4v,.rmvb,.rm,.dv,.tod,.mod,.vro,.nut,.ogm,.mxf,.divx,.cbz,.cbr,.pdf,.epub,.txt,.md,.markdown,.log,.nfo,.csv,.tsv,.json,.xml,.yaml,.yml,.toml,.ini,.cfg,.conf,.srt,.vtt,.ass,.ssa,.sub,.html,.htm,.rtf,.docx,.odt,application/pdf,application/epub+zip,application/rtf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.oasis.opendocument.text"
+            aria-label="Add files to MUGEN"
             onChange={(e) => { onPickFiles(e.target.files); e.currentTarget.value = ""; }} />
           <input ref={folderInput} hidden type="file" multiple onChange={(e) => { onPickFiles(e.target.files); e.currentTarget.value = ""; }} {...({ webkitdirectory: "" } as InputHTMLAttributes<HTMLInputElement>)} />
         </div>

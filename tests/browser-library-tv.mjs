@@ -14,7 +14,7 @@ try {
     await delay(250);
   }
   assert.ok(ready, 'PWA preview did not start');
-  browser = await chromium.launch({ headless: true });
+  browser = await chromium.launch({ executablePath: process.env.MUGEN_CHROMIUM_PATH || undefined, headless: true });
   const context = await browser.newContext();
   const page = await context.newPage();
   activePage = page;
@@ -47,7 +47,7 @@ try {
     window.__pickImportFiles();
   });
   await page.waitForFunction(() => document.querySelector('.toast')?.textContent.includes('Storage could not save all selected files'));
-  assert.match(await page.locator('.toast').innerText(), /100 songs\/videos added/);
+  assert.match(await page.locator('.toast').innerText(), /100 songs added/);
   async function countSaved() {
     return page.evaluate(() => new Promise((resolve, reject) => {
       const request = indexedDB.open('mortimer-player');
@@ -62,7 +62,7 @@ try {
   }
   assert.equal(await countSaved(), 100);
   await page.evaluate(() => { window.__failWrites = false; window.__pickImportFiles(); });
-  await page.waitForFunction(() => document.querySelector('.toast')?.textContent.includes('205 songs/videos added'));
+  await page.waitForFunction(() => document.querySelector('.toast')?.textContent.includes('205 songs added'));
   assert.equal(await countSaved(), 305);
   await page.evaluate(() => window.__pickImportFiles());
   await page.waitForFunction(() => document.querySelector('.toast')?.textContent.includes('already in your library'));

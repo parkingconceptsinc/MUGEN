@@ -18,7 +18,7 @@ for (let attempt = 0; attempt < 60; attempt++) {
 }
 assert.ok(serverReady, `Preview server did not become ready: ${baseURL}`);
 const fixtures = await createMediaFixtures(join(artifacts, 'fixtures'));
-const browser = await playwright.chromium.launch({ headless: true, args: ['--autoplay-policy=no-user-gesture-required'] });
+const browser = await playwright.chromium.launch({ executablePath: process.env.MUGEN_CHROMIUM_PATH || undefined, headless: true, args: ['--autoplay-policy=no-user-gesture-required'] });
 const context = await browser.newContext({ acceptDownloads: true, viewport: { width: 1365, height: 900 } });
 const page = await context.newPage();
 page.setDefaultTimeout(20_000);

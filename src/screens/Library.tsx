@@ -228,7 +228,7 @@ function EmptyLibrary() {
       <img className="welcomeLogo" src={`${import.meta.env.BASE_URL}logo.png`} alt="" />
       <p>Add a music folder or individual files. Everything stays on this device — tags, album art and playlists included.</p>
       <div className="heroActions">
-        <button className="btn primary" onClick={actions.importFolder}><FolderOpen size={18} /> Add music folder</button>
+        <button className="btn primary" onClick={actions.importFolder}><FolderOpen size={18} /> Add folder</button>
         <button className="btn" onClick={actions.importFiles}><FilePlus size={18} /> Add files</button>
       </div>
       <small>Supports MP3, FLAC, M4A/AAC, OGG/Opus, WAV and MP4/WebM/MKV video (depending on your browser).</small>

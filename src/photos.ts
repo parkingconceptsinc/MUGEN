@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import { deletePhotos, loadPhotos, savePhotos, type PhotoExif, type StoredPhoto } from "./library";
 import { readPref, writePref } from "./prefs";
 import { folderOf } from "./util";
+import { PHOTO_EXT, classifyLibraryFile } from "./mediaFormats";
 
 export type Photo = {
   id: string;
@@ -30,7 +31,6 @@ type PhotoState = {
   rotation: Record<string, number>;
 };
 
-const PHOTO_EXT = /\.(jpe?g|jfif|png|gif|webp|avif|bmp|heic|heif)$/i;
 const DECODABLE = /\.(jpe?g|jfif|png|gif|webp|avif|bmp)$/i;
 const KEEP_AS_IS = new Set(["image/jpeg", "image/png", "image/webp", "image/gif", "image/avif"]);
 const DISPLAY_MAX = 2560;
@@ -228,8 +228,12 @@ function draw(bitmap: ImageBitmap, width: number, height: number, type: string, 
   return new Promise((resolve) => canvas.toBlob(resolve, type, quality));
 }
 
+function canDecodePhoto(file: File) {
+  return DECODABLE.test(file.name) || (classifyLibraryFile(file.name, file.type)?.kind === "photos" && KEEP_AS_IS.has(file.type.toLowerCase().split(";", 1)[0].trim()));
+}
+
 async function processPhoto(file: File, path: string, addedAt: number): Promise<StoredPhoto> {
-  if (!DECODABLE.test(file.name)) throw new Error("unsupported");
+  if (!canDecodePhoto(file)) throw new Error("unsupported");
   // createImageBitmap applies the EXIF orientation, so sizes and pixels come out upright.
   const [bitmap, meta] = await Promise.all([createImageBitmap(file), readExif(file)]);
   try {
@@ -283,7 +287,7 @@ export async function importPhotos(
       const done = await Promise.allSettled(slice.slice(i, i + 3).map(({ file, path }, k) => processPhoto(file, path, addedAt + start + i + k)));
       done.forEach((r, k) => {
         if (r.status === "fulfilled") items.push(r.value);
-        else if (!DECODABLE.test(slice[i + k].file.name)) result.unsupported++;
+        else if (!canDecodePhoto(slice[i + k].file)) result.unsupported++;
         else result.failed++;
       });
     }

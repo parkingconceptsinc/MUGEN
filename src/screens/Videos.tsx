@@ -43,7 +43,7 @@ export function Videos() {
           <h2>No videos yet</h2>
           <p>Add a folder or pick video files. They get thumbnails, remember where you stopped and play in a full-screen player with gestures and subtitles.</p>
           <div className="heroActions">
-            <button className="btn primary" onClick={actions.importFolder}><FolderOpen size={18} /> Add video folder</button>
+            <button className="btn primary" onClick={actions.importFolder}><FolderOpen size={18} /> Add folder</button>
             <button className="btn" onClick={actions.importFiles}><FilePlus size={18} /> Add files</button>
           </div>
           <small>MP4, WebM, MOV and M4V play in every modern browser; MKV/AVI depend on the codecs inside.</small>

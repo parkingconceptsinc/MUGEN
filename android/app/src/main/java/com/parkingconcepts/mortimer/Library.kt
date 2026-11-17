@@ -23,7 +23,7 @@ import java.io.IOException
 data class LibraryItem(
     val uri: String,
     val title: String,
-    /** "audio", "videos", "books" or "comics". */
+    /** "audio", "videos", "books", "comics" or "photos". */
     val kind: String,
     /** "pdf", "epub", "cbz", "cbr", "txt", "audio", "video" or "other". */
     val format: String,
@@ -80,7 +80,7 @@ val READABLE_EXTENSIONS = setOf("pdf", "epub", "cbz", "cbr", "cb7", "7z", "zip",
 val AUDIO_EXTENSIONS = setOf("mp3", "m4a", "aac", "flac", "ogg", "oga", "opus", "wav", "wma", "amr", "mka", "aiff", "aif", "alac", "3gp", "mid", "midi")
 val VIDEO_EXTENSIONS = setOf("mp4", "m4v", "mkv", "webm", "mov", "avi", "3gp", "3g2", "ts", "m2ts", "mts", "mpg", "mpeg", "wmv", "flv", "ogv")
 
-fun extensionOf(name: String): String = name.substringBefore("?").substringAfterLast('.', "").lowercase()
+fun extensionOf(name: String): String = name.substringBefore("?").substringAfterLast('/').substringAfterLast('.', "").lowercase(java.util.Locale.ROOT)
 
 fun formatOf(name: String, kind: String): String = when (kind) {
     "audio" -> "audio"
@@ -246,32 +246,28 @@ fun persistReadPermission(context: Context, uri: Uri) {
     runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
 }
 
-/** Builds library items for files picked one by one. */
-suspend fun itemsFromUris(context: Context, uris: List<Uri>, kind: String): List<LibraryItem> = uris.distinct().map { uri ->
+/** Mixed selections route by format. A kind filter is used only by specialized tools. */
+suspend fun itemsFromUris(context: Context, uris: List<Uri>, kind: String? = null): List<LibraryItem> = uris.distinct().mapNotNull { uri ->
     currentCoroutineContext().ensureActive()
-    persistReadPermission(context, uri)
     val name = displayName(context, uri, "File")
-    LibraryItem(uri = uri.toString(), title = name, kind = kind, format = formatOf(name, kind), size = fileSize(context, uri))
+    val route = classifyLibraryFile(name) ?: classifyLibraryDocument(context, uri, name, runCatching { context.contentResolver.getType(uri) }.getOrNull().orEmpty()) ?: return@mapNotNull null
+    if (kind != null && route.kind != kind) return@mapNotNull null
+    persistReadPermission(context, uri)
+    LibraryItem(uri = uri.toString(), title = name, kind = route.kind, format = route.format, size = fileSize(context, uri))
 }
 
 /**
  * Walks a folder picked with OpenDocumentTree with bounded, cancellable work and returns
- * the files that belong on [kind]'s shelf. Sub-folder names become the series/album.
+ * all recognized files. An optional [kind] filter is for specialized tools only.
  */
 suspend fun itemsFromTree(
-    context: Context, tree: Uri, kind: String,
+    context: Context, tree: Uri, kind: String? = null,
     maxEntries: Int = 250_000, maxResults: Int = 25_000,
     onProgress: suspend (visited: Int, found: Int) -> Unit = { _, _ -> },
 ): List<LibraryItem> = withContext(Dispatchers.IO) {
     require(maxEntries > 0 && maxResults > 0)
 
     runCatching { context.contentResolver.takePersistableUriPermission(tree, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-    val accepted = when (kind) {
-        "audio" -> AUDIO_EXTENSIONS
-        "videos" -> VIDEO_EXTENSIONS
-        "comics" -> setOf("cbz", "cbr", "cb7", "7z", "zip", "rar", "pdf")
-        else -> READABLE_EXTENSIONS
-    }
     val out = ArrayList<LibraryItem>()
     val visited = HashSet<String>()
     val seenFiles = HashSet<String>()
@@ -306,10 +302,12 @@ suspend fun itemsFromTree(
                     val mime = c.getString(2) ?: ""
                     if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
                         dirs.add(id to name)
-                    } else if (extensionOf(name) in accepted && seenFiles.add(id)) {
-                        check(out.size < maxResults) { "This folder has too many media files. Import a smaller subfolder; no files from this scan were added." }
+                    } else {
                         val uri = DocumentsContract.buildDocumentUriUsingTree(tree, id)
-                        out.add(LibraryItem(uri = uri.toString(), title = name, kind = kind, format = formatOf(name, kind), folder = folderName, size = if (c.isNull(3)) 0 else c.getLong(3)))
+                        val route = classifyLibraryDocument(context, uri, name, mime) ?: continue
+                        if ((kind != null && route.kind != kind) || !seenFiles.add(id)) continue
+                        check(out.size < maxResults) { "This folder has too many media files. Import a smaller subfolder; no files from this scan were added." }
+                        out.add(LibraryItem(uri = uri.toString(), title = name, kind = route.kind, format = route.format, folder = folderName, size = if (c.isNull(3)) 0 else c.getLong(3)))
                     }
                 }
         }
