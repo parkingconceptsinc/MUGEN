@@ -8,7 +8,7 @@ import { createMediaFixtures } from './browser/media-fixtures.mjs';
 const directory = process.env.MUGEN_ARTIFACT_DIR || '/tmp/mugen-browser';
 await mkdir(directory, { recursive: true });
 const media = await createMediaFixtures(join(directory, 'unified-fixtures'));
-const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aJ1sAAAAASUVORK5CYII=', 'base64');
+const image = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFElEQVR4nGO8Y6Pxn4GBgYGJAQoAItwCQ64eCDwAAAAASUVORK5CYII=', 'base64');
 const epub = Buffer.from(zipSync({
   mimetype: strToU8('application/epub+zip'),
   'META-INF/container.xml': strToU8('<?xml version="1.0"?><container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0"><rootfiles><rootfile full-path="book.opf" media-type="application/oebps-package+xml"/></rootfiles></container>'),
@@ -68,13 +68,13 @@ try {
   assert.deepEqual(first.photos, ['Photo.PNG']);
   for (const section of ['Music', 'Videos', 'Comics', 'Photos']) {
     await page.locator('.tabbar').getByRole('button', { name: section, exact: true }).click();
+    await page.locator('.toast').waitFor({ state: 'hidden' });
     await pickFiles();
-    await page.locator(".importBar").waitFor({ state: "visible" });
-    await page.waitForFunction(() => !document.querySelector('.importBar'));
+    await page.waitForFunction(() => document.querySelector('.toast')?.textContent.includes('1 unsupported file skipped'));
     assert.deepEqual(await saved(), first, `reimport from ${section} must preserve counts and routing`);
   }
-  // Exercise the directory fallback with the same bytes and nested paths. Fixed
-  // modification times keep the existing photo identity stable for this retry.
+  // Exercise the directory fallback with the same bytes and nested paths.
+  await page.locator('.toast').waitFor({ state: 'hidden' });
   await page.evaluate(files => {
     const transfer = new DataTransfer();
     for (const entry of files) {
@@ -86,7 +86,7 @@ try {
     input.files = transfer.files;
     input.dispatchEvent(new Event('change', { bubbles: true }));
   }, files.filter(file => file.name !== 'Photo.PNG').map(file => ({ name: file.name, mimeType: file.mimeType, bytes: Array.from(file.buffer) })));
-  await page.waitForFunction(() => !document.querySelector('.importBar'));
+  await page.waitForFunction(() => document.querySelector('.toast')?.textContent.includes('1 unsupported file skipped'));
   assert.deepEqual(await saved(), first, 'folder paths do not duplicate mixed media or documents');
   await page.reload();
   await page.getByText('Loading your library…', { exact: true }).waitFor({ state: 'hidden' });

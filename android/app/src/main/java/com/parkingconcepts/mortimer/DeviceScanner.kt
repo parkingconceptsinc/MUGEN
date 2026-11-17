@@ -30,7 +30,7 @@ internal fun scannedFileIdentity(uri:Uri,roots:List<File>,ownAuthority:String?=n
             val root=if(volume=="primary")roots.firstOrNull() else roots.firstOrNull { it.name==volume }
             root?.let{File(it,relative).canonicalPath}
         }
-        else->classifyLibraryFile(file.name)?.let { it.kind to it.format }
+        else->null
     }
 }.getOrNull()
 internal fun scanKind(file:File):Pair<String,String>? {
